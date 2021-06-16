@@ -1,0 +1,4 @@
+* v0.1.0
+
+- initial version of Datamancer based on =ggplotnim= data frame with
+  major formula macro rewrite
