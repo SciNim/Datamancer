@@ -1,5 +1,9 @@
 * datamancer overview
 
+*NOTE*: Much of the content here is still relevant, but the details
+have changed quite significantly. 
+
+
 The =datamancer= packages is actually rather two packages in one.
 1. a plotting library following [[https://ggplot2.tidyverse.org/][ggplot2's]] syntax
 2. a dataframe library mostly following [[https://dplyr.tidyverse.org/][dplyr]]
