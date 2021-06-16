@@ -57,11 +57,11 @@ proc getFiles*(path: string): seq[string] =
   #if path.extractFilename in ExcludeDirSet: return
   # The files below are not valid by themselves, they are only included
   # from other files
-  const excludeFiles = [ "formula.nim" ]
-  let ExcludeFileSet = toSet(excludeFiles)
+  #const excludeFiles = []
+  #let ExcludeFileSet = toSet(excludeFiles)
 
   for file in listFiles(path):
-    if file.endsWith(".nim") and file.extractFilename notin ExcludeFileSet:
+    if file.endsWith(".nim"): # and file.extractFilename notin ExcludeFileSet:
       result.add file
   for dir in listDirs(path):
     result.add getFiles(dir)
