@@ -600,6 +600,7 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
           possibleTypes.add pt.get
       of nnkTemplateDef:
         # cannot deduce from template
+        result.maybeAddSpecialTypes(n)
         return
       else:
         # should be a symbol of a pure tree. Should have a well defined type
