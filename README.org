@@ -1,0 +1,231 @@
+
+* Datamancer
+[[https://github.com/SciNim/datamancer/workflows/datamancer%20CI/badge.svg]]
+
+#+ATTR_HTML: title="Join the chat at https://gitter.im/SciNim/Community"
+[[https://gitter.im/SciNim/Community][file:https://badges.gitter.im/SciNim/Community.svg]]
+
+** Comparison to other dataframe libraries
+
+Check out the following gist for a comparison of this library with
+dplyr (R) and pandas (Python):
+
+https://gist.github.com/Vindaar/6908c038707c7d8293049edb3d204f84
+
+
+** Documentation
+
+The documentation is found at:
+
+https://scinim.github.io/datamancer
+
+** Installation & dependencies
+
+Installation should be just a 
+#+BEGIN_SRC sh
+nimble install datamancer
+#+END_SRC
+away.
+
+*** Windows
+
+Using =ggplotnim= on Windows is made slightly more problematic,
+because of the default =cairo= backend. Installing =cairo= on Windows
+is not as straightforward as on Linux or OSX.
+
+There are multiple options, from most complicated to easiest:
+- installing a program, which also uses =cairo= on Windows, for
+  example =emacs= and adding said program to Windows' PATH. Some
+  instructions here:
+  https://gist.github.com/Vindaar/6cb4e93baff3e1ab88a7ab7ed1ae5686
+- using @pietroppeter's approach to only install the shared libraries
+  that are actually required, see here:
+  https://gist.github.com/pietroppeter/80266c634b22b3861273089dab3e1af2
+- or to thank @preshing's work and use his standalone single DLL for
+  =cairo= on windows:
+  https://github.com/preshing/cairo-windows/
+  See how it's used in the Github Actions workflow for Windows here:
+  https://github.com/Vindaar/ggplotnim/blob/master/.github/workflows/ci.yml#L61-L64
+
+Personally I would recommend the last option. Note however that the
+standalone DLL is called =cairo.dll=, but =ggplotnim= expects the name
+=libcairo-2.dll=. I would recommend to put the DLL in some sane place
+and adding that location to your Windows PATH variable:
+
+Simple text only instructions on how to do that:
+#+begin_quote
+- =Win= key
+- search for "path"
+- click on “edit system environment variables”
+- click on “Environment Variables” in the bottom right corner
+- under “System variables” select “PATH” and click edit
+- click “New” and add the full path to your installation location of
+  choice that contains the now called =libcairo-2.dll=
+#+end_quote
+
+After saving those changes and restarting PowerShell / the command
+prompt everything should work.
+
+
+** Features and formulas
+
+The data frame provides the "5 verbs" of [[https://dplyr.tidyverse.org/][dplyr]] and more. Main implemented functions:
+- =filter=
+- =mutate=, =transmute=
+- =select=, =rename=
+- =arrange=
+- =summarize=
+- =group_by=
+- =arrange=
+- =inner_join=
+- =set_diff=
+- =count=
+- =bind_rows=
+- =gather=
+- =unique=,
+which are all based on the =FormulaNode= object. Basically they all
+receive =varargs[FormulaNode]=, which is evaluated in context of the
+given dataframe.  
+
+** A few words on the =f{}= macro to create formulas
+
+Use:
+- no infix symbol and only code, which does not involve a column in
+  the sense defined below in [[Column access]]:
+  #+BEGIN_SRC nim
+  f{1 + 2}
+  f{"foo"}
+  f{true}
+  #+END_SRC
+  a =FormulaNode= of kind =fkVariable=. Stores the values as a =Value=
+  variant object.
+- =<-= for assignment
+  #+BEGIN_SRC nim
+  f{"newName" <- "oldName"}
+  #+END_SRC
+  a =FormulaNode= of kind =fkAssign=.
+  This does not involve a closure and is just a simple object storing
+  a LHS as a string and the RHS as a =Value= (to also support constant
+  columns via =f{"constantCol" <- 5}=).
+  Typically used for =rename= or as an argument for =transmute= and
+  =mutate= to just rename a column or to assign a constant column.
+- =<<= for reduce operations
+  #+BEGIN_SRC nim
+  f{"meanHwy" << mean(`hwy`)}
+  #+END_SRC
+  a =FormulaNode= of kind =fkScalar=.
+  Used only for =summarize= and means we reduce a full column to a
+  single =Value=. This generates a closure, which computes the RHS and
+  assigns it to a result variable of type =Value=. Type hints are
+  required (for now) if only a single proc call is involved on the
+  RHS to tell the macro as what to read the column "hwy" and what the
+  result variable is.
+- =~= for vector like proc
+  #+BEGIN_SRC nim
+  f{"xSquared" ~ `x` * `x`}
+  #+END_SRC
+  a =FormulaNode= of kind =fkVector=.
+  Used in =mutate=, =transmute= to calculate a full column. This also
+  generates a closure as the reduce operations =<<= does, except here
+  we loop over the length of the DF and access each read tensor via =[idx]=.
+- a formula without any infix symbols will be considered:
+  - =fkVariable= if no column involved
+  - =fkVector= else
+
+*** Column access
+To access columns in the context of formula, the biggest change
+occured. In the old formula system, a literal string was attempted to
+be resolved as a DF column dynamically. Since the new formulas are
+compiled to closures, this would involve overhead and is thus avoided
+for clearer separation between columns and real strings. This also
+helps readers of a formula. This means:
+- =`columnName`=: accented quotes refer to a DF column. Be careful to
+  only use this for simple letters (no non letter characters or spaces).
+- =c"columnName"= : call string literals (by convention use a =c=
+  before the string) are interpreted as a column in the same way as
+  accented quotes, but allow for column names with spaces / non letter
+  characters.
+- =idx("columnName"), idx(`columnName`), idx(nimExpressionReturningString)=:
+  refers to a specific element of the referred column
+- =col("columnName"), col(`columnName`), col(nimExpressionReturningString)=:
+  refers to a the full tensor of the referred column
+- or directly via: =df[nimExpressionReturningString] /
+  df[nimExpressionReturningString][idx]=: to access columns / indices using
+  identifiers / symbols / general expressions that return a string
+  quotes, call string literals or just string literals). This is
+  equivalent to =idx= / =col=, so the latter are preferred.
+
+The closures take a data frame as an argument, which is named
+=df=. The =df["columnName"]= refers to that argument, although not
+literally (it is gen'symmed and =df["columnName"]= refers to a
+=Column=). From that column we get the underlying =Tensor=.
+
+In the context of calling procedures, e.g.:
+#+BEGIN_SRC nim
+f{someProc(`columnName`)}
+#+END_SRC
+it may not be clear whether the procedure is supposed to take the
+whole tensor as an argument or hand each element of the tensor in a
+loop. Internally the macro tries to determine a suitable call for
+either a scalar or tensor argument. If the called procedure is unique
+this will likely succeed. In case of heavily overloaded symbols
+(e.g. =max=) it also tries to determine a match from (if any)
+additional arguments given to that procedure (and uses their types if
+they are not column references).
+
+In case at cannot be resolved, you will get an error at compile time
+to specify =idx= (per index access) or =col= (full column access) of the column.
+
+So for example:
+#+BEGIN_SRC nim
+f{"asFloat" ~ parseFloat(idx("colName"))}
+#+END_SRC
+where =parseFloat= acts on each element individually. If there is only
+a single overload (as in case of =parseFloat=), the input and output
+types are inferred automatically to be:
+- read tensor =colName= as a =string=
+- result type is =float=
+
+*** Type hints
+Type hints are required if the formula macro cannot determine the type
+required, either input or output. This is usually the case for
+ambiguous operations (overloaded procedures, only a single column
+without any operations, etc.). They are of
+the form:
+- =<type>: <actualFormula>=: simple type hint for the type of the
+  underlying tensor of the columns involved in the formula.  
+- =<type> -> <resDtype>: <actualFormula>=: full type for closure.
+  =<type>= is the dtype used for input tensors, =<resDtype>= the resulting
+  type.
+For example:
+#+begin_src nim
+f{int -> int: `x` * `y`}
+# ^--- type of the tensors involved on the RHS. Will be read as integers
+#           ^--- type of the resulting tensor
+#+end_src
+In this case the type would be determined to be float by the macro, so
+type hints are required in case we need them to be integers.
+
+*NOTE:* it is not possible to include tensors of different data types
+in a single formula using type hints. However, if they appear in
+different branches of the formula AST and the types are determined
+automatically, this is possible. All input tensors of a computation will be read
+either by the automatically deduced data type or the =<type>= argument
+mentioned here. If an underlying tensor is not actually of the given
+data type, it will be converted via =T(val)=, where =T= is the type or
+if the conversion is not possible a runtime exception will be thrown.
+
+In addition to looking at symbols in the scope, there is a step
+involving some simple heuristic rules, e.g. if =*=, =/= is involved, it's
+assumed that the input tensors are floats and the output as well. If
+=&= or =$= is involved, it's assumed to be strings. 
+Finally if =and= and other logic keywords are used, the result is
+assumed to be =bool= (not the input thought!). 
+
+#+BEGIN_SRC nim
+    const floatSet = toSet(@["+", "-", "*", "/", "mod"])
+    const stringSet = toSet(@["&", "$"])
+    const boolSet = toSet(@["and", "or", "xor", ">", "<", ">=", "<=", "==", "!=",
+                            "true", "false", "in", "notin"])
+#+END_SRC
+
