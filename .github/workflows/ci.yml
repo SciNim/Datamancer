@@ -4,12 +4,14 @@ on:
     paths:
       - 'tests/**'
       - 'src/**'
+      - 'docs/**'
       - 'datamancer.nimble'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'tests/**'
       - 'src/**'
+      - 'docs/**'
       - 'datamancer.nimble'
       - '.github/workflows/ci.yml'
 

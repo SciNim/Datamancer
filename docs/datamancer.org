@@ -58,7 +58,7 @@ operations.
 The five base operations ("the verbs of dplyr") are:
 - =mutate=: modify an existing column or add a new one 
 - =select=: select a subset of columns
-= =filter=: filter out a subset of records based on one or more conditions
+- =filter=: filter out a subset of records based on one or more conditions
 - =summarize=: reduce one or more columns to a single scalar
 - =arrange=: sort the dataframe according to one or more columns
 
