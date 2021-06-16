@@ -43,6 +43,12 @@ jobs:
           path: nim
           version: ${{ matrix.branch }}
 
+      - name: Install dependencies (Ubuntu)
+        if: ${{matrix.target == 'linux'}}
+        run: |
+          sudo apt-get update
+          sudo apt-get install pandoc
+
       - name: Setup nimble & deps
         shell: bash
         run: |
