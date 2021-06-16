@@ -17,7 +17,11 @@ https://gist.github.com/Vindaar/6908c038707c7d8293049edb3d204f84
 
 The documentation is found at:
 
-https://scinim.github.io/datamancer
+https://scinim.github.io/Datamancer/
+
+with a short introduction under:
+
+https://scinim.github.io/Datamancer/datamancer.html
 
 ** Installation & dependencies
 
