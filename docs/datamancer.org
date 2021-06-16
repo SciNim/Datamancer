@@ -1,8 +1,5 @@
 * Datamancer overview
 
-*NOTE*: Much of the content here is still relevant, but the details
-have changed quite significantly. 
-
 The =datamancer= packages is a dataframe library, which (as a
 companion to [[https://github.com/Vindaar/ggplotnim][ggplotnim]]) is also heavily inspired by a specific R
 library. In this case [[https://dplyr.tidyverse.org/][dplyr]], a dataframe library of the tidyverse.
