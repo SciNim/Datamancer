@@ -14,7 +14,8 @@ suite "Formulas":
   let f = [false, true, false]
   let g = ["hello", "world", "foo"]
   let h = [2.5, 7.5, NaN]
-  let df = seqsToDf(a, b, c, d, e, f, g, h)
+  let i = ["5", "6", "7"]
+  let df = seqsToDf(a, b, c, d, e, f, g, h, i)
   test "Basic `idx` tests with automatic type deduction from context":
     block:
       # - infix, "a" read as integer automatically
@@ -214,3 +215,23 @@ suite "Formulas":
       `hits` < 500}
 
     check $fn == """(and (and (and (>= rmsTransverse cut_rms_trans_low) (<= rmsTransverse cut_rms_trans_high)) (inRegion df["centerX"][idx] df["centerY"][idx] crSilver)) (< hits 500))"""
+
+  test "Explicit types in `col`, `idx`":
+    block:
+      # explicit types work
+      let fn = f{ idx("a", int) }
+      check fn.evaluate(df).iCol == [1, 2, 3].toTensor
+
+    block:
+      # mixing explicit types work
+      let fn = f{ idx("a", int) + idx("i", string).parseInt}
+      check fn.evaluate(df).iCol == [6, 8, 10].toTensor
+
+    block:
+      # type hints do ``not`` overwrite explicit types
+      let fn = f{string -> int: (
+        if `g` == "hello":
+          idx("a", int)
+        else:
+          idx("b", int)) }
+      check fn.evaluate(df).iCol == [1, 4, 5].toTensor
