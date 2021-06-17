@@ -409,9 +409,17 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   var colTypes = newSeq[ColKind](numCols)
   var lastIdx = idx
   var lastColStart = colStart
+  var dataColsIdx = 0
   while idx < size:
     parseLine(data, buf, sep, quote, col, idx, colStart, row, lastWasSep, inQuote, toBreak = true):
       guessType(data, buf, colTypes, col, idx, colStart, numCols)
+      # if we see the end of the line, store the current column number
+      if data[idx] in {'\n', '\r', '\l'}:
+        dataColsIdx = col
+
+  if dataColsIdx + 1 != numCols:
+    raise newException(IOError, "Input data contains " & $(dataColsIdx + 1) & " in the data portion, but " &
+      $numCols & " columns in the header.")
   # 2a. revert the indices (make it a peek)
   idx = lastIdx
   colStart = lastColStart
