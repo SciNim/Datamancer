@@ -735,6 +735,12 @@ t_in_s,  C1_in_V,  C2_in_V,  type
       check df["C2_in_V"].toTensor(float) == dfExp["C2_in_V"].toTensor(float)
       check df["type"].toTensor(string) == dfExp["type"].toTensor(string)
 
+  test "CSV parsing of data with unnamed column":
+    let df = readCsv("data/03-sample_hugo.csv")
+    check df.ncols == 9
+    check "Unnamed0" in df
+    check df["Unnamed0", int] == arange(0, 200).toTensor
+
   test "Summarize":
     let mpg = toDf(readCsv("data/mpg.csv"))
     block:
