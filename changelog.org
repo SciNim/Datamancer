@@ -1,3 +1,9 @@
+* v0.1.2
+- CSV parser is more robust, can handle unnammed columns
+- explicit types in =idx=, =col= column reference finally works
+  (e.g. =idx("foo", float)= accesses the column "foo" as a float
+  tensor overwriting type deductions and type hints)
+
 * v0.1.1
 - allow =nnkMacroDef= in =findType=
 - add development notes and ideas about rewrite of formula macro in =notes/formula_dev_notes.org=
