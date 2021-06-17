@@ -276,6 +276,13 @@ proc nodeIsDfIdx*(n: NimNode): bool =
   elif n.kind in {nnkCallStrLit, nnkAccQuoted}:
     result = true
 
+proc hasExplicitTypeHint*(n: NimNode): bool =
+  result = (n.nodeIsDf or n.nodeIsDfIdx) and
+    n.kind == nnkCall and
+    n.len == 3 and
+    n[2].kind in {nnkIdent, nnkSym} and
+    n[2].strVal in DtypesAll
+
 proc get(p: var Preface, node: NimNode, useIdx: bool): NimNode =
   let n = p[node]
   p.delete(node)
