@@ -630,6 +630,9 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
         let pt = determineTypeFromProc(tImpl, numArgs)
         if pt.isSome:
           possibleTypes.add pt.get
+      of nnkMacroDef:
+        # skip macro defs, e.g. like Unchained defining `*`, ... macros
+        continue
       else:
         error("How did we stumble over " & $(ch.treeRepr) & " with type " &
           $(tImpl.treeRepr))
