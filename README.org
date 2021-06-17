@@ -193,3 +193,9 @@ assumed to be =bool= (not the input thought!).
                             "true", "false", "in", "notin"])
 #+END_SRC
 
+*** Notes on formula macro internals
+
+For an insight into the implementation details, ideas and development
+notes, check out the following document:
+
+https://github.com/SciNim/Datamancer/blob/master/notes/formula_dev_notes.org
