@@ -94,14 +94,17 @@ template copyBuf(data: ptr UncheckedArray[char], buf: var string,
                  idx, colStart: int): untyped =
   let nIdx = idx - colStart
   if nIdx > 0:
+    ## TODO: can we keep the buffer the same length and only copy the actual length?
     buf = newString(nIdx)
     copyMem(buf[0].addr, data[colStart].addr, nIdx)
     buf.setLen(nIdx)
+  else:
+    buf.setLen(0)
 
 template parseHeaderCol(data: ptr UncheckedArray[char], buf: var string,
                         colNames: var seq[string],
-                        header: string, quote: char,
-                        idx, colStart): untyped =
+                        header: string, sep, quote: char,
+                        idx, colStart: int): untyped =
   copyBuf(data, buf, idx, colStart)
   if col == 0:
     if not buf.startsWith(header):
@@ -112,7 +115,18 @@ template parseHeaderCol(data: ptr UncheckedArray[char], buf: var string,
       # and remove possible whitespace
       buf = buf.strip(chars = Whitespace + {quote})
   let bufStripped = buf.strip(chars = Whitespace + {quote})
-  if idx - colStart > 0 and bufStripped.len > 0:
+  if bufStripped.len == 0 and sep in {' ', '\t'}:
+    # don't add any name because we are dealing with a space before the
+    # first column. We don't care about the `col` being off while parsing headers as
+    # we do not use it to access data.
+    # This is required over the `if` in the `parseLine` separator, because of possible
+    # files using header symbols e.g. '#'
+    discard
+  elif bufStripped.len == 0:
+    # in case a column does not have a name, we use `Unnamed` similar to pandas
+    let numUnknown = colNames.filterIt(it.startsWith("Unnamed"))
+    colNames.add("Unnamed" & $numUnknown.len)
+  else:
     colNames.add bufStripped
 
 template guessType(data: ptr UncheckedArray[char], buf: var string,
@@ -318,8 +332,11 @@ template parseLine(data: ptr UncheckedArray[char], buf: var string,
     colStart = idx + 1
   elif unlikely(data[idx] == sep):
     # convert last column to data
-    if idx - colStart > 0 or col > 0:
-      # only call if we have seen something yet!
+    if (idx - colStart > 0 or col > 0 or sep notin {' ', '\t'}):
+      # only parse if: we have characters to parse, unless we are not in the first
+      # column and unless our separator is not "spaces" like. Idea is only ignore
+      # empty (only spaces) first columns iff we are dealing with space separated files.
+      # For a proper separator like ',' empty inputs are allowed at the beginning.
       fnToCall
       inc col
     colStart = idx + 1
@@ -352,13 +369,13 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     colStart = 0
     lastWasSep = false
     inQuote = false
-    buf = newString(80)
+    buf = newStringOfCap(80)
 
   # 1. first parse the header
   var colNames: seq[string]
   while idx < size:
     parseLine(data, buf, sep, quote, col, idx, colStart, row, lastWasSep, inQuote, toBreak = true):
-      parseHeaderCol(data, buf, colNames, header, quote, idx, colStart)
+      parseHeaderCol(data, buf, colNames, header, sep, quote, idx, colStart)
 
   if colNamesIn.len > 0 and colNamesIn.len != colNames.len:
     raise newException(IOError, "Input data contains " & $colNames.len & " columns, but " &
