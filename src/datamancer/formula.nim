@@ -445,13 +445,23 @@ proc addColRef(n: NimNode, typeHint: FormulaTypes, asgnKind: AssignKind): seq[As
     let name = buildName(n[1])
     let colName = genColSym(name, "T")
     let colIdxName = genColSym(name, "Idx")
+    var dtypeOverride = dtype
+    var resTypeOverride = resType
+    if n.len == 3:
+      doAssert n[2].kind in {nnkSym, nnkIdent} and
+        n[2].strVal in DtypesAll, "Type to read as needs to " &
+        "be a supported type: " & $Dtypes & ", but is " & $n[2].repr
+      dtypeOverride = n[2]
+      if resTypeOverride.kind == nnkEmpty:
+        # use input type as return type as well
+        resTypeOverride = dtypeOverride
     result.add Assign(asgnKind: asgnKind,
                       node: n,
                       element: colIdxName,
                       tensor: colName,
                       col: n[1],
-                      colType: dtype,
-                      resType: resType)
+                      colType: dtypeOverride,
+                      resType: resTypeOverride)
   else:
     discard
 
@@ -1029,7 +1039,7 @@ macro compileFormulaImpl*(rawName: untyped,
     if arg.asgnKind == byIndex:
       allScalar = false
     # apply user given type hints rigorously
-    if fct.typeHint.inputType.isSome:
+    if fct.typeHint.inputType.isSome and not arg.node.hasExplicitTypeHint:
       arg.colType = fct.typeHint.inputType.get
     if fct.typeHint.resType.isSome:
       arg.resType = fct.typeHint.resType.get
