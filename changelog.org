@@ -1,7 +1,9 @@
+* v0.1.5
+- fully qualify =Value= on scalar formula construction
+
 * v0.1.4
 - fix formulas (and type deduction) for certain use cases involving
   =nnkBracketExpr= that are *not* references to columns
-- fully qualify =Value= on scalar formula construction
 
 * v0.1.3
 - improve type deduction capabilities for infix nodes
