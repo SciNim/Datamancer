@@ -503,8 +503,12 @@ proc generateClosure*(fct: FormulaCT): NimNode =
                                    ident"DataFrame",
                                    newEmptyNode())]
   of fkScalar:
+    when (NimMajor, NimMinor, NimPatch) < (1, 5, 0):
+      let valueId = ident(ValueIdent)
+    else:
+      let valueId = nnkDotExpr.newTree(ident"value", ident(ValueIdent))
     # to avoid clashes with other `Value` objects, fully clarify we mean ours
-    params = [nnkDotExpr.newTree(ident"value", ident(ValueIdent)),
+    params = [valueId,
               nnkIdentDefs.newTree(ident(DfIdent),
                                    ident"DataFrame",
                                    newEmptyNode())]
