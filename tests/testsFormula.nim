@@ -245,3 +245,15 @@ suite "Formulas":
     let fn = f{"a+5.0" ~ `a` + 5.0 }
     check fn.evaluate(df).kind == colFloat
     check fn.evaluate(df).fCol == [6.0, 7.0, 8.0].toTensor
+
+  test "Complex reduction with multiple types and type deduction of `mean`":
+    # this was broken up to `v0.1.3`
+    let df = seqsToDf({ "x" : @[1, 2, 3, 4, 5], "y" : @["a", "b", "c", "d", "e"] })
+    block:
+      let fn = f{"mean+ord" << mean(`x`) + ord(max(col(`y`, string))[0]).float }
+      check fn.reduce(df).kind == VFloat
+      check fn.reduce(df).toFloat == 104.0
+    block:
+      let fn = f{"mean+ord" << mean(`x`) + col(`y`, string).max[0].ord.float }
+      check fn.reduce(df).kind == VFloat
+      check fn.reduce(df).toFloat == 104.0
