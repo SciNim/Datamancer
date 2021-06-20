@@ -1,3 +1,7 @@
+* v0.1.4
+- fix formulas (and type deduction) for certain use cases involving
+  =nnkBracketExpr= that are *not* references to columns
+
 * v0.1.3
 - improve type deduction capabilities for infix nodes
 - add overload for =drop= that doesn't just work on a mutable data
@@ -7,7 +11,7 @@
 - =arrange= now also takes a =varargs[string]= instead of a
   =seq=. While there is still a bug of not properly being able to use
   varargs, at least an array is possible (and hopefully at some point
-  proper varargs).  
+  proper varargs).
 
 * v0.1.2
 - CSV parser is more robust, can handle unnammed columns
