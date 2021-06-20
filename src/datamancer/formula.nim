@@ -687,7 +687,15 @@ proc getTypeIfPureTree(tab: Table[string, NimNode], n: NimNode, numArgs: int): P
     ## Needed in some cases like dotExpressions from an infix so that we know
     ## the result of the full expression
     if n.len > 0:
-      result = tab.getTypeIfPureTree(n[^1], numArgs)
+      case n.kind
+      of nnkInfix, nnkCall, nnkPrefix, nnkCommand: # type we need is of 0 arg
+        result = tab.getTypeIfPureTree(n[0], numArgs)
+      of nnkDotExpr: # type we need is of last arg
+        result = tab.getTypeIfPureTree(n[^1], numArgs)
+      else:
+        # else we have no type info?
+        #result = tab.getTypeIfPureTree(n[^1], numArgs)
+        return
 
   ## TODO: there are cases where one can extract type information from impure trees.
   ## `idx("a").float` is a nnkDotExpr that is impure, but let's us know that the output
