@@ -389,7 +389,6 @@ suite "Data frame tests":
     # which is the case for current grouping and the mpg dataset:
     check subGroupCount == 19
 
-
     let cylFiltered = mpg.filter(f{c"cyl" == 4})
     check cylFiltered.len == 81
     let cylDrvFiltered = cylFiltered.filter(f{c"drv" == "4"})
