@@ -235,3 +235,13 @@ suite "Formulas":
         else:
           idx("b", int)) }
       check fn.evaluate(df).iCol == [1, 4, 5].toTensor
+
+  test "Add with integer should produce integer":
+    let fn = f{"a+5" ~ `a` + 5 }
+    check fn.evaluate(df).kind == colInt
+    check fn.evaluate(df).iCol == [6, 7, 8].toTensor
+
+  test "Add with float should produce float":
+    let fn = f{"a+5.0" ~ `a` + 5.0 }
+    check fn.evaluate(df).kind == colFloat
+    check fn.evaluate(df).fCol == [6.0, 7.0, 8.0].toTensor
