@@ -96,6 +96,12 @@ proc drop*(df: var DataFrame, key: string) {.inline.} =
   ## drops the given key from the DataFrame
   df.data.del(key)
 
+proc drop*(df: DataFrame, keys: varargs[string]): DataFrame =
+  ## Returns a `DataFrame` with the given keys dropped.
+  result = df.shallowCopy()
+  for k in keys:
+    result.drop(k)
+
 #proc add*(v: PersistentVector[Value], w: PersistentVector[Value]): PersistentVector[Value] =
 #  ## adds all elements of `w` to `v` and returns the resulting vector
 #  if v.len > 100 or w.len > 100:
