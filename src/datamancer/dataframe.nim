@@ -626,7 +626,7 @@ proc buildColHashes(df: DataFrame, keys: seq[string]): seq[Hash] =
   # finalize the hashes
   result.applyIt(!$it)
 
-proc arrange*(df: DataFrame, by: seq[string], order = SortOrder.Ascending): DataFrame
+proc arrange*(df: DataFrame, by: varargs[string], order = SortOrder.Ascending): DataFrame
 iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Value)], DataFrame) =
   ## yields the subgroups of a grouped DataFrame `df` and the `(key, Value)`
   ## pairs that were used to create the subgroup. If `df` has more than
@@ -1033,12 +1033,12 @@ proc sortBys(df: DataFrame, by: seq[string], order: SortOrder): seq[int] =
       resIdx = sortRecurse(df, by, startIdx = 1, resIdx = resIdx, order = order)
     result = resIdx
 
-proc arrange*(df: DataFrame, by: seq[string], order = SortOrder.Ascending): DataFrame =
+proc arrange*(df: DataFrame, by: varargs[string], order = SortOrder.Ascending): DataFrame =
   ## sorts the data frame in ascending / descending `order` by key `by`
   # now sort by cols in ascending order of each col, i.e. ties will be broken
   # in ascending order of the columns
   result = newDataFrame(df.ncols)
-  let idxCol = sortBys(df, by, order = order)
+  let idxCol = sortBys(df, @by, order = order)
   result.len = df.len
   var data = newColumn()
   for k in keys(df):
