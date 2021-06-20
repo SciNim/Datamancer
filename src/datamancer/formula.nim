@@ -244,9 +244,11 @@ proc extractSymbols(n: NimNode): seq[NimNode] =
   of nnkIntLit .. nnkFloat64Lit, nnkStrLit:
     result.add n
   of nnkBracketExpr:
-    # iff this is a pure (no column access) node, add as symbol
-    if n.isPureTree:
-      result.add n
+    # iff this is not a column access recurse and look at children
+    if n.nodeIsDf or n.nodeIsDfIdx:
+      return
+    for i in 0 ..< n.len:
+      result.add extractSymbols(n[i])
   of nnkDotExpr:
     ## If `DotExpr` consists only of Idents during the untyped pass,
     ## it's either field access or multiple calls taking no arguments.
