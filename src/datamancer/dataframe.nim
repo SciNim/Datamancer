@@ -34,6 +34,38 @@ proc newDataFrame*(size = 8,
                      data: initOrderedTable[string, Column](nextPowerOfTwo(size)),
                      len: 0)
 
+proc clone(data: OrderedTable[string, Column]): OrderedTable[string, Column] =
+  ## clones the given table by making sure the columns are copied
+  result = initOrderedTable[string, Column]()
+  for key in keys(data):
+    result[key] = data[key].clone
+
+proc clone*(df: DataFrame): DataFrame =
+  ## returns a cloned version of `df` so that the tensors don't share
+  ## data.
+  result = DataFrame(kind: df.kind)
+  result.len = df.len
+  result.data = df.data.clone
+  case df.kind
+  of dfGrouped:
+    result.groupMap = df.groupMap
+  else: discard
+
+proc shallowCopy*(df: DataFrame): DataFrame =
+  ## creates a shallowCopy of the `DataFrame` that does ``not`` deep copy the tensors
+  ## Used to return a different DF that contains the same data for those columns
+  ## that exist in both. The default for all procedures that take and return
+  ## a DF.
+  result = DataFrame(kind: df.kind)
+  result.len = df.len
+  # simply do a regular copy of the DF (no deep copy of the data, but a new
+  # table)
+  result.data = df.data
+  case df.kind
+  of dfGrouped:
+    result.groupMap = df.groupMap
+  else: discard
+
 template ncols*(df: DataFrame): int = df.data.len
 
 proc `high`*(df: DataFrame): int = df.len - 1
@@ -144,31 +176,6 @@ proc asgn*(df: var DataFrame, k: string, col: Column) {.inline.} =
   # low level assign, which does not care about sizes of column. Used in `toTab`.
   # Shorter columns are extended afterwards.
   df.data[k] = col
-
-proc clone(data: OrderedTable[string, Column]): OrderedTable[string, Column] =
-  ## clones the given table by making sure the columns are copied
-  result = initOrderedTable[string, Column]()
-  for key in keys(data):
-    result[key] = data[key].clone
-
-proc clone*(df: DataFrame): DataFrame =
-  ## returns a cloned version of `df` so that the tensors don't share
-  ## data.
-  # NOTE: This should actually just use `clone` on each tensor, but if
-  # we do that, we get random GC segfaults later
-  result = DataFrame(kind: df.kind)
-  result.len = df.len
-  result.data = df.data.clone
-  # TODO: raise Nim issue about this. If the next line is in use,
-  # we get a GC related segfault when running `testDf`, which happens
-  # somewhere within `readCsv` (thus unrelated to this code here) in the
-  # test "Reduce data frame using FormulaNode":
-  # test case.
-  # result.data = df.data.clone
-  case df.kind
-  of dfGrouped:
-    result.groupMap = df.groupMap
-  else: discard
 
 template withCombinedType*(df: DataFrame,
                            cols: seq[string],
@@ -811,7 +818,7 @@ proc select*[T: string | FormulaNode](df: DataFrame, cols: varargs[T]): DataFram
   ## it's possible to select and rename a column at the same time.
   ## Note that the columns will be ordered from left to right given by the order
   ## of the `cols` argument!
-  result = df
+  result = df.shallowCopy()
   result.selectInplace(cols)
 
 proc mutateImpl(df: var DataFrame, fns: varargs[FormulaNode],
@@ -870,7 +877,7 @@ proc mutate*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
   ## column will be named after the stringification of the formula.
   ##
   ## E.g.: `df.mutate(f{"x" * 2})` will add the column `(* x 2)`.
-  result = df
+  result = df.shallowCopy()
   result.mutateInplace(fns)
 
 proc transmuteInplace*(df: var DataFrame, fns: varargs[FormulaNode]) =
@@ -899,7 +906,7 @@ proc transmute*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
   ## column will be named after the stringification of the formula.
   ##
   ## E.g.: `df.transmute(f{"x" * 2})` will create the column `(* x 2)`.
-  result = df
+  result = df.shallowCopy()
   result.transmuteInplace(fns)
 
 proc rename*(df: DataFrame, cols: varargs[FormulaNode]): DataFrame =
@@ -1141,7 +1148,7 @@ proc group_by*(df: DataFrame, by: varargs[string], add = false): DataFrame =
   doAssert by.len > 0, "Need at least one argument to group by!"
   if df.kind == dfGrouped and add:
     # just copy `df`
-    result = df
+    result = df.shallowCopy()
   else:
     # copy over the data frame into new one of kind `dfGrouped` (cannot change
     # kind at runtime!)
@@ -1399,7 +1406,7 @@ proc drop_null*(df: DataFrame, cols: varargs[string],
       colsNeedPruning.add col
   # now have to check all those cols for null, advantage: all cols use Value
   # -> can read all
-  result = df
+  result = df.shallowCopy()
   for col in colsNeedPruning:
     ## TODO: avoid filtering several times somehow?
     ## can read all cols first and then iterate over them? Not necessarily faster
