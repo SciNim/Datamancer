@@ -815,7 +815,7 @@ proc detNumArgs(n: NimNode): int =
     result = 1
     warning("What kind? " & $n.kind & " in node " & n.repr)
 
-proc argsValid(pt: ProcType, args: seq[PossibleTypes], impureIdxs: seq[int]): bool =
+proc argsValid(pt: ProcType, args: seq[PossibleTypes]): bool =
   ## This procedure removes all `ProcTypes` from the input `pt` that do not match the given
   ## `args` (excluding the impure indices!)
   ## The `ProcTypes` need to contain all input types (even ones we do not support as DFs)
@@ -828,7 +828,8 @@ proc argsValid(pt: ProcType, args: seq[PossibleTypes], impureIdxs: seq[int]): bo
   result = true
   if pt.inputTypes.len < args.len: return false
   for i, inArg in pt.inputTypes:
-    if i in impureIdxs: continue
+    # `impure` arguments are `tkNone`. Even might have impure indices for which we could determine
+    # type information!
     let arg = args[i]
     case args[i].kind
     of tkExpression:
@@ -842,12 +843,38 @@ proc argsValid(pt: ProcType, args: seq[PossibleTypes], impureIdxs: seq[int]): bo
     of tkProcedure:
       for argPt in arg.procTypes:
         var anyTyp = false
-        if argPt.resType.isSome and inArg == argPt.resType.get:
+        if argPt.resType.isSome and typesMatch(inArg, argPt.resType.get):
           anyTyp = true
         if not anyTyp:
           return false
     else:
       discard
+
+proc filterValidProcs(pTypes: var PossibleTypes, n: NimNode,
+                      chTyps: seq[PossibleTypes]) =
+  ## removes all proc types form `pTypes` that do not pass the conditions on
+  ## the other arguments in form of the child types `chTyps` and the
+  ## wildcards in form of "impure" indices. For impure indices the `PossibleType` is
+  ## most likely `tkNone` (but may have type information for certain trees).
+  var idx = 0
+  while idx < pTypes.procTypes.len:
+    let pt = pTypes.procTypes[idx]
+    if not pt.argsValid(chTyps):
+      pTypes.procTypes.delete(idx)
+      continue
+    inc idx
+
+proc determineChildTypesAndImpure(n: NimNode, tab: Table[string, NimNode]): (seq[int], seq[PossibleTypes]) =
+  var impureIdxs = newSeq[int]()
+  var chTyps = newSeq[PossibleTypes]()
+  for i in 1 ..< n.len:
+    let typ = tab.getTypeIfPureTree(n[i], detNumArgs(n[i]))
+    chTyps.add typ
+    ## add as impure iff it is actually pure and we could ``not`` determine a type
+    if not n[i].isPureTree: # and typ.kind == tkNone:
+      # i - 1 is impure idx, because i == 0 is return type of procedure
+      impureIdxs.add i - 1
+  result = (impureIdxs, chTyps)
 
 proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: FormulaTypes): seq[Assign] =
   ## This procedure tries to determine type information from the typed symbols stored in `TypedSymbols`,
@@ -888,21 +915,9 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
       doAssert cmdTyp.kind == tkProcedure, "In a call the first argument needs to " &
         "have procedure signature, i.e. have an input and output type!"
       # first extract all possible types for the call/cmd/... arguments
-      var impureIdxs = newSeq[int]()
-      var chTyps = newSeq[PossibleTypes]()
-      for i in 1 ..< n.len:
-        chTyps.add tab.getTypeIfPureTree(n[i], detNumArgs(n[i]))
-        if not n[i].isPureTree:
-          # i - 1 is impure idx, because i == 0 is return type of procedure
-          impureIdxs.add i - 1
+      let (impureIdxs, chTyps) = determineChildTypesAndImpure(n, tab)
       # remove all mismatching proc types
-      var idx = 0
-      while idx < cmdTyp.procTypes.len:
-        let pt = cmdTyp.procTypes[idx]
-        if not pt.argsValid(chTyps, impureIdxs):
-          cmdTyp.procTypes.delete(idx)
-          continue
-        inc idx
+      cmdTyp.filterValidProcs(n, chTyps)
       # can use the type for the impure argument
       for idx in impureIdxs:
         result.add determineTypesImpl(
@@ -926,24 +941,29 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
   of nnkInfix:
     let lSym = buildName(n[0])
     let nSym = tab[lSym]
-    let typ1 = tab.getTypeIfPureTree(n[1], detNumArgs(n))
-    let typ2 = tab.getTypeIfPureTree(n[2], detNumArgs(n))
     doAssert not (n[1].isPureTree and n[2].isPureTree), "Both infix subtrees cannot be pure. We wouldn't have entered"
-    # infix has 2 arguments
-    let infixType = nSym.findType(numArgs = detNumArgs(n))
-    var reqType: NimNode
-    let matching1 = matchingTypes(typ1, infixType)
-    let matching2 = matchingTypes(typ2, infixType)
-    ## Now check if there is only a single result type of the infix type choices. If so
-    ## use that as the result (if none set already)
-    let resType = infixType.toTypeSet(inputs = false).toSeq.sortTypes()
-    ## TODO: think about applying similar logic to `nnkCall` here (i.e. don't use sets)
-    if resType.len > 0:
-      result.add determineTypesImpl(n[1], tab,
-                                    assignType(heuristicType, matching2, resType = ident(resType[^1])))
-      result.add determineTypesImpl(n[2], tab,
-                                    assignType(heuristicType, matching1, resType = ident(resType[^1])))
-    else:
+    # determine type of infix symbol
+    var infixType = nSym.findType(numArgs = detNumArgs(n))
+    # first extract all possible types for the infix arguments
+    let (impureIdxs, chTyps) = determineChildTypesAndImpure(n, tab)
+    case infixType.kind
+    of tkProcedure:
+      infixType.filterValidProcs(n, chTyps)
+      # can use the type for the impure argument
+      for idx in impureIdxs:
+        result.add determineTypesImpl(
+          # idx + 1 because we shift it down by 1 when adding to `impureIdxs`
+          n[idx + 1], tab,
+          assignType(heuristicType,
+                     infixType,
+                     arg = idx))
+    of tkExpression, tkNone:
+      ## TODO: we can remove this, right? There can never be a result here I think
+      let typ1 = tab.getTypeIfPureTree(n[1], detNumArgs(n))
+      let typ2 = tab.getTypeIfPureTree(n[2], detNumArgs(n))
+      let matching1 = matchingTypes(typ1, infixType)
+      let matching2 = matchingTypes(typ2, infixType)
+      doAssert matching1.len == 0 and matching2.len == 0, " this is not useless ??"
       result.add determineTypesImpl(n[1], tab,
                                     assignType(heuristicType, matching2))
       result.add determineTypesImpl(n[2], tab,
