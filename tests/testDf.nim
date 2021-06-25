@@ -1325,3 +1325,14 @@ suite "Formulas":
         .arrange("class")
       check df.len == 234
       check df["(+ cty (mean df[\"hwy\"]))", float][0 ..< 5] == [40.8, 39.8, 40.8, 39.8, 39.8].toTensor
+
+  test "Slicing DF with constant column":
+    var df = seqsToDf({ "Energy" : cycle(linspace(0.0, 24.0, 25), 2),
+                        "Counts" : concat(toSeq(0 ..< 25),
+                                          toSeq(0 ..< 25)) })
+    df["Type"] = constantColumn("background", df.len)
+    let dfSlice = df[24 .. 26]
+    check dfSlice.len == 3
+    check dfSlice["Energy", int] == [24, 0, 1].toTensor
+    check dfSlice["Counts", int] == [24, 0, 1].toTensor
+    check dfSlice["Type", string] == ["background", "background", "background"].toTensor
