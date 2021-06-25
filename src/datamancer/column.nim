@@ -64,7 +64,10 @@ proc `[]`*(c: Column, slice: Slice[int]): Column =
   of colString: result = toColumn c.sCol[slice.a .. slice.b]
   of colBool: result = toColumn c.bCol[slice.a .. slice.b]
   of colObject: result = toColumn c.oCol[slice.a .. slice.b]
-  of colConstant: result = c
+  of colConstant:
+    # for constant keep column, only adjust the length to the slice
+    result = c
+    result.len = slice.b - slice.a + 1
   of colNone: raise newException(IndexError, "Accessed column is empty!")
 
 proc newColumn*(kind = colNone, length = 0): Column =
