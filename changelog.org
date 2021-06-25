@@ -1,3 +1,6 @@
+* v0.1.6
+- fix slicing of constant columns
+
 * v0.1.5
 - fully qualify =Value= on scalar formula construction
 
