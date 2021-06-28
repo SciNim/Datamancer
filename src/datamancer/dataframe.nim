@@ -210,6 +210,9 @@ template withCombinedType*(df: DataFrame,
     body
   of colNone, colConstant: doAssert false, "No valid type!"
 
+proc `[]=`*[T: SomeNumber | string | bool](df: var DataFrame, k: string, t: T) {.inline.} =
+  df[k] = constantColumn(t, df.len)
+
 proc `[]=`*[T: Tensor | seq | array](df: var DataFrame, k: string, t: T) {.inline.} =
   df[k] = toColumn t
 
@@ -349,7 +352,10 @@ proc extendShortColumns*(df: var DataFrame) =
   ## has less entries in certain columns than the data frame length.
   ## This proc fills up the mutable dataframe in those columns
   for k in keys(df):
-    if df[k].len < df.len:
+    if df[k].len == 1:
+      ## make it a constant column of `df` length
+      df[k] = constantColumn(df[k][0, Value], df.len)
+    elif df[k].len < df.len:
       let nFill = df.len - df[k].len
       df[k] = df[k].add nullColumn(nFill)
 
@@ -436,20 +442,24 @@ macro toTab*(args: varargs[untyped]): untyped =
   result.add quote do:
     var `data` = newDataFrame()
   for a in s:
+    # let's just try to deal the compiler with it. It should fail on `toColumn` if we
+    # cannot support it after all
     case a.kind
-    of nnkIdent:
-      let key = a.strVal
-      result.add quote do:
-        asgn(`data`, `key`, `a`.toColumn)
-        `data`.len = max(`data`.len, `a`.len)
     of nnkExprColonExpr:
       let nameCh = a[0]
-      let seqCh = a[1]
+      let valCh = a[1]
+      let colN = genSym(nskLet, "column")
       result.add quote do:
-        asgn(`data`, `nameCh`, `seqCh`.toColumn)
-        `data`.len = max(`data`.len, `seqCh`.len)
+        let `colN` = `valCh`.toColumn
+        asgn(`data`, `nameCh`, `colN`)
+        `data`.len = max(`data`.len, `colN`.len)
     else:
-      error("Unsupported kind " & $a.kind)
+      let colN = genSym(nskLet, "column")
+      let aName = a.toStrLit
+      result.add quote do:
+        let `colN` = `a`.toColumn
+        asgn(`data`, `aName`, `colN`)
+        `data`.len = max(`data`.len, `colN`.len)
   result = quote do:
     block:
       `result`
