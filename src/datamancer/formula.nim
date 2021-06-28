@@ -560,6 +560,7 @@ proc determineTypeFromProc(n: NimNode, numArgs: int): Option[ProcType] =
       result = some(res)
 
 proc toType(n: NimNode): NimNode =
+  result = newEmptyNode()
   case n.kind
   of nnkIntLit .. nnkUInt64Lit: result = ident "int"
   of nnkFloatLit .. nnkFloat128Lit: result = ident "float"
@@ -567,7 +568,7 @@ proc toType(n: NimNode): NimNode =
   of nnkIdent, nnkSym:
     if n.strVal in ["true", "false"]: result = ident "bool"
     elif n.strVal in DtypesAll: result = n
-    else: error("Invalid type " & $n.repr & " of kind " & $n.kind)
+    else: warning("Invalid type " & $n.repr & " of kind " & $n.kind)
   of nnkBracketExpr:
     if n.isTensorType():
       result = n
@@ -577,7 +578,7 @@ proc toType(n: NimNode): NimNode =
     # cannot store enum type in Tensor, so return nil
     discard
   else:
-    error("Invalid node " & $n.kind & " : " & n.repr)
+    warning("Invalid node " & $n.kind & " : " & n.repr)
 
 proc maybeAddSpecialTypes(possibleTypes: var PossibleTypes, n: NimNode) =
   ## These don't appear as overloads sometimes?
@@ -619,10 +620,10 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
         ## TODO: is this branch likely?
         ## Should happen, yes. E.g. just a variable defined in local scope?
         ##
-        let typ = n.getType
-        if typ.kind != nnkNilLit:
+        let typ = n.getType.toType
+        if typ.kind != nnkEmpty:
           return PossibleTypes(isGeneric: false, kind: tkExpression,
-                               types: @[typ.toType], asgnKind: some(byIndex))
+                               types: @[typ], asgnKind: some(byIndex))
         warning("How did we stumble over " & $(n.treeRepr) & " with type " &
           $(tImpl.treeRepr))
         #return
@@ -866,13 +867,15 @@ proc filterValidProcs(pTypes: var PossibleTypes, n: NimNode,
   ## the other arguments in form of the child types `chTyps` and the
   ## wildcards in form of "impure" indices. For impure indices the `PossibleType` is
   ## most likely `tkNone` (but may have type information for certain trees).
-  var idx = 0
-  while idx < pTypes.procTypes.len:
-    let pt = pTypes.procTypes[idx]
-    if not pt.argsValid(chTyps):
-      pTypes.procTypes.delete(idx)
-      continue
-    inc idx
+  if pTypes.kind == tkProcedure:
+    var idx = 0
+    while idx < pTypes.procTypes.len:
+      let pt = pTypes.procTypes[idx]
+      if not pt.argsValid(chTyps):
+        pTypes.procTypes.delete(idx)
+        continue
+      inc idx
+  # else there's nothing to remove
 
 proc determineChildTypesAndImpure(n: NimNode, tab: Table[string, NimNode]): (seq[int], seq[PossibleTypes]) =
   var impureIdxs = newSeq[int]()
@@ -909,7 +912,7 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
       result.add addColRef(n, heuristicType, byIndex)
     else:
       ## in this case is a regular call
-      ## determine type information from the procedure / w/e
+      ## determine type information from the procedure / w/e. May be `tkNone` if symbol is e.g. generic
       var cmdTyp = tab.getTypeIfPureTree(n[0], detNumArgs(n))
       doAssert n[0].isPureTree, "If this wasn't a pure tree, it would be a col reference!"
       ## for each argument to the call / cmd get the type of the argument.
@@ -922,8 +925,6 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
       ## needs to restrict to this specific `max` thanks to the arguments `y, z, b`
       ## Arguments are only looked at for their *output* type, because that is the input to
       ## the command / call / ...
-      doAssert cmdTyp.kind == tkProcedure, "In a call the first argument needs to " &
-        "have procedure signature, i.e. have an input and output type!"
       # first extract all possible types for the call/cmd/... arguments
       let (impureIdxs, chTyps) = determineChildTypesAndImpure(n, tab)
       # remove all mismatching proc types
