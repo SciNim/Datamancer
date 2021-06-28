@@ -555,7 +555,7 @@ proc writeCsv*(df: DataFrame, filename: string, sep = ',', header = "",
     data.add "\n"
   writeFile(filename, data)
 
-proc showBrowser*(df: DataFrame, toRemove = false) =
+proc showBrowser*(df: DataFrame, fname = "df.html", path = getTempDir(), toRemove = false) =
   ## Displays the given DataFrame as a table in the default browser.
   ##
   ## Note: the HTML generation is not written for speed at this time. For very large
@@ -605,7 +605,7 @@ tr:nth-child(even) {
       body.add &"<td>{pretty(x)}</td>"
     body.add "\n</tr>"
   body.add "</tbody>"
-  let fname = getTempDir() / "df.html"
+  let fname = path / fname
   writeFile(fname, tmpl % [header & body])
   openDefaultBrowser(fname)
   if toRemove:
