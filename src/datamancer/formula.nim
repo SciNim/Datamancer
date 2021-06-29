@@ -590,9 +590,6 @@ proc maybeAddSpecialTypes(possibleTypes: var PossibleTypes, n: NimNode) =
 
 proc findType(n: NimNode, numArgs: int): PossibleTypes =
   ## This procedure tries to find type information about a given NimNode.
-  ## It must be a symbol (or contain one) of some kind. It should not be used for
-  ## literals, as they have fixed type information.
-  ## NOTE: this may be changed in the future! Currently this is used to
   var possibleTypes = PossibleTypes()
   case n.kind
   of nnkIntLit .. nnkFloat64Lit, nnkStrLit:
