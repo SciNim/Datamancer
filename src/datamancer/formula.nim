@@ -953,10 +953,12 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
     ## TODO: need to handle regular `nnkBracketExpr`. Can this appear? If pure we wouldn't be here
   of nnkInfix:
     let lSym = buildName(n[0])
-    let nSym = tab[lSym]
-    doAssert not (n[1].isPureTree and n[2].isPureTree), "Both infix subtrees cannot be pure. We wouldn't have entered"
-    # determine type of infix symbol
-    var infixType = nSym.findType(numArgs = detNumArgs(n))
+    var infixType: PossibleTypes
+    if lSym in tab: # the symbol should really be in `tab`. Let's try to continue otherwise
+      let nSym = tab[lSym]
+      doAssert not (n[1].isPureTree and n[2].isPureTree), "Both infix subtrees cannot be pure. We wouldn't have entered"
+      # determine type of infix symbol
+      infixType = nSym.findType(numArgs = detNumArgs(n))
     # first extract all possible types for the infix arguments
     let (impureIdxs, chTyps) = determineChildTypesAndImpure(n, tab)
     case infixType.kind
