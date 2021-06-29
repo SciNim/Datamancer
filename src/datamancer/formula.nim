@@ -1032,16 +1032,20 @@ proc parseOptionValue(n: NimNode): Option[FormulaKind] =
   else:
     error("Bad input node " & $n.repr & " in `parseOptionValue`.")
 
-macro compileFormulaImpl*(rawName: untyped,
-                          funcKindAst: untyped): untyped =
-  ## Second stage of formula macro. In a sense the "typed" stage (even if it's an untyped macro).
+macro compileFormulaImpl*(rawName: static string,
+                          funcKind: static FormulaKind): untyped =
+  ## Second stage of formula macro. The typed stage of the macro. It's important that the macro
+  ## is typed, as otherwise we risk that it is evaluated ``before`` the `addSymbols` calls, if
+  ## we are within a generic procedure. That leads to the CT tables being empty. By making it
+  ## typed (which we can do, because we store all problematic AST into the CT tables), we
+  ## force evaluation to the same compilation stage as `addSymbols`.
+  ##
   ## Extracts the typed symbols from `TypedSymbols` CT table and uses it to determine possible
   ## types for column references.
-  let funcKind = parseOptionValue(funcKindAst)
-  var fct = Formulas[rawName.strVal]
+  var fct = Formulas[rawName]
   var typeTab = initTable[string, NimNode]()
-  if rawName.strVal in TypedSymbols:
-    typeTab = TypedSymbols[rawName.strVal]
+  if rawName in TypedSymbols:
+    typeTab = TypedSymbols[rawName]
   # generate the `preface`
   ## generating the preface is done by extracting all references to columns,
   ## using their names as `tensor` names (not element, since we in the general
@@ -1107,19 +1111,18 @@ macro compileFormulaImpl*(rawName: untyped,
       "`U` is the output type (`T`, input type, is required as well).")
 
   # possibly overwrite funcKind
-  if funcKind.isSome:
+  if funcKind != fkNone:
     ## raise error in case given function kind does not match what we expect
-    let fnk = funcKind.get
-    if allScalar and fnk != fkScalar:
+    if allScalar and funcKind != fkScalar:
       warning("Formula " & $fct.rawName & " has a mismatch between given formula " &
-        "kind:\n\t`" & $fnk & "` (mapping)\nand automatically determined formula kind:\n\t" &
+        "kind:\n\t`" & $funcKind & "` (mapping)\nand automatically determined formula kind:\n\t" &
         "<< (reducing)\nPlease adjust the given kind to `<<`.")
-    elif not allScalar and fnk == fkScalar:
+    elif not allScalar and funcKind == fkScalar:
       error("Formula " & $fct.rawName & " has a mismatch between given formula " &
-        "kind:\n\t`" & $fnk & "` (reducing)\nand automatically determined formula kind:\n\t" &
+        "kind:\n\t`" & $funcKind & "` (reducing)\nand automatically determined formula kind:\n\t" &
         "`~` (mapping)\nPlease adjust the given kind to `~`.")
     # use the user given formula kind
-    fct.funcKind = fnk
+    fct.funcKind = funcKind
   else:
     fct.funcKind = if allScalar: fkScalar else: fkVector
 
@@ -1245,9 +1248,9 @@ proc compileFormula(n: NimNode): NimNode =
     ##   -> should imply `fkScalar` (and has to be an arg of a proc call)
     ## - type information of all symbols that are not column references, which
     ##   might be reducing operations (`mean(df["someCol"])` etc.).
-    let funcKind = if isReduce: some(fkScalar)
-                   elif isVector: some(fkVector)
-                   else: none(FormulaKind)
+    let funcKind = if isReduce: fkScalar
+               elif isVector: fkVector
+               else: fkNone
 
     ## Generate a preliminary `FormulaCT` with the information we have so far
     var fct = FormulaCT()
