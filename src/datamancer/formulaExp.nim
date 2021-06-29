@@ -15,6 +15,7 @@ type
   ## a data frame. Pure formulas represent raw expressions that evaluate to
   ## a simple `Value`
   FormulaKind* = enum
+    fkNone = "none" ## default value for uninitialized formula / no formula kind at CT yet
     fkVariable = "" ## Nim variable as `Value`, pure
     fkAssign = "<-" ## assignment op, pure
     fkVector = "~" ## map operation, impure

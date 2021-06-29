@@ -821,7 +821,9 @@ proc selectInplace*[T: string | FormulaNode](df: var DataFrame, cols: varargs[T]
       of fkAssign:
         df.asgn(fn.lhs, df[fn.rhs])
         toDrop.excl fn.lhs
-      else: doAssert false, "function does not make sense for select"
+      else:
+        raise newException(FormulaMismatchError, "Formula `" & $fn & "` of kind `" & $fn.kind & "` not allowed " &
+          "for selection.")
   # now drop all required keys
   for key in toDrop: df.drop(key)
 
@@ -865,6 +867,9 @@ proc mutateImpl(df: var DataFrame, fns: varargs[FormulaNode],
       let (colName, newCol) = df.calcNewConstColumnFromScalar(fn)
       df.asgn(colName, newCol)
       colsToKeep.add colName
+    of fkNone:
+      raise newException(FormulaMismatchError, "Formula `" & $fn & "` of kind `fkNone` not allowed " &
+        "for mutation.")
   when dropCols:
     df.selectInplace(colsToKeep)
 
@@ -1443,6 +1448,7 @@ func evaluate*(node: FormulaNode): Value =
   of fkAssign: result = node.rhs # ?? TODO: should this be allowed?
   of fkScalar: result = %~ node.valName
   of fkVector: result = %~ node.colName
+  of fkNone: result = ValueNull
 
 proc evaluate*(node: FormulaNode, df: DataFrame): Column =
   ## tries to return a Column from a FormulaNode with an input
@@ -1460,6 +1466,7 @@ proc evaluate*(node: FormulaNode, df: DataFrame): Column =
   of fkAssign: result = df[node.rhs.toStr]
   of fkVector: result = node.fnV(df)
   of fkScalar: result = constantColumn(node.fnS(df), df.len)
+  of fkNone: result = newColumn(colNone, df.len)
 
 proc reduce*(node: FormulaNode, df: DataFrame): Value =
   ## tries to return a Column from a FormulaNode with an input

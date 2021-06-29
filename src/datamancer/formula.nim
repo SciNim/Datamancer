@@ -31,6 +31,7 @@ type
       valName*: string
       valKind*: ValueKind
       fnS*: proc(c: DataFrame): Value
+    of fkNone: discard
 
   FormulaMismatchError* = object of CatchableError
 
@@ -75,6 +76,7 @@ proc toUgly*(result: var string, node: FormulaNode) =
     result = $node.colName
   of fkScalar:
     result = $node.valName
+  of fkNone: discard
 
 proc `$`*(node: FormulaNode): string =
   ## Converts `node` to its string representation
