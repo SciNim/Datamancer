@@ -1,4 +1,4 @@
-import macros, tables, sequtils, sets, algorithm, options, strutils
+import macros, tables, sequtils, sets, algorithm, options, strutils, hashes
 import value, column, df_types
 # formulaNameMacro contains a macro and type based on the fallback `FormulaNode`,
 # which is used to generate the names of each `FormulaNode` in lisp representation
@@ -56,6 +56,23 @@ type
     isGeneric: bool
     inputTypes: seq[NimNode] # types of all arguments
     resType: Option[NimNode]
+
+proc hash*(fn: FormulaNode): Hash =
+  result = hash(fn.kind.int)
+  result = result !& hash(fn.name)
+  case fn.kind
+  of fkVariable:
+    result = result !& hash(fn.val)
+  of fkAssign:
+    result = result !& hash(fn.lhs)
+    result = result !& hash(fn.rhs)
+  of fkVector:
+    result = result !& hash(fn.resType)
+    result = result !& hash(fn.fnV)
+  of fkScalar:
+    result = result !& hash(fn.valKind)
+    result = result !& hash(fn.fnS)
+  of fkNone: discard
 
 proc raw*(node: FormulaNode): string =
   ## prints the raw stringification of `node`
