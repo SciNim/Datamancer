@@ -836,7 +836,7 @@ proc argsValid(pt: ProcType, args: seq[PossibleTypes]): bool =
     # `impure` arguments are `tkNone`. Even might have impure indices for which we could determine
     # type information!
     let arg = args[i]
-    case args[i].kind
+    case arg.kind
     of tkExpression:
       var anyTyp = false
       for t in arg.types:
