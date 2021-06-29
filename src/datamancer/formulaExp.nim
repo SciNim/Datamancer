@@ -108,6 +108,19 @@ const DtypeOrderMap* = {
   "Tensor[bool]" : 15,
   "bool" : 16 # if something  can be done with `bool`, take that
 }.toTable()
+const DtypeOrderMapKeys = toSeq(DtypeOrderMap.keys())
+
+proc toStrType*(n: NimNode): NimNode =
+  case n.kind
+  of nnkIntLit .. nnkUInt64Lit: result = ident "int"
+  of nnkFloatLit .. nnkFloat128Lit: result = ident "float"
+  of nnkStrLit: result = ident "string"
+  of nnkIdent, nnkSym:
+    if n.strVal in ["true", "false"]: result = ident "bool"
+    else: result = ident(n.repr)
+  else: result = ident(n.repr)
+
+proc isValidType*(n: NimNode): bool =  n.strVal in DtypeOrderMapKeys
 
 proc sortTypes*(s: seq[string]): seq[string] =
   ## sorts the types according to our own "priority list"
@@ -118,7 +131,7 @@ proc sortTypes*(s: seq[string]): seq[string] =
   result = zip(s, ids).sortedByIt(it[1]).mapIt(it[0])
 
 proc sortTypes*(s: seq[NimNode]): seq[string] =
-  result = s.mapIt(it.repr).sortTypes()
+  result = s.filterIt(it.isValidType).mapIt(it.strVal).sortTypes()
 
 proc isColumnType*(n: NimNode): bool =
   case n.kind

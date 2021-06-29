@@ -568,36 +568,15 @@ proc determineTypeFromProc(n: NimNode, numArgs: int): Option[ProcType] =
   let (hasNumArgs, optArgs) = countArgs(params)
   if (hasNumArgs - numArgs) <= optArgs and numArgs <= hasNumArgs:
     res.isGeneric = (not (n.kind == nnkProcTy)) and n[2].kind != nnkEmpty
-    res.resType = some(params[0])
+    res.resType = some(params[0].toStrType)
     for idx in 1 ..< params.len:
       # skip index 0, cause that's the output type
       let pArg = params[idx]
       let numP = pArg.len - 2
       for j in 0 ..< pArg.len - 2:
-        res.inputTypes.add pArg[pArg.len - 2]
+        res.inputTypes.add pArg[pArg.len - 2].toStrType
     if res.resType.isSome or res.inputTypes.len > 0:
       result = some(res)
-
-proc toType(n: NimNode): NimNode =
-  result = newEmptyNode()
-  case n.kind
-  of nnkIntLit .. nnkUInt64Lit: result = ident "int"
-  of nnkFloatLit .. nnkFloat128Lit: result = ident "float"
-  of nnkStrLit: result = ident "string"
-  of nnkIdent, nnkSym:
-    if n.strVal in ["true", "false"]: result = ident "bool"
-    elif n.strVal in DtypesAll: result = n
-    else: warning("Invalid type " & $n.repr & " of kind " & $n.kind)
-  of nnkBracketExpr:
-    if n.isTensorType():
-      result = n
-    elif n[0].kind in {nnkSym, nnkIdent} and n[0].strVal == "typeDesc":
-      result = n[1]
-  of nnkEnumTy:
-    # cannot store enum type in Tensor, so return nil
-    discard
-  else:
-    warning("Invalid node " & $n.kind & " : " & n.repr)
 
 proc maybeAddSpecialTypes(possibleTypes: var PossibleTypes, n: NimNode) =
   ## These don't appear as overloads sometimes?
@@ -617,11 +596,13 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
   var possibleTypes = PossibleTypes()
   case n.kind
   of nnkIntLit .. nnkFloat64Lit, nnkStrLit:
-    return PossibleTypes(isGeneric: false, kind: tkExpression, types: @[n.toType], asgnKind: some(byIndex))
+    return PossibleTypes(isGeneric: false, kind: tkExpression, types: @[n.toStrType],
+                         asgnKind: some(byIndex))
   of nnkSym:
     ## TODO: chck if a node referring to our types
     if n.strVal in DtypesAll:
-      return PossibleTypes(isGeneric: false, kind: tkExpression, types: @[n], asgnKind: some(byIndex))
+      return PossibleTypes(isGeneric: false, kind: tkExpression, types: @[n.toStrType],
+                           asgnKind: some(byIndex))
     else:
       ## TODO: check if a proc by using `getImpl`
       let tImpl = n.getImpl
@@ -639,7 +620,7 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
         ## TODO: is this branch likely?
         ## Should happen, yes. E.g. just a variable defined in local scope?
         ##
-        let typ = n.getType.toType
+        let typ = n.getType.toStrType
         if typ.kind != nnkEmpty:
           return PossibleTypes(isGeneric: false, kind: tkExpression,
                                types: @[typ], asgnKind: some(byIndex))
@@ -652,7 +633,8 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
     ## TODO: fix to actually use proc type!
     let inputType = impl[0][1][1]
     let resType = impl[0][0]
-    let pt = ProcType(inputTypes: @[inputType], resType: some(resType))
+    let pt = ProcType(inputTypes: @[inputType.toStrType],
+                      resType: some(resType.toStrType))
     possibleTypes.add pt
   of nnkClosedSymChoice, nnkOpenSymChoice:
     for ch in n:
@@ -680,9 +662,8 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
       if pt.isSome:
         possibleTypes.add pt.get
     else:
-      if typ.toType.kind != nnkNilLit:
-        return PossibleTypes(isGeneric: false, kind: tkExpression,
-                             types: @[typ.toType], asgnKind: some(byIndex))
+      return PossibleTypes(isGeneric: false, kind: tkExpression,
+                           types: @[typ.toStrType], asgnKind: some(byIndex))
 
   ## possibly add special types
   possibleTypes.maybeAddSpecialTypes(n)
@@ -774,7 +755,7 @@ proc matchingTypes(t, u: PossibleTypes): seq[NimNode] =
     result = intersection(ts, us).toSeq.mapIt(ident(it))
 
 proc assignType(heuristicType: FormulaTypes, types: seq[NimNode], resType = newEmptyNode()): FormulaTypes =
-  if types.len == 1:
+  if types.len == 1 and types[0].isValidType:
     result = FormulaTypes(inputType: types[0],
                           resType: heuristicType.resType)
     if result.resType.kind == nnkEmpty:
@@ -791,8 +772,11 @@ proc assignType(heuristicType: FormulaTypes, typ: PossibleTypes, arg = 0): Formu
     if typ.types.len > 0:
       # take the type with the highest priority as the input type
       let typs = typ.types.sortTypes()
-      result = FormulaTypes(inputType: ident(typs[^1]),
-                            resType: heuristicType.resType)
+      if typs.len > 0:
+        result = FormulaTypes(inputType: ident(typs[^1]),
+                              resType: heuristicType.resType)
+      else:
+        result = heuristicType
     else:
       result = heuristicType
   of tkProcedure:
@@ -804,8 +788,11 @@ proc assignType(heuristicType: FormulaTypes, typ: PossibleTypes, arg = 0): Formu
         if el.inputTypes.len > arg:
           inTypes.add el.inputTypes[arg]
       let inTypsSorted = inTypes.sortTypes()
-      result = FormulaTypes(inputType: ident(inTypsSorted[^1]),
-                            resType: heuristicType.resType)
+      if inTypsSorted.len > 0:
+        result = FormulaTypes(inputType: ident(inTypsSorted[^1]),
+                              resType: heuristicType.resType)
+      else:
+        result = heuristicType
       if result.resType.kind == nnkEmpty:
         # only use output type if not set and pick highest priority one
         var outTyps = newSeq[NimNode]()
