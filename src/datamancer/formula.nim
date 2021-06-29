@@ -807,18 +807,6 @@ proc assignType(heuristicType: FormulaTypes, typ: PossibleTypes, arg = 0): Formu
   else:
     result = heuristicType
 
-proc toTypeSeq(t: PossibleTypes, inputs: bool): seq[NimNode] =
-  case t.kind
-  of tkExpression:
-    result = t.types
-  of tkProcedure:
-    for pt in t.procTypes:
-      if inputs:
-        result.add pt.inputTypes
-      elif pt.resType.isSome:
-        result.add pt.resType.get
-  else: discard
-
 proc detNumArgs(n: NimNode): int =
   case n.kind
   of nnkCall, nnkCommand, nnkPrefix:
