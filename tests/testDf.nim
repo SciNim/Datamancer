@@ -1205,6 +1205,22 @@ t_in_s,  C1_in_V,  C2_in_V,  type
 
       check dfTr.select("subMeanHwy").unique()["subMeanHwy", float] == expDf.select("subMeanHwy")["subMeanHwy", float]
 
+  test "Construction with scalar":
+    var df = seqsToDf({ "x" : @[1,2,3],
+                        "y" : toSeq(5..7),
+                        "z" : "foo",
+                        "α" : 2.5 })
+    check df.len == 3
+    check df["x", int] == [1,2,3].toTensor
+    check df["y", int] == [5,6,7].toTensor
+    check df["z"].kind == colConstant
+    check df["α"].kind == colConstant
+    check df["z"].cCol == %~ "foo"
+    check df["α"].cCol == %~ 2.5
+    df["β"] = 123
+    check df["β"].kind == colConstant
+    check df["β"].cCol == %~ 123
+
 suite "Formulas":
   test "Formula containing `if`":
     let fn = f{int -> int: if `poopoo` > 5:
