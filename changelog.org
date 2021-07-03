@@ -1,3 +1,12 @@
+* v0.1.7
+- allow assignment of constants in =seqsToDf=
+- allow assignment of scalars to DF as column directly
+- add filename argument to =showBrowser=
+- make =compileFormulaImpl= actually typed to make formulas work
+  correctly inside of generics (ref =ggplotnim=
+  https://github.com/Vindaar/ggplotnim/issues/116
+- change internal macro type logic to use strings
+  
 * v0.1.6
 - fix slicing of constant columns
 
