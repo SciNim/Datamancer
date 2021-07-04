@@ -1,3 +1,10 @@
+* v0.1.8
+- avoid some object conversions in column operations (ref #11)
+- add ~[]=~ overloads for columns for slice assignments
+- *significantly* improve performance of =mutate/transmute= operations
+  for grouped dataframes (O(150,000) groups in < 0.5 s possible now)
+- fixes #12 by avoiding hashing of columns. Some performance
+  regression in =innerJoin=, =setDiff= (~2x slower in bad cases).    
 * v0.1.7
 - allow assignment of constants in =seqsToDf=
 - allow assignment of scalars to DF as column directly
