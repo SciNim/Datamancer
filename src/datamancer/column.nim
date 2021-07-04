@@ -501,11 +501,12 @@ proc `[]=`*(c: var Column, slice: Slice[int], col: Column) =
   if c.compatibleColumns(col) and c.kind != colConstant:
     withNativeDtype(c):
       c[slice] = col.toTensor(dtype)
-  elif c.kind == colConstant:
+  elif c.kind == colConstant and col.kind == colConstant:
     if c.cCol == col.cCol: return # nothing to do
     else:
-      c = c.toObjectColumn()
-      c.oCol[sa .. sb] = col.toTensor(Value)
+      c = c.constantToFull()
+      let c2 = col.constantToFull()
+      c[slice] = c2
   else:
     c = c.toObjectColumn()
     c.oCol[sa .. sb] = col.toTensor(Value)
