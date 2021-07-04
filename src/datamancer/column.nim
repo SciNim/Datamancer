@@ -464,7 +464,9 @@ proc `[]=`*[T](c: var Column, slice: Slice[int], t: Tensor[T]) =
       c.oCol[sa .. sb] = t.asValue()
   of colFloat:
     when T is float:
-      c.fCol[sa .. sb | 1] = t
+      c.fCol[sa .. sb] = t
+    elif T is int:
+      c.fCol[sa .. sb] = t.asType(float)
     else:
       c = c.toObjectColumn()
       c.oCol[sa .. sb] = t.asValue()
