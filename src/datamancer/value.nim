@@ -291,7 +291,11 @@ template withNative*(v: Value,
   of VBool:
     let `valName` {.inject.} =  v.bval
     body
-  of VObject, VNull:
+  of VNull:
+    # a null value is just a null value
+    let `valName` {.inject.} =  v
+    body
+  of VObject:
     doAssert false, "not implemented / makes no sense for current usage"
 
 template withNativeConversion*(kind: ValueKind,
