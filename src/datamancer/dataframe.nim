@@ -641,8 +641,10 @@ proc assignStack(dfs: seq[DataFrame]): DataFrame =
     var col = result[k]
     var idx = 0
     for df in dfs:
+      if df.len == 0: continue
       col[idx .. idx + df.len - 1] = df[k]
       inc idx, df.len
+    result[k] = col
 
 proc hashColumn*(s: var seq[Hash], c: Column, finish: static bool = false) =
   ## performs a partial hash of a DF. I.e. a single column, where
