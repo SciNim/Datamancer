@@ -426,6 +426,9 @@ proc `[]=`*[T](c: var Column, idx: int, val: T) =
     c.oCol[idx] = %~ val
   of colConstant:
     if c.cCol == %~ val: discard # do nothing
+    elif c.cCol.kind == VNull:
+      # turn into constant column of `val`
+      c.cCol = %~ val
     else:
       # need to replace constant column by non constant with changed value at
       # specified index
