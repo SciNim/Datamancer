@@ -26,6 +26,7 @@ export formulaNameMacro
 
 const ValueNull* = Value(kind: VNull)
 
+proc select*[T: string | FormulaNode](df: DataFrame, cols: varargs[T]): DataFrame
 proc newDataFrame*(size = 8,
                    kind = dfNormal): DataFrame =
   ## initialize a DataFrame, which initializes the table for `size` number
@@ -304,6 +305,11 @@ proc row*(df: DataFrame, idx: int, cols: varargs[string]): Value {.inline.} =
   let mcols = if cols.len == 0: getKeys(df) else: @cols
   for col in mcols:
     result[col] = df[col][idx, Value]
+
+proc assignRow*(v: var Value, df: DataFrame, idx: int) =
+  ## `v` needs to be a VObject with the exact same keys as `df`!
+  for col in keys(df.data):
+    v[col] = df[col][idx, Value]
 
 proc pretty*(df: DataFrame, numLines = 20, precision = 4, header = true): string =
   ## converts the first `numLines` to a table.
@@ -658,13 +664,42 @@ proc hashColumn*(s: var seq[Hash], c: Column, finish: static bool = false) =
       else:
         s[idx] = !$(s[idx] !& hash(t[idx]))
 
-proc buildColHashes(df: DataFrame, keys: seq[string]): seq[Hash] =
+proc buildColHashes(df: DataFrame, keys: seq[string]): seq[seq[Value]] =
+  ## Computes a sequence of `Value VObject` elements from the given
+  ## columns. This is to avoid issue #12 (hash collisions if many input
+  ## values present).
+  ##
+  ## NOTE: This version is up to a factor of ~2.5 or so slower than the old
+  ## hashing based version (on the upside we have a different solution for the
+  ## `groups` iterator, which is the same speed). Keep this in mind for the future
+  ## and optimize it further.
+  result = newSeq[seq[Value]](df.len)
+  # determine columns
+  let mcols = if keys.len == 0: getKeys(df) else: @keys
+  # assign columns to a seq (avoid key lookup)
+  var colCols = newSeq[Tensor[Value]](mcols.len)
+  for i, col in mcols:
+    colCols[i] = df[col, Value]
+  # assign rows
+  var row = newSeq[Value](mcols.len)
+  for i in 0 ..< df.len:
+    for j, col in mcols:
+      row[j] = colCols[j][i]
+    result[i] = row
+
+proc selectTensors(df: DataFrame, keys: seq[string]): seq[Tensor[Value]] =
+  result = newSeq[Tensor[Value]](keys.len)
   for i, k in keys:
-    if i == 0:
-      result = newSeq[Hash](df.len)
-    result.hashColumn(df[k])
-  # finalize the hashes
-  result.applyIt(!$it)
+    result[i] = df[k, Value]
+
+proc row(cols: seq[Tensor[Value]], idx: int): seq[Value] =
+  result = newSeq[Value](cols.len)
+  for i, col in cols:
+    result[i] = col[idx]
+
+proc assignRow(row: var seq[Value], cols: seq[Tensor[Value]], idx: int) =
+  for i, col in mpairs(row):
+    col = cols[i][idx]
 
 proc arrange*(df: DataFrame, by: varargs[string], order = SortOrder.Ascending): DataFrame
 iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Value)], DataFrame) =
@@ -680,16 +715,8 @@ iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Valu
   # arrange by all keys in ascending order
   let dfArranged = df.arrange(keys, order = order)
   # having the data frame in a sorted order, walk it and return each combination
-  let hashes = buildColHashes(dfArranged, keys)
-  #[
-  Need new approach.
-  Again calculate hashes of `keys` columns.
-  Walk through DF.
-  If hash == lastHash:
-    accumulatte
-  else:
-    yield (seq(key, df[k][idx, Value]), slice of df)
-  ]#
+  let hashes = dfArranged.selectTensors(keys)
+
   proc buildClassLabel(df: DataFrame, keys: seq[string],
                        idx: int): seq[(string, Value)] =
     result = newSeq[(string, Value)](keys.len)
@@ -697,11 +724,11 @@ iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Valu
       result[j] = (key, df[key][idx, Value])
 
   var
-    currentHash = hashes[0]
-    lastHash = hashes[0]
+    currentHash = hashes.row(0) # [0]
+    lastHash = hashes.row(0) # [0]
     startIdx, stopIdx: int # indices which indicate from where to where a subgroup is located
   for i in 0 ..< dfArranged.len:
-    currentHash = hashes[i]
+    currentHash.assignRow(hashes, i) # [i]
     if currentHash == lastHash:
       # continue accumulating
       discard
@@ -1301,7 +1328,7 @@ proc setDiff*(df1, df2: DataFrame, symmetric = false): DataFrame =
   let h1 = buildColHashes(df1, keys)
   let h2 = buildColHashes(df2, keys)
   # given hashes apply set difference
-  var diff: HashSet[Hash]
+  var diff: HashSet[seq[Value]]
   if symmetric:
     diff = symmetricDifference(toHashSet(h1), toHashSet(h2))
     var idxToKeep1 = newSeqOfCap[int](diff.card)
@@ -1383,20 +1410,17 @@ proc gather*(df: DataFrame, cols: varargs[string],
       result[rem] = toColumn(fullCol)
   result.len = newLen
 
-
 proc unique*(c: Column): Column =
-  ## returns a seq of all unique values in `v`
-  var hashes = newSeq[Hash](c.len)
-  hashes.hashColumn(c, finish = true)
-  # finalize the hashes
-  var hSet = toHashSet(hashes)
+  ## returns a Column of all only unique values in `c`
+  let cV = c.toTensor(Value)
+  var hSet = toHashSet(cV)
   var idxToKeep = newTensor[int](hSet.card)
   var idx = 0
   for i in 0 ..< c.len:
-    if hashes[i] in hSet:
+    if cV[i] in hSet:
       idxToKeep[idx] = i
       # remove from set to not get duplicates!
-      hSet.excl hashes[i]
+      hSet.excl cV[i]
       inc idx
   # apply idxToKeep as filter
   result = c.filter(idxToKeep)
