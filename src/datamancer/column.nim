@@ -449,7 +449,6 @@ proc `[]=`*[T](c: var Column, slice: Slice[int], t: Tensor[T]) =
   let length = slice.b - slice.a + 1
   let sa = slice.a
   let sb = slice.b
-  echo "Assigning slice of length ", length
   if length != t.size:
     raise newException(ValueError, "Given tensor of size " & $t.size & " does not match slice " &
       $slice & " with length: " & $length & ".")
