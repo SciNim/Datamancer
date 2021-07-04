@@ -616,7 +616,35 @@ proc add*(df: var DataFrame, dfToAdd: DataFrame) =
     doAssert df.getKeys.sorted == dfToAdd.getKeys.sorted, "all keys must match to add dataframe!"
     df = bind_rows([("", df), ("", dfToAdd)])
 
-proc hashColumn(s: var seq[Hash], c: Column, finish: static bool = false) =
+proc assignStack(dfs: seq[DataFrame]): DataFrame =
+  ## Returns a data frame built as a stack of the data frames in the sequence.
+  ##
+  ## All dataframes must have matching keys and column types. It should only
+  ## be called from places where this is made sure as the point of the
+  ## procedure is speeding up assignment for cases where we know this holds.
+  if dfs.len == 0: return newDataFrame()
+  elif dfs.len == 1: return dfs[0]
+  let df0 = dfs[0]
+  result = newDataFrame(df0.getKeys().len)
+  # 1. determine required lengths of final columns
+  var lengths = 0
+  for df in dfs:
+    inc lengths, df.len
+  # 2. generate output columns of correct type and length
+  for k in df0.getKeys():
+    result[k] = newColumn(df0[k].kind, lengths)
+    # 2a. if column is constant, already assign its value
+    if df0[k].kind == colConstant:
+      result[k].cCol = df0[k].cCol
+  # 3. walk over each output column and assign each slice
+  for k in result.getKeys():
+    var col = result[k]
+    var idx = 0
+    for df in dfs:
+      col[idx .. idx + df.len - 1] = df[k]
+      inc idx, df.len
+
+proc hashColumn*(s: var seq[Hash], c: Column, finish: static bool = false) =
   ## performs a partial hash of a DF. I.e. a single column, where
   ## the hash is added to each index in `s`. The hash is not finalized,
   ## rather the idea is to use this to hash all columns on `s` first.
@@ -791,12 +819,15 @@ proc filter*(df: DataFrame, conds: varargs[FormulaNode]): DataFrame =
   ## a boolean value. In a case of a mismatch `FormulaMismatchError` is thrown.
   case df.kind
   of dfGrouped:
-    result = newDataFrame()
+    var dfs = newSeq[DataFrame]()
+    var i = 0
     for (tup, subDf) in groups(df):
       var mdf = subDf.filterImpl(conds)
       for (str, val) in tup:
         mdf[str] = constantColumn(val, mdf.len)
-      result.add mdf
+      dfs.add mdf
+      inc i
+    result = assignStack(dfs)
   else:
     result = df.filterImpl(conds)
 
@@ -877,12 +908,14 @@ proc mutateInplace*(df: var DataFrame, fns: varargs[FormulaNode]) =
   ## Inplace variasnt of `mutate` below.
   case df.kind
   of dfGrouped:
-    var res = newDataFrame()
+    var dfs = newSeq[DataFrame]()
+    var i = 0
     for (tup, subDf) in groups(df):
       var mdf = subDf
       mdf.mutateImpl(fns, dropCols = false)
-      res.add mdf
-    df = res
+      dfs.add mdf
+      inc i
+    df = assignStack(dfs)
   else:
     df.mutateImpl(fns, dropCols = false)
 
@@ -905,12 +938,14 @@ proc transmuteInplace*(df: var DataFrame, fns: varargs[FormulaNode]) =
   ## Inplace variant of `transmute` below.
   case df.kind
   of dfGrouped:
-    var res = newDataFrame()
+    var dfs = newSeq[DataFrame]()
+    var i = 0
     for (tup, subDf) in groups(df):
       var mdf = subDf
       mdf.mutateImpl(fns, dropCols = true)
-      res.add mdf
-    df = res
+      dfs.add mdf
+      inc i
+    df = assignStack(dfs)
   else:
     df.mutateImpl(fns, dropCols = true)
 
