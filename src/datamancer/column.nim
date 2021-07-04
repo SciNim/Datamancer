@@ -17,7 +17,8 @@ type
     of colNone: discard
 
 template `%~`*(v: Value): Value = v
-
+proc pretty*(c: Column): string
+proc compatibleColumns*(c1, c2: Column): bool {.inline.}
 # just a no-op
 template toColumn*(c: Column): Column = c
 
@@ -439,6 +440,74 @@ proc `[]=`*[T](c: var Column, idx: int, val: T) =
     # rewrite as an object column
     c = c.toObjectColumn()
     c.oCol[idx] = %~ val
+
+proc `[]=`*[T](c: var Column, slice: Slice[int], t: Tensor[T]) =
+  ## Assigns the tensor `t` to the slice `slice`. The slice length must match
+  ## the tensor length exactly and must be smaller than the column length.
+  ##
+  ## If the type of `t` does not match the column kind, we reallocate to an object column.
+  let length = slice.b - slice.a + 1
+  let sa = slice.a
+  let sb = slice.b
+  echo "Assigning slice of length ", length
+  if length != t.size:
+    raise newException(ValueError, "Given tensor of size " & $t.size & " does not match slice " &
+      $slice & " with length: " & $length & ".")
+  elif length > c.len:
+    raise newException(ValueError, "Given slice " & $slice & " of length " & $length &
+      " is larger than column length of " & $c.len & ".")
+  case c.kind
+  of colInt:
+    when T is int:
+      c.iCol[sa .. sb] = t
+    else:
+      c = c.toObjectColumn()
+      c.oCol[sa .. sb] = t.asValue()
+  of colFloat:
+    when T is float:
+      c.fCol[sa .. sb | 1] = t
+    else:
+      c = c.toObjectColumn()
+      c.oCol[sa .. sb] = t.asValue()
+  of colString:
+    when T is string:
+      c.sCol[sa .. sb] = t
+    else:
+      c = c.toObjectColumn()
+      c.oCol[sa .. sb] = t.asValue()
+  of colBool:
+    when T is bool:
+      c.bCol[sa .. sb] = t
+    else:
+      c = c.toObjectColumn()
+      c.oCol[sa .. sb] = t.asValue()
+  of colConstant:
+    ## if we are handed a Tensor to slice assign, we have to convert to a full column
+    ## Then try again with the full tensor (possibly convert to object column then)
+    c = c.constantToFull()
+    c[sa .. sb] = t
+  of colObject:
+    when T is Value:
+      c.oCol[sa .. sb] = t
+    else:
+      c.oCol[sa .. sb] = t.asValue()
+  of colNone:
+    raise newException(ValueError, "Cannot assign a tensor to an empty column.")
+
+proc `[]=`*(c: var Column, slice: Slice[int], col: Column) =
+  let sa = slice.a.int
+  let sb = slice.b.int
+  if c.compatibleColumns(col) and c.kind != colConstant:
+    withNativeDtype(c):
+      c[slice] = col.toTensor(dtype)
+  elif c.kind == colConstant:
+    if c.cCol == col.cCol: return # nothing to do
+    else:
+      c = c.toObjectColumn()
+      c.oCol[sa .. sb] = col.toTensor(Value)
+  else:
+    c = c.toObjectColumn()
+    c.oCol[sa .. sb] = col.toTensor(Value)
 
 template withNative2*(c1, c2: Column, idx1, idx2: int,
                       valName1, valName2: untyped,
