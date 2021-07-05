@@ -1410,6 +1410,45 @@ proc gather*(df: DataFrame, cols: varargs[string],
       result[rem] = toColumn(fullCol)
   result.len = newLen
 
+proc spread*[T](df: DataFrame, namesFrom, valuesFrom: string,
+                valuesFill: T = 0): DataFrame =
+  ## The inverse operation to `gather`. A conversion from long format to
+  ## a wide format data frame.
+  ##
+  ## The name is `spread`, but the API is trying to be more closely aligned
+  ## to the newer `pivot_wider`.
+  ##
+  ## Note: currently `valuesFill` does not have an effect. We simply default
+  ## initialize the new columns to the native default value of the data stored
+  ## in the column.
+  result = newDataFrame()
+  # 1. determine new columns from all unique values in `namesFrom`
+  let dfGrouped = df.group_by(namesFrom)
+  let newCols = dfGrouped.groupMap[namesFrom].toSeq
+  # 2. find remaining keys
+  let restKeys = df.getKeys().filterIt(it != namesFrom and it != valuesFrom)
+  # 3. and length of resulting DF by unique elements of *non* accessed columns
+  let dfSelect = df.select(restKeys).unique()
+  # 4. create result DF from input column types
+  for c in restKeys:
+    result[c] = newColumn(df[c].kind, dfSelect.len)
+  for c in newCols:
+    result[c.toStr] = newColumn(df[valuesFrom].kind, dfSelect.len)
+  var idx = 0
+  # 5. now group by *other* keys and get the `newCols` from each. That way each subgroup
+  #   corresponds to *one row* in the output
+  for (tup, subDf) in groups(df.group_by(restKeys)):
+    # 6. for each sub df, walk all rows to get correct key/vals
+    # NOTE: this is inefficient
+    for row in subDf:
+      # NOTE: we could also extract the restKeys info from `tup`
+      for col in restKeys:
+        withNative(row[col], x):
+          result[col, idx] = x
+      withNative(row[valuesFrom], x):
+        result[row[namesFrom].toStr, idx] = x
+    inc idx
+
 proc unique*(c: Column): Column =
   ## returns a Column of all only unique values in `c`
   let cV = c.toTensor(Value)
