@@ -585,6 +585,20 @@ suite "Data frame tests":
       check onlyy2["x"].toTensor(int) == toTensor x2s
     check onlyy2.len == x2s.len
 
+  test "Spread":
+    let df = readCsv("data/fishdata_sparse.csv")
+    let dfSpread = df.spread(namesFrom = "station", valuesFrom = "seen")
+    let namesExp = concat(df["station"].unique.toTensor(string).toRawSeq,
+                          @["fish"]).sorted
+    check dfSpread.len == 19
+    check dfSpread.getKeys().len == 12
+    check dfSpread.getKeys().sorted == namesExp
+    for k in dfSpread.getKeys():
+      check dfSpread[k].kind == colInt
+    # easy column to check, all 1
+    check dfSpread["\"Release\"", int] == newTensorWith(19, 1)
+    ## TODO: support NULL values instead of filling by default T(0)
+
   test "Pretty printing of DFs":
     var
       # need the data as two sequences (well actually as a DataFrame, but that is
