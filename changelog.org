@@ -2,6 +2,8 @@
 - add basic implementation of =spread= (inverse of =gather=; similar
   to dplyr =pivot_wider=). The current implementation is rather basic
   and performance may be suboptimal for very large data frames.
+- add =null= helper to create a =VNull Value=
+- significantly improve the docs of the =dataframe.nim= module.  
 * v0.1.8
 - avoid some object conversions in column operations (ref #11)
 - add ~[]=~ overloads for columns for slice assignments
