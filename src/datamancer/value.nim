@@ -89,6 +89,10 @@ proc `%~`*(v: bool): Value =
 proc `%~`*(v: OrderedTable[string, Value]): Value =
   result = Value(kind: VObject, fields: v)
 
+proc null*(): Value =
+  ## Constructs a `VNull` value.
+  Value(kind: VNull)
+
 proc newVObject*(length = 8): Value =
   result = Value(kind: VObject)
   result.fields = initOrderedTable[string, Value](nextPowerOfTwo(length))
