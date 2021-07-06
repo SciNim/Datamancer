@@ -3,7 +3,11 @@
   to dplyr =pivot_wider=). The current implementation is rather basic
   and performance may be suboptimal for very large data frames.
 - add =null= helper to create a =VNull Value=
-- significantly improve the docs of the =dataframe.nim= module.  
+- significantly improve the docs of the =dataframe.nim= module.
+- fixes an issue where unique column reference names were combined
+  into the same column due to a bad name generation algorithm
+- significantly improves performance in applications in which
+  allocation of memory is a bottleneck (tensors were zero initialized).
 * v0.1.8
 - avoid some object conversions in column operations (ref #11)
 - add ~[]=~ overloads for columns for slice assignments
