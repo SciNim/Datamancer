@@ -257,3 +257,10 @@ suite "Formulas":
       let fn = f{"mean+ord" << mean(`x`) + col(`y`, string).max[0].ord.float }
       check fn.reduce(df).kind == VFloat
       check fn.reduce(df).toFloat == 104.0
+
+  test "Formula variable name generation":
+    # this was broken up to `v0.1.8`, as all variables were turned into `colT`
+    # (we just *removed* the part that made each column unique)
+    let df = seqsToDf({"0" : [1,1,1], "1" : [2,2,2], "2" : [3,3,3]})
+    let fn = f{idx("0") + idx("1") + idx("2")}
+    check fn.evaluate(df).toTensor(int) == toTensor [6,6,6]
