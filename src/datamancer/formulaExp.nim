@@ -230,7 +230,7 @@ proc convertDtype(d: NimNode): NimNode =
       ident(ResIdent),
       newEmptyNode(),
       nnkCall.newTree(
-        nnkBracketExpr.newTree(ident"newTensor",
+        nnkBracketExpr.newTree(ident"newTensorUninit",
                                d),
         nnkDotExpr.newTree(ident(DfIdent),
                            ident"len"))
