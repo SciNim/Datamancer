@@ -390,21 +390,13 @@ proc determineHeuristicTypes(body: NimNode,
       "Consider giving type hints via: `f{T -> U: <theFormula>}`")
   result = typ
 
-proc removeAll(s: string, chars: set[char]): string =
-  result = newStringOfCap(s.len)
-  for c in s:
-    if c notin chars:
-      result.add c
-  if result.len == 0:
-    result = "col"
-
 proc genColSym(name, s: string): NimNode =
   ## custom symbol generation from `name` (may contain characters that are
   ## invalid Nim symbols) and `s`
-  let toRemove = AllChars - IdentStartChars
-  var res = removeAll(name, toRemove)
-  res &= s
-  result = ident(res)
+  var name = name
+  if name.len == 0 or name[0] notin IdentStartChars:
+    name = "col" & name
+  result = ident(name & s)
 
 proc addColRef(n: NimNode, typeHint: FormulaTypes, asgnKind: AssignKind): seq[Assign] =
   let (dtype, resType) = (typeHint.inputType, typeHint.resType)
