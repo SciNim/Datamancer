@@ -194,7 +194,8 @@ proc compileVectorFormula(fct: FormulaCT): NimNode =
                 colName: `colName`, kind: fkVector,
                 resType: toColKind(type(`dtype`)),
                 fnV: `fnClosure`)
-  echo result.repr
+  when defined(echoFormulas):
+    echo result.repr
 
 proc compileScalarFormula(fct: FormulaCT): NimNode =
   let fnClosure = generateClosure(fct)
@@ -206,7 +207,8 @@ proc compileScalarFormula(fct: FormulaCT): NimNode =
                 valName: `valName`, kind: fkScalar,
                 valKind: toValKind(`dtype`),
                 fnS: `fnClosure`)
-  echo result.repr
+  when defined(echoFormulas):
+    echo result.repr
 
 proc checkDtype(body: NimNode,
                 floatSet: HashSet[string],
