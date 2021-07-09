@@ -615,8 +615,9 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
         if typ.kind != nnkEmpty:
           return PossibleTypes(isGeneric: false, kind: tkExpression,
                                types: @[typ], asgnKind: some(byIndex))
-        warning("How did we stumble over " & $(n.treeRepr) & " with type " &
-          $(tImpl.treeRepr))
+        when false:
+          warning("How did we stumble over " & $(n.treeRepr) & " with type " &
+            $(tImpl.treeRepr))
         #return
   of nnkCheckedFieldExpr:
     let impl = n.getTypeImpl
@@ -809,7 +810,6 @@ proc detNumArgs(n: NimNode): int =
     result = 1
   else:
     result = 1
-    warning("What kind? " & $n.kind & " in node " & n.repr)
 
 proc argsValid(pt: ProcType, args: seq[PossibleTypes]): bool =
   ## This procedure removes all `ProcTypes` from the input `pt` that do not match the given
