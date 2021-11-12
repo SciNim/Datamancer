@@ -23,6 +23,10 @@ with a short introduction under:
 
 https://scinim.github.io/Datamancer/datamancer.html
 
+a tutorial for data wrangling with Datamancer is available at:
+
+https://scinim.github.io/getting-started/basics/data_wrangling.html
+
 ** Installation & dependencies
 
 Installation should be just a 
