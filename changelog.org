@@ -1,3 +1,9 @@
+* v0.1.10
+- make sure to only import and export =arraymancer/tensor= submodule
+- fix CSV parsing wrt. empty fields (treated as NaN) and explicit NaN
+  & Inf values
+- fix CSV parsing of files with extraneous newlines
+- add more parsing tests  
 * v0.1.9
 - add basic implementation of =spread= (inverse of =gather=; similar
   to dplyr =pivot_wider=). The current implementation is rather basic
