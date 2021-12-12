@@ -1,6 +1,7 @@
 import datamancer, unittest, sequtils, math, strutils, streams, sugar, sets
 import algorithm
 import seqmath
+from os import removeFile
 
 when not declared(AssertionDefect):
   type AssertionDefect = AssertionError
@@ -84,7 +85,104 @@ suite "Column":
     check c.toTensor(0 .. 10, int) == newTensorWith(11, 12)
     check c.toTensor(int) == newTensorWith(40, 12)
 
-suite "Data frame tests":
+suite "DataFrame parsing":
+  proc cmpElements[T](s1, s2: seq[T]): bool =
+    # comparse the two seq, while properly handling `NaN`
+    result = true
+    for (x, y) in zip(s1, s2):
+      when T is float:
+        if classify(x) == fcNaN xor classify(y) == fcNaN:
+          return false
+        elif classify(x) != fcNaN and classify(y) != fcNaN:
+          if not almostEqual(x, y): return false
+        # else both NaN
+      else:
+        if x != y: return false
+
+
+  test "Parsing with inf, NaN":
+    let exp = """w,x,y,z
+1,10,0.1,100
+2,ERR,inf,200
+NaN,N/A,0.3,300
+4,40,0.4,400"""
+
+    let exp2 = exp & "\n"
+    let exp3 = exp & "\n\n"
+    let exp4 = exp & "\n\n\n"
+
+    template checkBlock(arg: typed): untyped {.dirty.} =
+      let df = parseCsvString(arg)
+      check df["w"].kind == colFloat
+      check df["x"].kind == colObject # because of invalid floats
+      check df["y"].kind == colFloat
+      check df["z"].kind == colInt
+      echo df
+      check cmpElements(df["w", float].toRawSeq, @[1'f64, 2, NaN, 4])
+      check cmpElements(df["x", Value].toRawSeq, @[%~ 10, %~ "ERR", %~ "N/A", %~ 40])
+      check cmpElements(df["y", float].toRawSeq, @[0.1, Inf, 0.3, 0.4])
+      check cmpElements(df["z", int].toRawSeq, @[100, 200, 300, 400])
+
+    block NoNewline:
+      checkBlock(exp)
+    block OneNewline:
+      checkBlock(exp2)
+    block TwoNewlines:
+      checkBlock(exp3)
+    block ThreeNewlines:
+      checkBlock(exp4)
+
+  test "Parsing with newlines after data":
+    let exp = """x,y,z
+1,2,3
+4,5,6
+7,8,9
+
+
+"""
+    template checkBlock(): untyped {.dirty.} =
+      check df["x"].kind == colInt
+      check df["y"].kind == colInt
+      check df["z"].kind == colInt
+
+      check df["x", int] == toTensor([1,4,7])
+      check df["y", int] == toTensor([2,5,8])
+      check df["z", int] == toTensor([3,6,9])
+
+    block FromString:
+      let df = parseCsvString(exp)
+      checkBlock()
+    block FromFile:
+      let path = "/tmp/test_newlines_datamancer.csv"
+      when defined(linux):
+        ## XXX: use proper temp handling to check on other OSs
+        writeFile(path, exp)
+        let df = readCsv(path)
+        checkBlock()
+        removeFile(path)
+
+  test "Parsing with missing values":
+    let exp = """x,y,z
+1,2,
+4,,6
+,8,9
+"""
+    template checkBlock(): untyped {.dirty.} =
+      check df["x"].kind == colFloat
+      check df["y"].kind == colFloat
+      #check df["z"].kind == colFloat
+      echo df
+      check cmpElements(df["x", float].toRawSeq, @[1'f64,4,NaN])
+      check cmpElements(df["y", float].toRawSeq, @[2'f64,NaN,8])
+      #check df["z", float] == toTensor([NaN,6,9])
+
+    block FromString:
+      let df = parseCsvString(exp)
+      checkBlock()
+
+
+
+suite "DataFrame tests":
   test "Creation of DFs from seqs":
     let a = [1, 2, 3]
     let b = [3, 4, 5]
