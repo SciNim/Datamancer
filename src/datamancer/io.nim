@@ -437,10 +437,10 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
 
   let numCols = colNames.len
   # 1b. skip `skipLines`
-  let rowStart = row
+  let rowDataStart = row
   while idx < size:
     parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
-      if row - rowStart == skipLines:
+      if row - rowDataStart == skipLines:
         break
   # compute the number of skipped lines in total
   let skippedLines = row
