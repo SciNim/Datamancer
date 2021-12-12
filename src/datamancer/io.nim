@@ -159,7 +159,33 @@ proc pow10(e: int): float {.inline.} =
 
 type
   RetType = enum
-    rtInt, rtFloat, rtNaN, rtError
+    rtInt, rtFloat, rtNaN, rtInf, rtError
+
+func normalizeChar(c: char): char =
+  # normalize uppercase chars to lowercase
+  if c in {'A' .. 'Z'}:
+    chr(ord(c) + (ord('a') - ord('A')))
+  else:
+    c
+
+func tryParse(toEat: seq[char], data: ptr UncheckedArray[char], idx: var int,
+              sep: char,
+              retTyp: RetType, retVal: float, floatVal: var float): RetType =
+  ## tries to parse certain strings `NaN`, `Inf` into floats
+  ##
+  ## Returns `rtError` if it cannot
+  var eatIdx = 0
+  while data[idx] != '\0' and                     # end if end of buffer
+        data[idx] != sep and                      # end if separator
+        data[idx].normalizeChar == toEat[eatIdx]: # continue if still expected
+    inc eatIdx
+    inc idx
+  if eatIdx == toEat.len:                         # matched exactly `toEat`
+    floatVal = retVal                             # assign expected value to return
+    return retTyp
+  else:
+    return rtError
+
 
 proc parseNumber(data: ptr UncheckedArray[char],
                  sep: char, # if this sep is found parsing ends
@@ -168,6 +194,9 @@ proc parseNumber(data: ptr UncheckedArray[char],
   ## this code is taken and adapted from @c-blake's code in Nim PR #16055.
   # Parse/validate/classify all at once, returning the type we parsed into
   # and if not `rtError` the `intVal/floatVal` will store the parsed number
+  if data[idxIn] in {sep, '\n', '\r', '\0'}:    # empty field in CSV
+    floatVal = NaN
+    return rtNaN
   const Sign = {'+', '-'} # NOTE: `parseFloat` can generalize this to INF/NAN.
   var idx = idxIn
   var noDot = false
@@ -196,17 +225,36 @@ proc parseNumber(data: ptr UncheckedArray[char],
     intVal = -intVal                            # adjust sign
 
   if pnt < 0:                                   # never saw '.'
-    if nD == 0 and data[idx] == sep:            # empty field in CSV
-      return rtNaN
+    if nD == 0 and
+       (data[idx] == '\0' or data[idx] == sep): # just a sign `+`, `-`
+      return rtError
     pnt = nD; noDot = true                      # so set to number of digits
-  elif nD == 1:
+  elif nD == 1 or (pnt == 0 and nD == 0):
     return rtError                              # ONLY "[+-]*\.*"
 
   # `\0` is necessary to support parsing until the end of the file in case of no line break
   if data[idx] notin {'\0', sep, '\n', '\r', '\l', 'e', 'E'}: ## TODO: generalize this?
-    return rtError
+    # might be "nan", "inf" or "-inf" or some other invalid string
+    var ret = tryParse(@['n', 'a', 'n'], data, idx,
+                       sep,
+                       rtNaN,                   # return rtNaN if parsed
+                       NaN,                     # assign NaN
+                       floatVal)                # to `floatVal` if true
+    if ret == rtNaN: return ret
+    ret = tryParse(@['i', 'n', 'f'], data, idx,
+                   sep,
+                   rtInf,                       # return rtInf if parsed
+                   Inf,                         # assign Inf
+                   floatVal)                    # to `floatVal` if true
+    if ret == rtInf:
+      if data[idxIn] == '-': floatVal = -Inf    # invert sign
+      return ret
+
+    return ret # else can return as it will be `rtError`
 
   if data[idx] in {'E', 'e'}:                   # optional exponent
+    if idx == idxIn: return rtError             # starts with `E` / `e`. Not a valid float
+                                                # important for any string starting with `E`/`e` as well
     idx.inc
     let i0 = idx
     if data[idx] in Sign:
@@ -228,7 +276,7 @@ proc parseNumber(data: ptr UncheckedArray[char],
   #if giant:
   #  return rtError
   #  #copyBuf(data, strVal, idx, idxIn)
-  result = rtFloat                                # mark as float
+  result = rtFloat                              # mark as float
 
 template parseCol(data: ptr UncheckedArray[char], buf: var string,
                   col: var Column,
@@ -242,14 +290,11 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
       retType = parseNumber(data, sep, colStart, intVal, floatVal)
       case retType
       of rtInt: col.iCol[row] = intVal
-      of rtFloat, rtNaN:
+      of rtFloat, rtNaN, rtInf:
         # before we copy everything check if can be parsed to float, this branch will only
         # be called a single time
         col = toColumn col.iCol.asType(float)
-        if retType != rtNaN:
-          col.fCol[row] = floatVal
-        else:
-          col.fCol[row] = NaN
+        col.fCol[row] = floatVal # `floatVal` may be NaN, Inf or regular value
         colTypes[colIdx] = colFloat
       of rtError:
         # object column
@@ -261,8 +306,7 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
       retType = parseNumber(data, sep, colStart, intVal, floatVal)
       case retType
       of rtInt: col.fCol[row] = intVal.float
-      of rtFloat: col.fCol[row] = floatVal
-      of rtNaN: col.fCol[row] = NaN
+      of rtFloat, rtNaN, rtInf: col.fCol[row] = floatVal # `floatVal` may be NaN, Inf or regular value
       of rtError:
         # object column
         copyBuf(data, buf, idx, colStart)
@@ -286,7 +330,7 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
       retType = parseNumber(data, sep, colStart, intVal, floatVal)
       case retType
       of rtInt: col.oCol[row] = %~ intVal
-      of rtFloat: col.oCol[row] = %~ floatVal
+      of rtFloat, rtInf: col.oCol[row] = %~ floatVal
       of rtNaN: col.oCol[row] = Value(kind: VNull)
       of rtError:
         copyBuf(data, buf, idx, colStart)
@@ -299,7 +343,7 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
 template parseLine(data: ptr UncheckedArray[char], buf: var string,
                    sep: char,
                    quote: char,
-                   col, idx, colStart, row: var int,
+                   col, idx, colStart, row, rowStart: var int,
                    lastWasSep, inQuote: var bool,
                    toBreak: static bool,
                    fnToCall: untyped): untyped =
@@ -309,6 +353,10 @@ template parseLine(data: ptr UncheckedArray[char], buf: var string,
     inc idx
     # skip ahead in case we start quote
     continue
+  elif unlikely(data[idx] in {'\n', '\r', '\l'}) and rowStart == idx:
+    # empty line, skip
+    colStart = idx + 1
+    rowStart = idx + 1
   elif unlikely(data[idx] in {'\n', '\r', '\l'}):
     fnToCall
     inc row
@@ -316,6 +364,7 @@ template parseLine(data: ptr UncheckedArray[char], buf: var string,
     if data[idx] == '\r' and data[idx + 1] == '\l':
       inc idx
     colStart = idx + 1
+    rowStart = idx + 1
     lastWasSep = false
     when toBreak:
       inc idx
@@ -359,6 +408,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     row = 0
     col = 0
     colStart = 0
+    rowStart = 0
     lastWasSep = false
     inQuote = false
     buf = newStringOfCap(80)
@@ -366,7 +416,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   # 1. first parse the header
   var colNames: seq[string]
   while idx < size:
-    parseLine(data, buf, sep, quote, col, idx, colStart, row, lastWasSep, inQuote, toBreak = true):
+    parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
       parseHeaderCol(data, buf, colNames, header, sep, quote, idx, colStart)
 
   if colNamesIn.len > 0 and colNamesIn.len != colNames.len:
@@ -381,7 +431,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   # 1a. if `header` is set, skip all additional lines starting with header
   if header.len > 0:
     while idx < size:
-      parseLine(data, buf, sep, quote, col, idx, colStart, row, lastWasSep, inQuote, toBreak = false):
+      parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
         if col == 0 and data[colStart] != header[0]:
           break
 
@@ -389,7 +439,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   # 1b. skip `skipLines`
   let rowStart = row
   while idx < size:
-    parseLine(data, buf, sep, quote, col, idx, colStart, row, lastWasSep, inQuote, toBreak = false):
+    parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
       if row - rowStart == skipLines:
         break
   # compute the number of skipped lines in total
@@ -403,7 +453,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   var lastColStart = colStart
   var dataColsIdx = 0
   while idx < size:
-    parseLine(data, buf, sep, quote, col, idx, colStart, row, lastWasSep, inQuote, toBreak = true):
+    parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
       guessType(data, buf, colTypes, col, idx, colStart, numCols)
       # if we see the end of the line, store the current column number
       if data[idx] in {'\n', '\r', '\l'}:
@@ -430,7 +480,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     intVal: int
     floatVal: float
   while idx < size:
-    parseLine(data, buf, sep, quote, col, idx, colStart, row, lastWasSep, inQuote, toBreak = false):
+    parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
       parseCol(data, buf, cols[col], sep, colTypes, col, idx, colStart, row, numCols,
                intVal, floatVal, retType)
   if row + skippedLines < lineCnt:
@@ -503,7 +553,8 @@ proc parseCsvString*(csvData: string,
 
   ## we're dealing with ASCII files, thus each byte can be interpreted as a char
   var data = cast[ptr UncheckedArray[char]](csvData[0].unsafeAddr)
-  result = readCsvTypedImpl(data, csvData.len, countLines(csvData), sep, header, skipLines, toSkip, colNames)
+  result = readCsvTypedImpl(data, csvData.len, countNonEmptyLines(csvData),
+                            sep, header, skipLines, toSkip, colNames)
 
 proc readCsvAlt*(fname: string,
                  sep = ',',
