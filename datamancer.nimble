@@ -19,6 +19,7 @@ task test, "Run standard tests":
   exec "nim c -r tests/test_issue20.nim"
   exec "nim c -r tests/test_issue28.nim"
   exec "nim c -r tests/testsFormula.nim"
+  exec "nim c -r tests/testParse.nim"
 
 import os, strutils, strformat
 const
