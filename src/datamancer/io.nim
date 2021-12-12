@@ -528,6 +528,22 @@ proc readCsv*(fname: string,
   result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, toSkip, colNames)
   ff.close()
 
+func countNonEmptyLines(s: string): int =
+  var idx = 0
+  var lineStart = idx
+  while idx < s.len:
+    case s[idx]
+    of '\n', '\r':
+      if abs(lineStart - idx) > 0: # only count lines with data
+        inc result
+      if idx < s.high and s[idx] == '\r' and s[idx + 1] == '\l':
+        inc idx
+      inc idx
+      lineStart = idx # store start of line as reference
+    else: inc idx
+  if lineStart != idx:
+    inc result # ended with valid line w/o newline at end
+
 proc parseCsvString*(csvData: string,
                      sep: char = ',',
                      header: string = "",
