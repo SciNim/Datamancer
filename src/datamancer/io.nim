@@ -9,14 +9,6 @@ proc toDf*(df: DataFrame): DataFrame {.deprecated: "`toDf` is not required anymo
   "already returns an actual `DataFrame` nowadays. Feel free to remove the `toDf` call."} =
   df
 
-proc countLines(s: var FileStream): int =
-  ## quickly counts the number of lines and then resets stream to beginning
-  ## of file
-  var buf = newString(500)
-  while s.readLine(buf):
-    inc result
-  s.setPosition(0)
-
 proc checkHeader(s: Stream, fname, header: string, colNames: seq[string]): bool =
   ## checks whether the given file contains the header `header`
   result = true
