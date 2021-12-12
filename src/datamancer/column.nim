@@ -1,4 +1,4 @@
-import arraymancer
+import arraymancer/tensor
 import value, sugar, math, strformat
 from sequtils import allIt
 

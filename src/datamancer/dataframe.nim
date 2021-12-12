@@ -4,8 +4,8 @@ import sequtils, stats, strformat, algorithm, parseutils
 # for error messages to print types
 import typetraits
 
-import arraymancer
-export arraymancer.tensor
+import arraymancer/tensor
+export tensor
 
 import value
 export value
