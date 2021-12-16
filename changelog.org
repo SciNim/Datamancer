@@ -3,7 +3,11 @@
 - fix CSV parsing wrt. empty fields (treated as NaN) and explicit NaN
   & Inf values
 - fix CSV parsing of files with extraneous newlines
-- add more parsing tests  
+- fix CSV parsing with missing values at the end of a line (becomes
+  =NaN=)
+- fix CSV parsing of empty fields if missing in first row and element
+  is *not* float
+- add more parsing tests
 * v0.1.9
 - add basic implementation of =spread= (inverse of =gather=; similar
   to dplyr =pivot_wider=). The current implementation is rather basic
