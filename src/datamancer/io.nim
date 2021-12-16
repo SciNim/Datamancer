@@ -127,14 +127,18 @@ template guessType(data: ptr UncheckedArray[char], buf: var string,
   # only determine types for as many cols as in header
   if col < numCols:
     copyBuf(data, buf, idx, colStart)
-    if buf.isInt:
-      colTypes[col] = colInt
-    elif buf.isNumber:
-      colTypes[col] = colFloat
-    elif buf.isBool:
-      colTypes[col] = colBool
-    else:
-      colTypes[col] = colString
+    if colTypes[col] == colNone: # do not overwrite if already set
+      if buf.len == 0:
+        # inconclusive, need to look at next line
+        colTypes[col] = colNone
+      elif buf.isInt:
+        colTypes[col] = colInt
+      elif buf.isNumber:
+        colTypes[col] = colFloat
+      elif buf.isBool:
+        colTypes[col] = colBool
+      else:
+        colTypes[col] = colString
 
 proc i64(c: char): int {.inline.} = int(ord(c) - ord('0'))
 
@@ -340,6 +344,18 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
       raise newException(IOError, "Invalid column type to parse into: `colNone`. " &
         "This shouldn't have happened! row = " & $row & ", col = " & $col)
 
+template advanceToNextRow() {.dirty.} =
+  ## The steps done after a line break is found & we advance to the next row.
+  ##
+  ## Stored in a dity template as we also use it while guessing types.
+  inc row
+  col = 0
+  if data[idx] == '\r' and data[idx + 1] == '\l':
+    inc idx
+  colStart = idx + 1
+  rowStart = idx + 1
+  lastWasSep = false
+
 template parseLine(data: ptr UncheckedArray[char], buf: var string,
                    sep: char,
                    quote: char,
@@ -359,13 +375,7 @@ template parseLine(data: ptr UncheckedArray[char], buf: var string,
     rowStart = idx + 1
   elif unlikely(data[idx] in {'\n', '\r', '\l'}):
     fnToCall
-    inc row
-    col = 0
-    if data[idx] == '\r' and data[idx + 1] == '\l':
-      inc idx
-    colStart = idx + 1
-    rowStart = idx + 1
-    lastWasSep = false
+    advanceToNextRow()
     when toBreak:
       inc idx
       break
@@ -390,6 +400,10 @@ template parseLine(data: ptr UncheckedArray[char], buf: var string,
   else:
     discard
   inc idx
+
+proc allColTypesSet(colTypes: seq[ColKind]): bool =
+  ## checks if all column types are determined, i.e. not `colNone` the default
+  result = colTypes.allIt(it != colNone)
 
 proc readCsvTypedImpl(data: ptr UncheckedArray[char],
                       size: int,
@@ -451,6 +465,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   var colTypes = newSeq[ColKind](numCols)
   var lastIdx = idx
   var lastColStart = colStart
+  var lastRow = row
   var dataColsIdx = 0
   while idx < size:
     parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
@@ -458,6 +473,11 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
       # if we see the end of the line, store the current column number
       if data[idx] in {'\n', '\r', '\l'}:
         dataColsIdx = col
+        if not allColTypesSet(colTypes): # manually perform steps to go to next line and skip
+                                         # `when toBreak` logic
+          advanceToNextRow()
+          inc idx
+          continue
 
   if dataColsIdx + 1 != numCols:
     raise newException(IOError, "Input data contains " & $(dataColsIdx + 1) & " in the data portion, but " &
@@ -465,7 +485,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   # 2a. revert the indices (make it a peek)
   idx = lastIdx
   colStart = lastColStart
-  dec row
+  row = lastRow
   # 3. create the starting columns
   var cols = newSeq[Column](numCols)
   let dataLines = lineCnt - skippedLines
