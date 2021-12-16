@@ -1,9 +1,8 @@
 
 * Datamancer
 [[https://github.com/SciNim/datamancer/workflows/datamancer%20CI/badge.svg]]
-
-#+ATTR_HTML: title="Join the chat at https://gitter.im/SciNim/Community"
-[[https://gitter.im/SciNim/Community][file:https://badges.gitter.im/SciNim/Community.svg]]
+[[https://matrix.to/#/#nim-science:envs.net][https://img.shields.io/static/v1?message=join%20chat&color=blue&label=nim-science&logo=matrix&logoColor=gold&style=flat-square&.svg]]
+[[https://discord.gg/f5hA9UK3dY][https://img.shields.io/discord/371759389889003530?color=blue&label=nim-science&logo=discord&logoColor=gold&style=flat-square&.svg]]
 
 ** Comparison to other dataframe libraries
 
