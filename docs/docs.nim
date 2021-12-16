@@ -94,7 +94,7 @@ proc buildDocs*(path: string, docPath: string,
   ## https://github.com/nim-lang/Nim/pull/11814 is required.
   ##
   ##
-  const gitUrl = "https://github.com/Vindaar/datamancer"
+  const gitUrl = "https://github.com/SciNim/datamancer"
   ## WARNING: this means `gen_docs` *only* works if you use `nimble develop` on
   ## the repository. Nimble cannot deal with ****. This is frustrating. Thanks.
   let baseDir = execAction("nimble path datamancer").parentDir & $DirSep
