@@ -117,7 +117,6 @@ NaN,N/A,0.3,300
       check df["x"].kind == colObject # because of invalid floats
       check df["y"].kind == colFloat
       check df["z"].kind == colInt
-      echo df
       check cmpElements(df["w", float].toRawSeq, @[1'f64, 2, NaN, 4])
       check cmpElements(df["x", Value].toRawSeq, @[%~ 10, %~ "ERR", %~ "N/A", %~ 40])
       check cmpElements(df["y", float].toRawSeq, @[0.1, Inf, 0.3, 0.4])
@@ -161,7 +160,7 @@ NaN,N/A,0.3,300
         checkBlock()
         removeFile(path)
 
-  test "Parsing with missing values":
+  test "Parsing with missing values, float":
     let exp = """x,y,z
 1,2,
 4,,6
@@ -170,17 +169,51 @@ NaN,N/A,0.3,300
     template checkBlock(): untyped {.dirty.} =
       check df["x"].kind == colFloat
       check df["y"].kind == colFloat
-      #check df["z"].kind == colFloat
-      echo df
+      check df["z"].kind == colFloat
       check cmpElements(df["x", float].toRawSeq, @[1'f64,4,NaN])
       check cmpElements(df["y", float].toRawSeq, @[2'f64,NaN,8])
-      #check df["z", float] == toTensor([NaN,6,9])
+      check cmpElements(df["z", float].toRawSeq, @[NaN,6,9])
 
     block FromString:
       let df = parseCsvString(exp)
       checkBlock()
 
+    block FromFile:
+      let path = "/tmp/test_missing_datamancer.csv"
+      when defined(linux):
+        ## XXX: use proper temp handling to check on other OSs
+        writeFile(path, exp)
+        let df = readCsv(path)
+        checkBlock()
+        removeFile(path)
 
+  test "Parsing with missing values, string":
+    let exp = """x,y,z
+a,2,
+aa,3,
+b,,foo
+,8,bar
+"""
+    template checkBlock(): untyped {.dirty.} =
+      check df["x"].kind == colString
+      check df["y"].kind == colFloat
+      check df["z"].kind == colString
+      check cmpElements(df["x", string].toRawSeq, @["a", "aa", "b", ""])
+      check cmpElements(df["y", float].toRawSeq, @[2'f64,3,NaN,8])
+      check cmpElements(df["z", string].toRawSeq, @["","","foo","bar"])
+
+    block FromString:
+      let df = parseCsvString(exp)
+      checkBlock()
+
+    block FromFile:
+      let path = "/tmp/test_missing_string_datamancer.csv"
+      when defined(linux):
+        ## XXX: use proper temp handling to check on other OSs
+        writeFile(path, exp)
+        let df = readCsv(path)
+        checkBlock()
+        removeFile(path)
 
 suite "DataFrame tests":
   test "Creation of DFs from seqs":
