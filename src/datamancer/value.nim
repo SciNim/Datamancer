@@ -383,6 +383,26 @@ proc `==`*(v, w: Value): bool =
     of VNull:
       result = true
 
+template convenienceValueComparisons*(): untyped =
+  ## These are a few comparison procedures that are defined for convenience within the context
+  ## of a `f{}` formula to allow writing
+  ## `foo` == "bar"
+  ## even if `foo` is actually a `Value` based column.
+  ##
+  ## This is handled by simply inserting these templates into the closure body.
+  ##
+  ## Feel free to call the template in a local (or global) scope to make them available
+  ## in other scopes. Note that the templates are *not* exported!
+  {.push used.} # NOTE: hint[XDeclaredButNotUsed]: off has no effect.
+                # `used` successfully quiets the compiler about unused templates
+  template `==`[T: char | string | SomeNumber | bool](v: Value, x: T): bool = v == %~ x
+  template `==`[T: char | string | SomeNumber | bool](x: T, v: Value): bool = v == %~ x
+  template `<`[T: char | string | SomeNumber | bool](v: Value, x: T): bool  = v <  %~ x
+  template `<`[T: char | string | SomeNumber | bool](x: T, v: Value): bool  = v <  %~ x
+  template `<=`[T: char | string | SomeNumber | bool](v: Value, x: T): bool = v <= %~ x
+  template `<=`[T: char | string | SomeNumber | bool](x: T, v: Value): bool = v <= %~ x
+  {.pop.}
+
 proc `<`*(v, w: Value): bool =
   ## checks whether the `v` is smaller than `w`
   ## Note: this is only defined for a subset of the possible types!

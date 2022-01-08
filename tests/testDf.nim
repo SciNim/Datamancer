@@ -1497,3 +1497,60 @@ suite "Formulas":
     check dfSlice["Energy", int] == [24, 0, 1].toTensor
     check dfSlice["Counts", int] == [24, 0, 1].toTensor
     check dfSlice["Type", string] == ["background", "background", "background"].toTensor
+suite "Formulas with object columns using convenience operators":
+  test "int comparisons":
+    let df = seqsToDf({"x" : [%~ 1, %~ 2, %~ 3]})
+    check df.filter(f{`x` == 1})["x", int] == [1].toTensor
+    check df.filter(f{`x` != 1})["x", int] == [2,3].toTensor
+    check df.filter(f{`x` > 1})["x", int] == [2,3].toTensor
+    check df.filter(f{`x` >= 1})["x", int] == [1,2,3].toTensor
+    check df.filter(f{`x` < 2})["x", int] == [1].toTensor
+
+    check df.filter(f{1 == `x`})["x", int] == [1].toTensor
+    check df.filter(f{1 != `x`})["x", int] == [2,3].toTensor
+    check df.filter(f{1 < `x`})["x", int] == [2,3].toTensor
+    check df.filter(f{1 <= `x`})["x", int] == [1,2,3].toTensor
+    check df.filter(f{2 > `x`})["x", int] == [1].toTensor
+
+  test "float comparisons":
+    let df = seqsToDf({"x" : [%~ 1.0, %~ 2.0, %~ 3.0]})
+    check df.filter(f{`x` == 1.0})["x", float] == [1.0].toTensor
+    check df.filter(f{`x` != 1.0})["x", float] == [2.0,3.0].toTensor
+    check df.filter(f{`x` > 1.0})["x", float] == [2.0,3.0].toTensor
+    check df.filter(f{`x` >= 1.0})["x", float] == [1.0,2.0,3.0].toTensor
+    check df.filter(f{`x` < 2.0})["x", float] == [1.0].toTensor
+
+    check df.filter(f{1.0 == `x`})["x", float] == [1.0].toTensor
+    check df.filter(f{1.0 != `x`})["x", float] == [2.0,3.0].toTensor
+    check df.filter(f{1.0 < `x`})["x", float] == [2.0,3.0].toTensor
+    check df.filter(f{1.0 <= `x`})["x", float] == [1.0,2.0,3.0].toTensor
+    check df.filter(f{2.0 > `x`})["x", float] == [1.0].toTensor
+
+  test "float comparisons with int Value":
+    let df = seqsToDf({"x" : [%~ 1, %~ 2, %~ 3]})
+    check df.filter(f{`x` == 1.0})["x", int] == [1].toTensor
+    check df.filter(f{`x` != 1.0})["x", int] == [2,3].toTensor
+    check df.filter(f{`x` > 1.0})["x", int] == [2,3].toTensor
+    check df.filter(f{`x` >= 1.0})["x", int] == [1,2,3].toTensor
+    check df.filter(f{`x` < 2.0})["x", int] == [1].toTensor
+
+    check df.filter(f{1.0 == `x`})["x", int] == [1].toTensor
+    check df.filter(f{1.0 != `x`})["x", int] == [2,3].toTensor
+    check df.filter(f{1.0 < `x`})["x", int] == [2,3].toTensor
+    check df.filter(f{1.0 <= `x`})["x", int] == [1,2,3].toTensor
+    check df.filter(f{2.0 > `x`})["x", int] == [1].toTensor
+
+  test "bool comparisons":
+    let df = seqsToDf({"x" : [true, false, true]})
+    check df.filter(f{`x` == true})["x", bool] == [true, true].toTensor
+    check df.filter(f{`x` == false})["x", bool] == [false].toTensor
+
+    check df.filter(f{`x` != true})["x", bool] == [false].toTensor
+    check df.filter(f{`x` != false})["x", bool] == [true, true].toTensor
+
+  test "string comparisons":
+    let df = seqsToDf({"x" : ["foo", "bar", "baz"]})
+    check df.filter(f{`x` == "foo"})["x", string] == ["foo"].toTensor
+    check df.filter(f{`x` != "foo"})["x", string] == ["bar", "baz"].toTensor
+    check df.filter(f{`x` in ["foo", "bar"]})["x", string] == ["foo", "bar"].toTensor
+    check df.filter(f{`x` notin ["foo", "bar"]})["x", string] == ["baz"].toTensor
