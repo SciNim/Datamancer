@@ -1,3 +1,10 @@
+* v0.1.11
+- add convenience comparison operators for =Value= elements of a
+  column with regular types *within a =f{}= formula* (they are emitted
+  as templates into the closure scope to avoid having them available
+  in all scopes).
+  Use the =convenienceValueComparisons= template to emit them to a
+  local scope if desired outside formula scopes.
 * v0.1.10
 - make sure to only import and export =arraymancer/tensor= submodule
 - fix CSV parsing wrt. empty fields (treated as NaN) and explicit NaN

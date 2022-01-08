@@ -504,6 +504,7 @@ proc parseFormulaCT(stmts: NimNode): FormulaCT =
 
 proc generateClosure*(fct: FormulaCT): NimNode =
   var procBody = newStmtList()
+  procBody.add getAst(convenienceValueComparisons()) # add convenience comparison ops Value ⇔ T
   procBody.add convertPreface(fct.preface)
   if fct.funcKind == fkVector:
     procBody.add convertDtype(fct.resType)
