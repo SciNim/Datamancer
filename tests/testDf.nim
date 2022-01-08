@@ -1497,6 +1497,24 @@ suite "Formulas":
     check dfSlice["Energy", int] == [24, 0, 1].toTensor
     check dfSlice["Counts", int] == [24, 0, 1].toTensor
     check dfSlice["Type", string] == ["background", "background", "background"].toTensor
+
+  test "Single function call in formula":
+    proc inRegion(x, y: float, r: string): bool =
+      result = x > 1
+    let df = seqsToDf({"x" : [1,2,3], "y" : [4,5,6]})
+    let rad = "foo"
+    let res = df.filter(f{inRegion(`x`, `y`, rad)})
+    check res["x", int] == [2,3].toTensor
+
+  test "Formula referring to bool column":
+    let df = seqsToDf({"x" : [1,2,3], "y" : [true, false, true]})
+    block IsTrue:
+      let res = df.filter(f{bool: `y`})
+      check res["x", int] == [1,3].toTensor
+    block IsFalse:
+      let res = df.filter(f{bool: not `y`})
+      check res["x", int] == [2].toTensor
+
 suite "Formulas with object columns using convenience operators":
   test "int comparisons":
     let df = seqsToDf({"x" : [%~ 1, %~ 2, %~ 3]})
