@@ -136,7 +136,10 @@ suite "`parseNumber` tests":
 
     # start after first separator
     for i in 123456789 .. 123456789 + 50:
-      checkFloat($toFloat(i) & "," & $toFloat(i), toFloat(i), start = 18)
+      when defined(nimPreviewFloatRoundtrip):
+        checkFloat($toFloat(i) & "," & $toFloat(i), toFloat(i), start = 19)
+      else:
+        checkFloat($toFloat(i) & "," & $toFloat(i), toFloat(i), start = 18)
 
     # some exp notation
     checkFloat("1e5", 1e5, start = 0)
