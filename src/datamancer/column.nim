@@ -1,10 +1,13 @@
 import arraymancer/tensor
-import value, sugar, math, strformat
-from sequtils import allIt
+import std / [sugar, math, strformat, tables, macros, strutils]
+import value
+from sequtils import allIt, mapIt
 
+import ast_utils
+export ast_utils
 type
   ColKind* = enum
-    colNone, colFloat, colInt, colBool, colString, colObject, colConstant
+    colNone, colFloat, colInt, colBool, colString, colObject, colConstant, colGeneric
   Column* = ref object
     len*: int
     case kind*: ColKind
@@ -14,10 +17,193 @@ type
     of colString: sCol*: Tensor[string]
     of colObject: oCol*: Tensor[Value]
     of colConstant: cCol*: Value
+    of colGeneric: discard # added when overwriting `Column` type
     of colNone: discard
 
+  ColumnLike* = concept x
+    x.len is int
+    x.kind is ColKind
+
+  SupportedTypes = float | char | int | bool | string | Value
+
+import macrocache
+const TypeNames* = CacheTable"ColTypeTable" # initTable[string, NimNode]()
+var FieldNames* {.compileTime.} = initTable[string, seq[string]]()
+
+proc nodeRepr(n: NimNode): string =
+  case n.kind
+  of nnkIdent, nnkSym: result = n.strVal
+  else: result = n.toStrLit.strVal.multiReplace([("[", "_"), ("]", "_")])
+
+proc genFieldName*(typ: NimNode): NimNode =
+  #echo "typ ", typ.treerepr
+  result = ident("g" & $typ.nodeRepr) # & $Col
+
+proc genColNameStr*(types: seq[NimNode]): string =
+  result = types.mapIt(it.nodeRepr.capitalizeAscii).join()
+
+proc genColName*(types: seq[NimNode]): NimNode =
+  let suffix = genColNameStr(types)
+  result = genSym(nskType, "Column" & suffix) # gensym required to make it a symbol that lasts
+
+proc hasFieldName(col: NimNode, field: string): bool =
+  let names = FieldNames[col.strVal]
+  result = field in names
+
+proc getRefType*(n: NimNode): NimNode =
+  expectKind(n, nnkTypeDef)
+  result = n[2]
+
+proc getRecList(n: NimNode): NimNode =
+  case n.kind
+  of nnkRefTy: result = n[0][2][1]
+  of nnkObjectTy: result = n[2][1]
+  of nnkTypeDef: result = n[2][0][2][1]
+  else: error("Invalid branch: " & $n.kind)
+
+proc getGenericTypeBranch(n: NimNode): NimNode =
+  # nice, huh?
+  case n.kind
+  of nnkTypeDef: result = n.getRefType.getRecList.getGenericTypeBranch
+  of nnkRefTy: result = n.getRecList.getGenericTypeBranch()
+  of nnkRecCase: result = n[7]
+  of nnkObjectTy: result = n.getRecList.getGenericTypeBranch()
+  else: error("Invalid branch: " & $n.kind)
+
+proc getInnerType*(n: NimNode): NimNode = n.getTypeImpl[1][1] # get inner type of `Tensor[T]`
+
+macro patchColumn*(typ: typed): untyped =
+  let typ0 = getInnerType(typ)
+  #echo typ0.treerepr
+  #echo typ.getImpl.treerepr
+  #echo typ.getTypeImpl.treerepr
+  #echo typ.getTypeInst.treerepr
+  #echo typ.getType.treerepr
+  var typImp = getTypeInst(Column).getImpl
+  #echo typImp.treerepr
+  var refTy = getRefType(typImp)
+  #echo refTy.treerepr
+  var body = getRecList(refTy)
+  #echo body.treerepr
+  var rec = getGenericTypeBranch(body) # get the `colGeneric` branch of the `Column` object
+  #echo rec.treerepr
+  let colId = genColName(@[typ0])
+  #echo colId.repr
+  let fieldName = genFieldName(typ0)
+  let tTyp = nnkBracketExpr.newTree(ident"Tensor", typ0)
+  #ident("Tensor[" & $typ0.strVal & "]")
+  rec[1] = nnkIdentDefs.newTree(fieldName, tTyp, newEmptyNode())
+  body[7] = rec
+  result = refTy
+  #echo result.repr
+  result = quote do:
+    #mixin `tTyp`
+    type
+      `colId` = `result`
+    `colId`
+  result = result.replaceSymsByIdents()
+  #echo result.treerepr
+
+  TypeNames[genColNameStr(@[typ0])] = `colId`
+
+  #if true: quit()
+  #echo result.repr
+  #TypeNames[@[typ0.strVal]] = colId
+  #FieldNames[colId.strVal] = @[fieldName.strVal]
+
+
+#proc `$`[T: DataFrameLike](df: T): string =
+#  result = "DF(cols: "
+#  for c in df.cols:
+#    echo "print ", c
+#    result.add $c & ", "
+#  result.add ")"
+
+macro assignField(c, val: typed): untyped =
+  # get the correct field name
+  #echo val.treerepr
+  #echo val.getType.treerepr
+  #echo val.getTypeImpl.treerepr
+  #echo val.getImpl.treerepr
+  #echo val.getTypeInst.treerepr
+  let typ0 = val.getTypeInst[1]
+  let fn = genFieldName(typ0) #FieldNames[@[typ0.strVal]]
+  result = quote do:
+    `c`.`fn` = `val`
+  #echo fn.repr
+
+macro getField(c, dtype: typed): untyped =
+  # get the correct field name
+  let typ0 = dtype.getType[1]
+  let fn = genFieldName(typ0) # FieldNames[@[typ0.strVal]]
+  let cTyp = c.getTypeInst # required to check that `dtype` matches this type
+
+  if cTyp.hasFieldName(fn.strVal):
+    result = quote do:
+      `c`.`fn`
+  else:
+    error("The given column of type " & $cTyp.strVal & " has no generic field of type " & $typ0.strVal)
+
+proc getColumnImpl(n: NimNode): NimNode =
+  echo n.kind, " and ", n.repr
+  case n.kind
+  of nnkSym:
+    if "column" in n.strVal.normalize:
+      result = getColumnImpl(n.getTypeImpl)
+    else:
+      result = getColumnImpl(n.getType)
+  of nnkBracketExpr: result = n[1].getColumnImpl
+  of nnkTypeDef: result = n[2]
+  of nnkObjectTy: result = n
+  of nnkCall: result = n.getType.getColumnImpl
+  of nnkHiddenDeref: result = n[0].getColumnImpl
+  else:
+    echo n.treerepr
+    error("invalid")
+
+
+macro getField(c: typed): untyped =
+  # get the correct field name based on the (only!) generic field. Once we have more
+  # generic fields (i.e. multiple new types in a single DF), need to dispatch a `case` here
+  #echo c.getType.repr
+  #echo c.getImpl.repr
+  #if c.kind != nnkHiddenDeref:
+  #  echo "BEGIN================================================================================"
+  #  echo c.treerepr
+  #  echo c.getType.treerepr
+  #  #echo c.getImpl.treerepr
+  #  echo c.getTypeImpl.treerepr
+  #  echo c.getTypeInst.treerepr
+  #let cTyp = c.getTypeInst.getImpl # required to check that `dtype` matches this type
+  let cTyp = c.getColumnImpl()#c.getType[1].getImpl # required to check that `dtype` matches this type
+  #echo "CTYP ", cTyp.treerepr
+  if cTyp.kind != nnkNilLit:
+    let genBranch = getGenericTypeBranch(cTyp)
+    if genBranch[1].kind != nnkNilLit and genBranch[1].kind != nnkRecList:
+      #echo genBranch.treerepr
+      let fn = genBranch[1][0]
+      result = quote do:
+        `c`.`fn`
+    else:
+      #echo genBranch.treerepr
+      #error("Invalid branch. This should never happen!")
+      result = quote do:
+        newTensor[float](0)
+  else:
+    result = quote do:
+      error("Invalid branch. This should never happen!")
+      newTensor[float](0)
+
+
+  #if cTyp.hasFieldName(fn.strVal):
+  #  result = quote do:
+  #    `c`.`fn`
+  #else:
+  #  error("The given column of type " & $cTyp.strVal & " has no generic field of type " & $typ0.strVal)
+
+
 template `%~`*(v: Value): Value = v
-proc pretty*(c: Column): string
+proc pretty*(c: ColumnLike): string
 proc compatibleColumns*(c1, c2: Column): bool {.inline.}
 # just a no-op
 template toColumn*(c: Column): Column = c
@@ -26,7 +212,21 @@ func high*(c: Column): int = c.len - 1
 
 func isConstant*(c: Column): bool = c.kind == colConstant
 
-proc toColumn*[T: SomeFloat | SomeInteger | string | bool | Value](t: Tensor[T]): Column =
+macro printType(t: typed): untyped =
+  echo t.getType.treerepr
+  echo t.getImpl.treerepr
+  echo t.getTypeImpl.treerepr
+  echo t.getTypeInst.treerepr
+
+proc makeColumn[T](s: T): auto =
+  #Column()
+  #discard
+  type retTyp = patchColumn(T)
+  result = retTyp(kind: colGeneric, len: s.len) #
+  assignField(result, s)
+  #printType(result)
+
+proc toColumn*[T](t: Tensor[T]): ColumnLike =
   when T is SomeInteger:
     result = Column(kind: colInt,
                     iCol: t.asType(int),
@@ -39,18 +239,46 @@ proc toColumn*[T: SomeFloat | SomeInteger | string | bool | Value](t: Tensor[T])
     result = Column(kind: colBool,
                     bCol: t,
                     len: t.size)
-  elif T is string:
+  elif T is string or T is char:
     result = Column(kind: colString,
-                    sCol: t,
+                    sCol: t.asType(string),
                     len: t.size)
   elif T is Value:
     result = Column(kind: colObject,
                     oCol: t,
                     len: t.size)
+  elif T isnot seq and T isnot Tensor:
+    ## generate a new type and return it
+    result = makeColumn(t)
 
-proc constantColumn*[T](val: T, len: int): Column =
+  else: error("The type " & $T & " is not supported!")
+
+proc toColumn*[T](s: openArray[T]): ColumnLike =
+  var vals = newTensor[T](s.len)
+  for i, x in s:
+    vals[i] = x
+  result = toColumn(vals)
+
+type
+  ScalarLike = concept x
+    x is char or x is string or x.float is float
+
+## XXX: We need a way to declare the following is only allowed for scalar data types. For some reason
+## `T: not seq | not array | not Tensor` does not work
+proc toColumn*[T: ScalarLike](x: T): Column =
+  # also possible to create single row column, but inefficient
+  # for `summarize` though there's no way around
+  let vals = newTensorWith[T](1, x)
+  result = toColumn(vals)
+
+proc constantColumn*[T](val: T, len: int): auto =
   ## creates a constant column based on `val` and its type
-  result = Column(len: len, kind: colConstant, cCol: %~ val)
+  when T is SupportedTypes:
+    result = Column(len: len, kind: colConstant, cCol: %~ val)
+  else:
+    var tmp: Tensor[T]
+    type retType = patchColumn(typeof(T))
+    result = retType(len: len, kind: colConstant, cCol: %~ val)
 
 proc constantToFull*(c: Column): Column =
   ## creates a real constant full tensor column based on a constant column
@@ -69,6 +297,7 @@ proc `[]`*(c: Column, slice: Slice[int]): Column =
     # for constant keep column, only adjust the length to the slice
     result = c
     result.len = slice.b - slice.a + 1
+  of colGeneric: raise newException(Exception, "implement me")
   of colNone: raise newException(IndexError, "Accessed column is empty!")
 
 proc newColumn*(kind = colNone, length = 0): Column =
@@ -80,7 +309,7 @@ proc newColumn*(kind = colNone, length = 0): Column =
   of colObject: result = toColumn newTensor[Value](length)
   of colConstant: result = constantColumn(Value(kind: VNull), length)
   of colNone: result = Column(kind: colNone, len: 0)
-
+  of colGeneric: raise newException(Exception, "implement me")
 
 proc toColKind*[T](dtype: typedesc[T]): ColKind =
   when T is SomeFloat:
@@ -112,6 +341,7 @@ proc toValueKind*(colKind: ColKind): ValueKind =
   of colObject: result = VObject
   of colConstant: result = VObject
   of colNone: result = VNull
+  of colGeneric: raise newException(Exception, "implement me")
 
 proc toNimType*(colKind: ColKind): string =
   ## returns the string name of the underlying data type of the column kind
@@ -123,8 +353,9 @@ proc toNimType*(colKind: ColKind): string =
   of colObject: result = "object"
   of colConstant: result = "constant"
   of colNone: result = "null"
+  of colGeneric: result = "generic" # XXX: replace by macro at callsite
 
-template withNativeTensor*(c: Column,
+template withNativeTensor*(c: ColumnLike,
                            valName: untyped,
                            body: untyped): untyped =
   case c.kind
@@ -147,6 +378,10 @@ template withNativeTensor*(c: Column,
     withNative(c.cCol, realVal):
       let `valName` {.inject.} = newTensorWith(c.len, realVal)
       body
+  of colGeneric:
+    # get generic type of the given `ColumnLike`
+    let `valName` {.inject.} = getField(c)
+    body
   of colNone: raise newException(ValueError, "Accessed column is empty!")
 
 proc combinedColKind*(c: seq[ColKind]): ColKind =
@@ -182,7 +417,7 @@ template withNative*(c: Column, idx: int,
   of colConstant:
     let `valName` {.inject.} =  c[idx, Value]
     body
-  of colNone: raise newException(ValueError, "Accessed column is empty!")
+  of colNone, colGeneric: raise newException(ValueError, "Accessed column is empty!")
 
 template withNativeDtype*(c: Column, body: untyped): untyped =
   case c.kind
@@ -201,7 +436,7 @@ template withNativeDtype*(c: Column, body: untyped): untyped =
   of colObject, colConstant:
     type dtype {.inject.} = Value
     body
-  of colNone: raise newException(ValueError, "Accessed column is empty!")
+  of colNone, colGeneric: raise newException(ValueError, "Accessed column is empty!")
 
 template withDtypeByColKind*(colKind: ColKind, body: untyped): untyped =
   case colKind
@@ -220,7 +455,7 @@ template withDtypeByColKind*(colKind: ColKind, body: untyped): untyped =
   of colObject, colConstant:
     type dtype {.inject.} = Value
     body
-  of colNone: raise newException(ValueError, "Invalid column kind!")
+  of colNone, colGeneric: raise newException(ValueError, "Invalid column kind!")
 
 proc asValue*[T](t: Tensor[T]): Tensor[Value] {.noInit.} =
   ## Apply type conversion on the whole tensor
@@ -307,7 +542,7 @@ proc toTensor*[T](c: Column, dtype: typedesc[T],
     result = c.oCol.valueTo(T, dropNulls = dropNulls)
   of colConstant:
     result = c.constantToFull.toTensor(dtype, dropNulls)
-  of colNone: raise newException(ValueError, "Accessed column is empty!")
+  of colNone, colGeneric: raise newException(ValueError, "Accessed column is empty!")
 
 proc toTensor*[T](c: Column, slice: Slice[int], dtype: typedesc[T]): Tensor[T] =
   case c.kind
@@ -331,9 +566,9 @@ proc toTensor*[T](c: Column, slice: Slice[int], dtype: typedesc[T]): Tensor[T] =
     result = c.oCol[slice.a .. slice.b].valueTo(T)
   of colConstant:
     result = newTensorWith[T](slice.b - slice.a + 1, c.cCol.to(T))
-  of colNone: raise newException(ValueError, "Accessed column is empty!")
+  of colNone, colGeneric: raise newException(ValueError, "Accessed column is empty!")
 
-proc `[]`*[T](c: Column, idx: int, dtype: typedesc[T]): T =
+proc `[]`*[T](c: ColumnLike, idx: int, dtype: typedesc[T]): T =
   when T isnot Value:
     case c.kind
     of colInt:
@@ -376,6 +611,9 @@ proc `[]`*[T](c: Column, idx: int, dtype: typedesc[T]): T =
         result = c.cCol.toInt
       elif T is bool:
         result = c.cCol.toBool
+    of colGeneric:
+      when T isnot SupportedTypes:
+        result = getField(c)[idx] # XXX: use dtype? means we might not find field!, dtype)
     of colNone: raise newException(ValueError, "Accessed column is empty!")
   else:
     case c.kind
@@ -385,6 +623,10 @@ proc `[]`*[T](c: Column, idx: int, dtype: typedesc[T]): T =
     of colBool: result = %~ c.bCol[idx]
     of colObject: result = c.oCol[idx]
     of colConstant: result = c.cCol
+    of colGeneric:
+      echo "WARN: Accessed column is generic. Treating return value as Value of VString!"
+      let val = getField(c)
+      result = %~ $val[idx]
     of colNone: raise newException(ValueError, "Accessed column is empty!")
 
 proc toObjectColumn*(c: Column): Column =
@@ -395,51 +637,72 @@ proc toObjectColumn*(c: Column): Column =
       res[idx] = %~ (t[idx])
   result = toColumn res
 
-proc `[]=`*[T](c: var Column, idx: int, val: T) =
+proc `[]=`*[T](c: var ColumnLike, idx: int, val: T) =
   ## assign `val` to column `c` at index `idx`
   ## If the types match, it just calls `[]=` on the tensor.
   ## If they are compatible, `val` is converted to c's type.
   ## If they are incompatible, `c` will be rewritten to an object
   ## column.
   var rewriteAsValue = false
-  case c.kind
-  of colFloat:
-    when T is float:
-      c.fCol[idx] = val
-    elif T is SomeNumber:
-      c.fCol[idx] = val.float
-  of colInt:
-    when T is int:
-      c.iCol[idx] = val
-    else:
-      rewriteAsValue = true
-  of colString:
-    when T is string:
-      c.sCol[idx] = val
-    else:
-      rewriteAsValue = true
-  of colBool:
-    when T is bool:
-      c.bCol[idx] = val
-    else:
-      rewriteAsValue = true
-  of colObject:
-    c.oCol[idx] = %~ val
-  of colConstant:
-    if c.cCol == %~ val: discard # do nothing
-    elif c.cCol.kind == VNull:
-      # turn into constant column of `val`
-      c.cCol = %~ val
-    else:
-      # need to replace constant column by non constant with changed value at
-      # specified index
-      c = c.constantToFull()
-      c[idx] = val
-  of colNone: raise newException(ValueError, "Accessed column is empty!")
-  if rewriteAsValue:
-    # rewrite as an object column
-    c = c.toObjectColumn()
-    c.oCol[idx] = %~ val
+  when T is SupportedTypes:
+    case c.kind
+    of colFloat:
+      when T is float:
+        c.fCol[idx] = val
+      elif T is SomeNumber:
+        c.fCol[idx] = val.float
+    of colInt:
+      when T is int:
+        c.iCol[idx] = val
+      else:
+        rewriteAsValue = true
+    of colString:
+      when T is string:
+        c.sCol[idx] = val
+      else:
+        rewriteAsValue = true
+    of colBool:
+      when T is bool:
+        c.bCol[idx] = val
+      else:
+        rewriteAsValue = true
+    of colObject:
+      c.oCol[idx] = %~ val
+    of colConstant:
+      if c.cCol == %~ val: discard # do nothing
+      elif c.cCol.kind == VNull:
+        # turn into constant column of `val`
+        c.cCol = %~ val
+      else:
+        # need to replace constant column by non constant with changed value at
+        # specified index
+        c = c.constantToFull()
+        c[idx] = val
+    of colNone: raise newException(ValueError, "Accessed column is empty!")
+    of colGeneric: raise newException(Exception, "Invalid branch. This should never happen!")
+    if rewriteAsValue:
+      # rewrite as an object column
+      c = c.toObjectColumn()
+      c.oCol[idx] = %~ val
+  else:
+    doAssert c.kind == colGeneric, "Assignment of unsupported types only to `colGeneric` columns!"
+    when T isnot SupportedTypes:
+      getField(c)[idx] = val
+
+proc assignData*[T: ColumnLike; U](c: var T, data: Tensor[U]) =
+  ## Unsafe if `data` does not match `c's` kind!
+  when U is int:
+    c.iCol = data
+  elif U is float:
+    c.fCol = data
+  elif U is string:
+    c.sCol = data
+  elif U is bool:
+    c.bCol = data
+  elif U is Value:
+    c.oCol = data
+  else:
+    assignField(c, data)
 
 proc `[]=`*[T](c: var Column, slice: Slice[int], t: Tensor[T]) =
   ## Assigns the tensor `t` to the slice `slice`. The slice length must match
@@ -492,7 +755,7 @@ proc `[]=`*[T](c: var Column, slice: Slice[int], t: Tensor[T]) =
       c.oCol[sa .. sb] = t
     else:
       c.oCol[sa .. sb] = t.asValue()
-  of colNone:
+  of colNone, colGeneric:
     raise newException(ValueError, "Cannot assign a tensor to an empty column.")
 
 proc `[]=`*(c: var Column, slice: Slice[int], col: Column) =
@@ -537,7 +800,7 @@ template withNative2*(c1, c2: Column, idx1, idx2: int,
     let `valName2` {.inject.} =  c2[idx2, Value]
     body
   of colConstant: raise newException(ValueError, "Accessed column is constant!")
-  of colNone: raise newException(ValueError, "Accessed column is empty!")
+  of colNone, colGeneric: raise newException(ValueError, "Accessed column is empty!")
 
 proc compatibleColumns*(c1, c2: Column): bool {.inline.} =
   if c1.kind == c2.kind: result = true
@@ -568,7 +831,7 @@ proc toObject*(c: Column): Column {.inline.} =
   of colString: result = toColumn c.sCol.asValue
   of colBool: result = toColumn c.bCol.asValue
   of colConstant: raise newException(ValueError, "Accessed column is constant!")
-  of colNone: raise newException(ValueError, "Accessed column is empty!")
+  of colNone, colGeneric: raise newException(ValueError, "Accessed column is empty!")
 
 proc add*(c1, c2: Column): Column =
   ## adds column `c2` to `c1`. Uses `concat` internally.
@@ -586,7 +849,7 @@ proc add*(c1, c2: Column): Column =
     of colConstant:
       if c1.cCol == c2.cCol: result = c1 # does not matter which to return
       else: result = add(c1.constantToFull, c2.constantToFull)
-    of colNone: doAssert false, "Both columns are empty!"
+    of colNone, colGeneric: doAssert false, "Both columns are empty!"
   elif compatibleColumns(c1, c2):
     # convert both to float
     case c1.kind
@@ -605,18 +868,6 @@ proc add*(c1, c2: Column): Column =
     # convert both columns to Value
     result = toColumn concat(c1.toObject.oCol, c2.toObject.oCol, axis = 0)
   result.len = c1.len + c2.len
-
-proc toColumn*[T: SomeFloat | SomeInteger | string | bool | Value](s: openArray[T]): Column =
-  var vals = newTensor[T](s.len)
-  for i, x in s:
-    vals[i] = x
-  result = toColumn(vals)
-
-proc toColumn*[T: SomeFloat | SomeInteger | string | bool | Value](x: T): Column =
-  # also possible to create single row column, but inefficient
-  # for `summarize` though there's no way around
-  let vals = newTensorWith[T](1, x)
-  result = toColumn(vals)
 
 proc toNativeColumn*(s: openArray[Value]): Column =
   ## given input as `Value`, will attempt to return the column as native
@@ -682,12 +933,12 @@ template liftScalarToColumn*(name: untyped): untyped =
       result = %~ `name`(c.toTensor(dtype))
 liftScalarToColumn(max)
 
-proc pretty*(c: Column): string =
+proc pretty*(c: ColumnLike): string =
   ## pretty prints a Column
   result = &"Column of type: {toNimType(c.kind)} with length: {c.len}\n"
   withNativeTensor(c, t):
     result.add &"  contained Tensor: {t}"
-template `$`*(c: Column): string = pretty(c)
+template `$`*(c: ColumnLike): string = pretty(c)
 
 proc clone*(c: Column): Column =
   ## clones the given column by cloning the Tensor
@@ -699,7 +950,7 @@ proc clone*(c: Column): Column =
   of colBool: result.bCol = c.bCol.clone()
   of colObject: result.oCol = c.oCol.clone()
   of colConstant: result.cCol = c.cCol # just a `Value`
-  of colNone: discard
+  of colNone, colGeneric: discard
 
 proc map*[T; U](c: Column, fn: (T -> U)): Column =
   ## Maps a given column given `fn` to a new column.

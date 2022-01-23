@@ -16,3 +16,8 @@ type
       # a set of the categories
       groupMap*: OrderedTable[string, HashSet[Value]]
     else: discard
+
+  DataFrameLike* = concept x
+    x.len is int
+    x.data[string].kind is ColKind
+    x.kind is DataFrameKind
