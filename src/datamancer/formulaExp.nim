@@ -46,6 +46,9 @@ type
     loop*: NimNode # loop needs to be patched to remove accented quotes etc
     generateLoop*: bool # only of interest for `fkScalar`. Means instead of generating a
                         # single `res = %~ <user body>` statement, generate a for loop w/ accumulation
+    df*: Option[NimNode] # the (optional) DataFrame from which to deduce the type of the closure argument DF
+    dfType*: NimNode # the extracted/default type of the `DataFrame` argument to the closure
+    colResType*: NimNode # the returned `Column` type of a `fkVektor` closure (usually `Column`)
   ## `Lift` stores a node which needs to be lifted out of a for loop, because it performs a
   ## reducing operation on a full DF column. It will be replaced by `liftedNode` in the loop
   ## body.
@@ -87,8 +90,9 @@ const
   RIdent = "r"
   DfIdent = "df"
   IdxIdent = "idx"
-  ColIdent = "Column"
+  ColIdent* = "Column"
   ValueIdent = "Value"
+  InputDF* = "InputDataFrame" # the data frame given as input to deduce types from
 
 const Dtypes* = ["float", "int", "string", "bool", "Value"]
 const DtypesAll* = ["float", "float64", "int", "int64", "string", "bool", "Value"]
@@ -332,8 +336,10 @@ proc hasExplicitTypeHint*(n: NimNode): bool =
   result = (n.nodeIsDf or n.nodeIsDfIdx) and
     n.kind == nnkCall and
     n.len == 3 and
-    n[2].kind in {nnkIdent, nnkSym} and
-    n[2].strVal in DtypesAll
+    n[2].kind in {nnkIdent, nnkSym} # and
+    #n[2].strVal in DtypesAll
+    # XXX: DtypesAll check not allowed here! otherwise overwrites `
+    # explicit hints of custom types
 
 proc get(p: var Preface, node: NimNode, useIdx: bool): NimNode =
   let n = p[node]
@@ -499,10 +505,9 @@ proc hasResIdent(p: Preface): bool =
     if arg.asgnKind == byCustom and arg.node[0][0].strVal == ResIdent:
       return true
 
-proc convertLoop(p: Preface, dtype, loop: NimNode,
+proc convertLoop(p: Preface, dtype, fctColResType, loop: NimNode,
                  fnKind: FormulaKind,
-                 generateLoop: bool
-                ): NimNode =
+                 generateLoop: bool): NimNode =
   let memCopyable = ["float", "int", "bool"]
   let isMemCopyable = dtype.strVal in memCopyable and
     p.args.allIt(it.colType.strVal in memCopyable)
@@ -536,7 +541,7 @@ proc convertLoop(p: Preface, dtype, loop: NimNode,
     let resId = ident(ResIdent)
     let resultId = ident(ResultIdent)
     result = quote do:
-      `resultId` = toColumn `resId`
+      `resultId` = toColumn(`fctColResType`, `resId`)
 
   case fnKind
   of fkVector:
@@ -596,14 +601,15 @@ proc generateClosure*(fct: FormulaCT): NimNode =
   procBody.add convertPreface(fct.preface)
   if fct.funcKind == fkVector:
     procBody.add convertDtype(fct.resType)
-  procBody.add convertLoop(fct.preface, fct.resType, fct.loop, fct.funcKind, fct.generateLoop)
+  procBody.add convertLoop(fct.preface, fct.resType, fct.colResType, fct.loop, fct.funcKind, fct.generateLoop)
   result = procBody
+  let dfTyp = fct.colResType
   var params: array[2, NimNode]
   case fct.funcKind
   of fkVector:
-    params = [ident(ColIdent),
+    params = [fct.colResType,
               nnkIdentDefs.newTree(ident(DfIdent),
-                                   ident"DataFrame",
+                                   nnkBracketExpr.newTree(ident"DataFrame", dfTyp),
                                    newEmptyNode())]
   of fkScalar:
     when (NimMajor, NimMinor, NimPatch) < (1, 5, 0):
@@ -613,7 +619,7 @@ proc generateClosure*(fct: FormulaCT): NimNode =
     # to avoid clashes with other `Value` objects, fully clarify we mean ours
     params = [valueId,
               nnkIdentDefs.newTree(ident(DfIdent),
-                                   ident"DataFrame",
+                                   nnkBracketExpr.newTree(ident"DataFrame", dfTyp),
                                    newEmptyNode())]
   else:
     error("Invalid FormulaKind `" & $(fct.funcKind.repr) & "` in `convertLoop`. Already handled " &
