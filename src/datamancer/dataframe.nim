@@ -561,10 +561,10 @@ template withCombinedType*(df: DataFrame,
     withCombinedType(df, @["x", "z"]):
       doAssert dtype is float # float can encompass `int` and `float` as we're lenient!
 
-  var colKinds = newSeq[ColKind]()
+  var colSeq = newSeq[Column]() # need columns to extract correct combined type
   for k in cols:
-    colKinds.add df[k].kind
-  let combKind = combinedColKind(colKinds)
+    colSeq.add df[k]
+  let combKind = combinedColKind(colSeq)
   case combKind
   of colInt:
     type dtype {.inject.} = int
@@ -934,13 +934,23 @@ proc hashColumn(s: var seq[Hash], c: Column, finish: static bool = false) =
   ## rather the idea is to use this to hash all columns on `s` first.
   ##
   ## Currently not used (ref. issue #12).
-  withNativeTensor(c, t):
-    assert s.len == t.size
-    for idx in 0 ..< t.size:
+  # NOTE: this distinction is important to not generate a full tensor for
+  # the `withNativeTensor` call in case the input is a constant!
+  if c.kind == colConstant:        # if constant, don't have to access `t[idx]` all the time
+    let hConst = hash(c[0, Value]) # just hash first element and combine with all hashes
+    for idx in 0 ..< s.len:
       when not finish:
-        s[idx] = s[idx] !& hash(t[idx])
+        s[idx] = s[idx] !& hConst
       else:
-        s[idx] = !$(s[idx] !& hash(t[idx]))
+        s[idx] = !$(s[idx] !& hConst)
+  else: # else hash everything
+    withNativeTensor(c, t):
+      assert s.len == t.size
+      for idx in 0 ..< t.size:
+        when not finish:
+          s[idx] = s[idx] !& hash(t[idx])
+        else:
+          s[idx] = !$(s[idx] !& hash(t[idx]))
 
 proc buildColHashes(df: DataFrame, keys: seq[string]): seq[seq[Value]] =
   ## Computes a sequence of `Value VObject` elements from the given
@@ -1067,8 +1077,12 @@ proc filterImpl[T; U: seq[int] | Tensor[int]](resCol: var Column, col: Column, f
 
 proc filter[T: seq[int] | Tensor[int]](col: Column, filterIdx: T): Column =
   ## perform filterting of the given column `key`
-  withNativeDtype(col):
-    filterImpl[dtype, T](result, col, filterIdx)
+  if col.kind == colConstant: # just return a "shortened" constant tensor
+    result = col
+    result.len = filterIdx.len
+  else:
+    withNativeDtype(col):
+      filterImpl[dtype, T](result, col, filterIdx)
 
 proc countTrue(t: Tensor[bool]): int {.inline.} =
   for el in t:
@@ -1424,16 +1438,20 @@ proc arrangeSortImpl[T](toSort: var seq[(int, T)], order: SortOrder) =
     )
 
 proc sortBySubset(df: DataFrame, by: string, idx: seq[int], order: SortOrder): seq[int] =
-  withNativeDtype(df[by]):
-    var res = newSeq[(int, dtype)](idx.len)
-    let t = toTensor(df[by], dtype)
-    for i, val in idx:
-      res[i] = (val, t[val])
-    res.arrangeSortImpl(order = order)
-    # after sorting here, check duplicate values of `val`, slice
-    # of those duplicates, use the next `by` in line and sort
-    # the remaining indices. Recursively do this until
-    result = res.mapIt(it[0])
+  let col = df[by]
+  if col.kind == colConstant: # nothing to sort
+    result = idx
+  else:
+    withNativeDtype(col):
+      var res = newSeq[(int, dtype)](idx.len)
+      let t = toTensor(col, dtype)
+      for i, val in idx:
+        res[i] = (val, t[val])
+      res.arrangeSortImpl(order = order)
+      # after sorting here, check duplicate values of `val`, slice
+      # of those duplicates, use the next `by` in line and sort
+      # the remaining indices. Recursively do this until
+      result = res.mapIt(it[0])
 
 proc sortRecurse(df: DataFrame, by: seq[string],
                  startIdx: int,
@@ -1546,7 +1564,9 @@ proc arrange*(df: DataFrame, by: varargs[string], order = SortOrder.Ascending): 
   # now sort by cols in ascending order of each col, i.e. ties will be broken
   # in ascending order of the columns
   result = newDataFrame(df.ncols)
-  let idxCol = sortBys(df, @by, order = order)
+  # remove all constant columns from `by` (nothing to sort there)
+  let by = @by.filterIt(df[it].kind != colConstant)
+  let idxCol = sortBys(df, by, order = order)
   result.len = df.len
   var data = newColumn()
   for k in keys(df):
@@ -1587,7 +1607,7 @@ proc innerJoin*(df1, df2: DataFrame, by: string): DataFrame =
   let
     df1S = df1.arrange(by)
     df2S = df2.arrange(by)
-  withNativeDtype(df1S[by]):
+  withNativeDtype(df1S[by]): ## TODO: this likely means we convert constants to `Value`...
     let
       col1 = df1S[by].toTensor(dtype).toRawSeq
       col2 = df2S[by].toTensor(dtype).toRawSeq
@@ -1613,7 +1633,7 @@ proc innerJoin*(df1, df2: DataFrame, by: string): DataFrame =
     for k in allKeys:
       if k in df1S and k in df2S:
         doAssert compatibleColumns(df1S[k], df2S[k]), " Key: " & $k & ", df1: " & $df1S[k].kind & ", df2: " & $df2S[k].kind
-        result.asgn(k, newColumn(kind = combinedColKind(@[df1S[k].kind, df2S[k].kind]),
+        result.asgn(k, newColumn(kind = combinedColKind(@[df1S[k], df2S[k]]),
                                  length = resLen))
       elif k in df1S and k notin df2S:
         result.asgn(k, newColumn(kind = df1S[k].kind, length = resLen))
@@ -1658,8 +1678,9 @@ proc innerJoin*(df1, df2: DataFrame, by: string): DataFrame =
     # possibly shorten the columns
     if result.len < resLen:
       for k in getKeys(result):
-        withNativeTensor(result[k], t):
-          result.asgn(k, toColumn(t[_ ..< result.len]))
+        if result[k].kind != colConstant: # if constant nothing to short
+          withNativeTensor(result[k], t):
+            result.asgn(k, toColumn(t[_ ..< result.len]))
         result[k].len = result.len
 
 proc toHashSet*[T](t: Tensor[T]): HashSet[T] =
@@ -1893,7 +1914,7 @@ proc gather*(df: DataFrame, cols: varargs[string],
     result.asgn(value, toColumn valTensor)
   # For remainder of columns, just use something like `repeat`!, `stack`, `concat`
   for rem in remainCols:
-    withNativeDtype(df[rem]):
+    withNativeDtype(df[rem]): ## XXX: this might convert to colObject?
       let col = df[rem].toTensor(dtype)
       var fullCol = newTensorUninit[dtype](newLen)
       for i in 0 ..< cols.len:
