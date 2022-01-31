@@ -737,3 +737,39 @@ template map_inline*(c: Column, body: untyped): Column =
       raise newException(Exception, "Column is of invalid type for map body `" & $(astToStr(body)) &
         "` for dtype of column: " & $(c.kind.toNimType))
     res
+
+proc lag*[T](t: Tensor[T], n = 1): Tensor[T] {.noInit.} =
+  ## Lags the input tensor by `n`, i.e. returns a shifted tensor
+  ## such that it *lags* behind `t`:
+  ## `lag([1, 2, 3], 1) ⇒ [null, 1, 2]`
+  ## NOTE: Currently `null` is just a `default(T)` value! Do not use the values
+  ## left behind for any computation unless you are fine with picking up
+  ## zero values!
+  result = newTensorUninit[T](t.size)
+  #result[0 ..< n] = leave unspecified for now
+  let hi = t.size.int - n
+  result[n ..< t.size.int] = t[0 ..< hi]
+  result[0 ..< n] = default(T)
+
+proc lag*(c: Column, n = 1): Column =
+  ## Overload of the above for columns
+  withNativeDtype(c):
+    result = toColumn lag(c.toTensor(dtype), n)
+
+proc lead*[T](t: Tensor[T], n = 1): Tensor[T] {.noInit.} =
+  ## Leads the input tensor by `n`, i.e. returns a shifted tensor
+  ## such that it *leads* ahead of `t`:
+  ## `lead([1, 2, 3], 1) ⇒ [2, 3, null]`
+  ## NOTE: Currently `null` is just a `default(T)` value! Do not use the values
+  ## left behind for any computation unless you are fine with picking up
+  ## zero values!
+  result = newTensorUninit[T](t.size)
+  #result[0 ..< n] = leave unspecified for now
+  let hi = t.size.int - n
+  result[0 ..< n] = t[n ..< hi]
+  result[n ..< t.size.int] = default(T)
+
+proc lead*(c: Column, n = 1): Column =
+  ## Overload of the above for columns
+  withNativeDtype(c):
+    result = toColumn lead(c.toTensor(dtype), n)
