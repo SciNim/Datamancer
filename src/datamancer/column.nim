@@ -1,6 +1,6 @@
 import arraymancer/tensor
 import value, sugar, math, strformat
-from sequtils import allIt
+from sequtils import allIt, anyIt, mapIt
 
 type
   ColKind* = enum
@@ -103,8 +103,22 @@ proc toColKind*(vKind: ValueKind): ColKind =
   of VObject: result = colObject
   of VNull: result = colObject
 
-proc toValueKind*(colKind: ColKind): ValueKind =
-  case colKind
+proc toValueKind*(col: Column): ValueKind =
+  case col.kind
+  of colFloat: result = VFloat
+  of colInt: result = VInt
+  of colString: result = VString
+  of colBool: result = VBool
+  of colObject: result = VObject
+  of colConstant:
+    # need to look at the `ValueKind` of the constant!
+    result = col.cCol.kind
+  of colNone: result = VNull
+
+proc toValueKind*(col: ColKind): ValueKind {.deprecated: "This version of `toValueKind` " &
+    "has been deprecated in favor of a `toValueKind` taking a `Column` object. This way a " &
+    "conversion of `colConstant` can be done to the underlying type of the `Value` object.".} =
+  case col
   of colFloat: result = VFloat
   of colInt: result = VInt
   of colString: result = VString
@@ -112,6 +126,12 @@ proc toValueKind*(colKind: ColKind): ValueKind =
   of colObject: result = VObject
   of colConstant: result = VObject
   of colNone: result = VNull
+
+proc nativeColKind*(col: Column): ColKind =
+  ## Returns the native column kind, i.e. the column kind the native data stored
+  ## in the column has, ``including`` constant columns (hence the native kind is
+  ## ``not`` equal to the `kind` field of the column!
+  result = col.toValueKind.toColKind # a back and forth
 
 proc toNimType*(colKind: ColKind): string =
   ## returns the string name of the underlying data type of the column kind
@@ -149,13 +169,19 @@ template withNativeTensor*(c: Column,
       body
   of colNone: raise newException(ValueError, "Accessed column is empty!")
 
-proc combinedColKind*(c: seq[ColKind]): ColKind =
-  if c.allIt(it == c[0]):
+proc combinedColKind*(c: seq[Column]): ColKind =
+  if c.allIt(it.kind == c[0].kind):
     # all the same, take any
-    result = c[0]
-  elif c.allIt(it in {colInt, colFloat}):
+    result = c[0].kind
+  elif c.allIt(it.kind in {colInt, colFloat}):
     # int and float can be combined to float, since we're lenient like that
     result = colFloat
+  elif c.anyIt(it.kind == colConstant):
+    # extract col constant and convert their `ValueKind` to `ColKind`
+    let noConst = c.mapIt(it.nativeColKind)
+    if noConst.allIt(it == noConst[0]): result = noConst[0]
+    elif noConst.allIt(it in {colInt, colFloat}): result = colFloat
+    else: result = colObject
   else:
     # the rest can only be merged via object columns of `Values`.
     result = colObject
@@ -198,9 +224,13 @@ template withNativeDtype*(c: Column, body: untyped): untyped =
   of colBool:
     type dtype {.inject.} = bool
     body
-  of colObject, colConstant:
+  of colObject:
     type dtype {.inject.} = Value
     body
+  of colConstant:
+    withNative(c.cCol, realVal):
+      type dtype {.inject.} = typeof(realVal)
+      body
   of colNone: raise newException(ValueError, "Accessed column is empty!")
 
 template withDtypeByColKind*(colKind: ColKind, body: untyped): untyped =
@@ -389,6 +419,7 @@ proc `[]`*[T](c: Column, idx: int, dtype: typedesc[T]): T =
 
 proc toObjectColumn*(c: Column): Column =
   ## returns `c` as an object column
+  ## XXX: can't we somehow convert same slices of a tensor?
   var res = newTensor[Value](c.len)
   withNativeTensor(c, t):
     for idx in 0 ..< c.len:
@@ -498,9 +529,10 @@ proc `[]=`*[T](c: var Column, slice: Slice[int], t: Tensor[T]) =
 proc `[]=`*(c: var Column, slice: Slice[int], col: Column) =
   let sa = slice.a.int
   let sb = slice.b.int
-  if c.compatibleColumns(col) and c.kind != colConstant:
+  if c.compatibleColumns(col):
+    c = c.constantToFull() # in case `c` is const, else is no-op
     withNativeDtype(c):
-      c[slice] = col.toTensor(dtype)
+      c[slice] = col.toTensor(dtype) # converts to full, if it's const
   elif c.kind == colConstant and col.kind == colConstant:
     if c.cCol == col.cCol: return # nothing to do
     else:
@@ -508,6 +540,7 @@ proc `[]=`*(c: var Column, slice: Slice[int], col: Column) =
       let c2 = col.constantToFull()
       c[slice] = c2
   else:
+    # else we have no other choice than convert to `Value` :/
     c = c.toObjectColumn()
     c.oCol[sa .. sb] = col.toTensor(Value)
 
@@ -544,6 +577,14 @@ proc compatibleColumns*(c1, c2: Column): bool {.inline.} =
   elif c1.kind in {colInt, colFloat} and
        c2.kind in {colInt, colFloat}:
     result = true
+  elif c1.kind == colConstant:
+    # check if underlying type is same as `c2`
+    let c1VKind = c1.cCol.kind.toColKind # convert ValueKind of const to ColKind
+    result = c1VKind == c2.kind
+  elif c2.kind == colConstant:
+    # check if underlying type is same as `c1`
+    let c1VKind = c2.cCol.kind.toColKind # convert ValueKind of const to ColKind
+    result = c1VKind == c1.kind
   else: result = false
 
 proc equal*(c1: Column, idx1: int, c2: Column, idx2: int): bool =
@@ -556,7 +597,7 @@ proc equal*(c1: Column, idx1: int, c2: Column, idx2: int): bool =
   else:
     # need to get the enveloping kind and read the data using that corresponding
     # data type
-    let kind = combinedColKind(@[c1.kind, c2.kind])
+    let kind = combinedColKind(@[c1, c2])
     withDtypeByColKind(kind):
       result = c1[idx1, dtype] == c2[idx2, dtype]
 
@@ -598,7 +639,10 @@ proc add*(c1, c2: Column): Column =
       # c1 is float, c2 is int
       assert c2.kind == colInt
       result = toColumn concat(c1.fCol, c2.iCol.asType(float), axis = 0)
-    else: doAssert false, "cannot happen, since not compatible!"
+    else:
+      # one of the two is constant and same type as the other
+      # `constantToFull` is a no-op for the non-constant column
+      result = add(c1.constantToFull, c2.constantToFull) # recurse on this proc
   elif c1.kind == colConstant or c2.kind == colConstant:
     result = add(c1.constantToFull, c2.constantToFull)
   else:
