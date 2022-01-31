@@ -1,3 +1,78 @@
+* v0.2.0
+- *MAJOR, BREAKING*: Add experimental support for "non-generic generic
+  =Columns=". Essentially, from many procedures it is now possible to
+  assign data types that are normally not supported to be stored
+  inside of a =DataFrame=. With a lot of macro magic however, we
+  generate a new =Column= type that is able to store such a data
+  type. Then we return a new =DataFrame= for the user that uses the
+  new =Column= type. For that reason =DataFrame= is now a generic type
+  (generic over the =Column= type) and the notion of the =Column= has
+  become a =ColumnLike= concept. This was the easiest way to add
+  support for things like:
+  - =DateTime=
+  - arbitrary =unchained= units in a DF
+  - =Measurement= objects =Measuremancer=
+  - ... whatever else you can think of. As long as it fits into a
+    =Tensor[T]=, you can now place it into a DF!
+  See XXX for a short introduction on the feature.
+- constant =DataFrame= columns have seen improvements. Before most
+  operations on them would convert them to a non-constant column,
+  often forced to convert to an object column. Now, most operations
+  (that make sense) are supported on constants themselves and if a
+  non-constant conversion is required, it aims to use the type
+  corresponding to the underlying =Value= kind of the constant. That
+  way conversions of constants to full columns should now lead to
+  native (float, int, string, bool) tensors (unless an operation with
+  another native, incompatible type is performed)
+- some bugs were fixed that could cause reference semantics of
+  dataframes to shine through when using =filter=
+- *BREAKING*: the =toValueKind= procedure now takes a =Column= instead
+  of a =ColumnKind=. This is to be able to handle the constant to full
+  conversion properly. Note: A deprecated variant of the former
+  version is still around!
+- add =filterToIdx=, which takes a DF and a sequence / tensor of
+  integers. The procedure will keep only those rows of the DF whose
+  indices are part of the seq/Tensor
+- slight performance improvements for the parsing of CSV files (larger
+  for string heavy files) by avoiding an unnecessary =newString= call
+  (yeah, =setLen= resizes for you if needed...)
+- allow more valid Nim code inside of =f{}= formulas, e.g. if
+  expressions and block statements
+- fix type determinations in =f{}= formulas, if a procedure with
+  default parameters, but no explicit type information is given.  
+- certain expressions in =f{}= formulas (for example
+  =isNaN(idx("foo"))=) could produce unintended CT errors and work now
+  (sorry, had to add a =when compiles= check :( ).
+- *SEMI-BREAKING*: add preliminary support for reducing formulas that require a =for=
+  loop. This (currently) allows for ~res += <formula>~ like statements
+  inside of a loop instead of just ~res = <formula>~ where in the
+  latter the formula must produce a scalar by itself (i.e. does not
+  allow *element wise* access to columns). Now a formula that accesses
+  a single element via =idx(...)= will produce a loop with an
+  accumulation.
+- experimental support for "full formulas" as I call them that allow
+  to have more control over variables in the scope of the formula:
+  #+begin_src nim
+  formula:
+    preface:
+      foo in df["Foo", float]
+      bar in baz(df["Bar", int])
+    loop:
+      bar^2.float + foo  
+  #+end_src
+  allows for custom variable names inside of the context (and more
+  importantly) to perform a full column operation (e.g. =baz=) on a
+  column *before* the loop and use the elements of that operation
+  inside of the loop. Note that this is _not_ for *reducing* operations
+  on columns (i.e. =mean(df["Bar", float])=)! It is still planned to
+  lift reducing operations out of the loop body, but that is still
+  pending.
+- add (experimental) =lag=, =lead= procedures that take a
+  =Tensor/Column= and return a new =Tensor/Column= that is shiftet
+  forward / backward N elements (the left overs are zeroed, the
+  shifted ones are dropped).
+- the =showBrowser= helper to view a =DataFrame= in the browser now
+  adds an additional "index" column
 * v0.1.11
 - add convenience comparison operators for =Value= elements of a
   column with regular types *within a =f{}= formula* (they are emitted
