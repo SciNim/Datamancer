@@ -590,9 +590,22 @@ proc determineTypeFromProc(n: NimNode, numArgs: int): Option[ProcType] =
     for idx in 1 ..< params.len:
       # skip index 0, cause that's the output type
       let pArg = params[idx]
-      let numP = pArg.len - 2
-      for j in 0 ..< pArg.len - 2:
-        res.inputTypes.add pArg[pArg.len - 2].toStrType
+      let numP = pArg.len - 2 # number of arguments in this `nnkIdentDefs`. By default 3, but more
+                              # if multiple like `a, b: float` (4 in this case)
+      # if empty, means proc has a default value, but not exact type, e.g.:
+      # IdentDefs
+      #   Sym "n"
+      #   Sym "m"
+      #   Empty        <- pArg.len - 2
+      #   IntLit 1     <- pArg.len - 1
+      var typ: NimNode
+      case pArg[numP].kind
+      of nnkEmpty:
+        typ = pArg[pArg.len - 1].getType # use the default values type
+      else: # else param has a specific type
+        typ = pArg[pArg.len - 2].toStrType # use the arguments type as a type
+      for j in 0 ..< numP: # now add a type for *each* of the possible N arguments of the same type
+        res.inputTypes.add typ
     if res.resType.isSome or res.inputTypes.len > 0:
       result = some(res)
 
@@ -850,6 +863,9 @@ proc argsValid(pt: ProcType, args: seq[PossibleTypes]): bool =
   for i, inArg in pt.inputTypes:
     # `impure` arguments are `tkNone`. Even might have impure indices for which we could determine
     # type information!
+    if i >= args.len: return true # either we have already returned or we
+                                  # return here, as we lack arguments. This is the case
+                                  # for procs with *defaults*. A default is always true.
     let arg = args[i]
     case arg.kind
     of tkExpression:
