@@ -1175,7 +1175,7 @@ proc filter*(df: DataFrame, conds: varargs[FormulaNode]): DataFrame =
     let dfRes = df.filter(f{ `x` < 3 or `y` == "e" }) ## arbitrary boolean expressions supported
     doAssert dfRes["x", int] == [1, 2, 5].toTensor
     doAssert dfRes["y", string] == ["a", "b", "e"].toTensor
-
+  let df = df.shallowCopy # make a shallow copy, as otherwise we might modify the input
   case df.kind
   of dfGrouped:
     var dfs = newSeq[DataFrame]()
