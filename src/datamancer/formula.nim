@@ -210,38 +210,58 @@ proc compileScalarFormula(fct: FormulaCT): NimNode =
   when defined(echoFormulas):
     echo result.repr
 
+type
+  TupRes = tuple[isInt: bool,
+                 isFloat: bool,
+                 isString: bool,
+                 isBool: bool]
+
 proc checkDtype(body: NimNode,
                 floatSet: HashSet[string],
                 stringSet: HashSet[string],
                 boolSet: HashSet[string]):
-                  tuple[isInt: bool,
-                        isFloat: bool,
-                        isString: bool,
-                        isBool: bool] =
-  for i in 0 ..< body.len:
-    case body[i].kind
-    of nnkIdent:
-      # check
-      result = (isInt: result.isInt,
-                isFloat: body[i].strVal in floatSet or result.isFloat,
-                isString: body[i].strVal in stringSet or result.isString,
-                isBool: body[i].strVal in boolSet or result.isBool)
-    of nnkCallStrLit, nnkAccQuoted, nnkCall:
-      # skip this node completely, don't traverse further, since it (might) represent
-      # a column!
-      continue
-    of nnkStrLit, nnkTripleStrLit, nnkRStrLit:
-      result.isString = true
-    of nnkIntLit .. nnkUInt64Lit:
-      result.isInt = true
-    of nnkFloatLit, nnkFloat64Lit:
-      result.isFloat = true
-    else:
-      let res = checkDtype(body[i], floatSet, stringSet, boolSet)
-      result = (isInt: result.isInt or res.isInt,
-                isFloat: result.isFloat or res.isFloat,
-                isString: result.isString or res.isString,
-                isBool: result.isBool or res.isBool)
+                  TupRes =
+  func assignResult(r: var TupRes, res: TupRes) =
+    r = (isInt: r.isInt or res.isInt,
+         isFloat: r.isFloat or res.isFloat,
+         isString: r.isString or res.isString,
+         isBool: r.isBool or res.isBool)
+  case body.kind
+  of nnkIdent:
+    # check
+    result = (isInt: result.isInt,
+              isFloat: body.strVal in floatSet or result.isFloat,
+              isString: body.strVal in stringSet or result.isString,
+              isBool: body.strVal in boolSet or result.isBool)
+  of nnkCallStrLit, nnkAccQuoted, nnkCall:
+    # skip this node completely, don't traverse further, since it (might) represent
+    # a column!
+    return
+  of nnkStrLit, nnkTripleStrLit, nnkRStrLit:
+    result.isString = true
+  of nnkIntLit .. nnkUInt64Lit:
+    result.isInt = true
+  of nnkFloatLit, nnkFloat64Lit:
+    result.isFloat = true
+  of nnkIfStmt: # exclude if statements
+    var res: tuple[isInt: bool,
+                   isFloat: bool,
+                   isString: bool,
+                   isBool: bool]
+    for branch in body:
+      if branch.kind == nnkElifBranch:
+        res = checkDtype(branch[0], floatSet, stringSet, boolSet)
+        res.isBool = false # ignore bool here, argument [0] to `if / elif` is obv. bool
+        result.assignResult(res)
+        res = checkDtype(branch[1], floatSet, stringSet, boolSet)
+        result.assignResult(res)
+      elif branch.kind == nnkElse:
+        res = checkDtype(branch, floatSet, stringSet, boolSet)
+        result.assignResult(res)
+  else:
+    for ch in body:
+      let res = checkDtype(ch, floatSet, stringSet, boolSet)
+      result.assignResult(res)
 
 var TypedSymbols {.compileTime.}: Table[string, Table[string, NimNode]]
 var Formulas {.compileTime.}: Table[string, FormulaCT]
