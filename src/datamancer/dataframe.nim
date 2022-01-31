@@ -1053,20 +1053,22 @@ iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Valu
   # have a single key
   yield (buildClassLabel(dfArranged, keys, dfArranged.high), dfArranged[startIdx .. dfArranged.high])
 
-proc filterImpl[T](resCol: var Column, col: Column, filterIdx: Tensor[int]) =
+proc filterImpl[T; U: seq[int] | Tensor[int]](resCol: var Column, col: Column, filterIdx: U) =
+  ## Fills the input column `resCol` with the elements of `col` filtered
+  ## to the indices `filterIdx`.
   let t = toTensor(col, T)
-  var res = newTensorUninit[T](filterIdx.size)
-  if filterIdx.size > 0:
+  var res = newTensorUninit[T](filterIdx.len)
+  if filterIdx.len > 0:
     var i = 0
-    for idx in 0 ..< filterIdx.size:
+    for idx in 0 ..< filterIdx.len:
       res[i] = t[filterIdx[idx]]
       inc i
   resCol = res.toColumn
 
-proc filter(col: Column, filterIdx: Tensor[int]): Column =
+proc filter[T: seq[int] | Tensor[int]](col: Column, filterIdx: T): Column =
   ## perform filterting of the given column `key`
   withNativeDtype(col):
-    filterImpl[dtype](result, col, filterIdx)
+    filterImpl[dtype, T](result, col, filterIdx)
 
 proc countTrue(t: Tensor[bool]): int {.inline.} =
   for el in t:
@@ -1103,6 +1105,27 @@ proc applyFilterFormula(df: DataFrame, fn: FormulaNode): Column =
     raise newException(FormulaMismatchError, "Given formula " & $fn.name & " is of unsupported kind " &
       $fn.kind & ". Only reducing `<<` and mapping `~` formulas are supported in `filter`.")
 
+proc filterToIdx*[T: seq[int] | Tensor[int]](df: DataFrame, indices: T,
+                                             keys: seq[string] = @[]): DataFrame =
+  ## Filters the input dataframe to all rows matching the indices of `idx`.
+  ##
+  ## If the `keys` argument is empty, all columns are filtered.
+  ##
+  ## WARNING: If `keys` is given and only represents a subset of the DF,
+  ## the resulting DataFrame will be ragged and the unfiltered columns
+  ## are "invisible". The dataframe then technically is invalid. Use
+  ## at your own risk!
+  ##
+  ## Mostly used internally, but very useful in certain contexts.
+  var keys = keys
+  if keys.len == 0:
+    keys = df.getKeys()
+  result = df.shallowCopy()
+  for k in keys:
+    result.asgn(k, df[k].filter(indices))
+    # fill each key with the non zero elements
+  result.len = indices.len
+
 proc filterImpl(df: DataFrame, conds: varargs[FormulaNode]): DataFrame =
   ## Implements filtering of mapping and scalar formulas on a `DataFrame`.
   ## Does not differentiate between grouped and ungrouped inputs (done in
@@ -1133,10 +1156,7 @@ proc filterImpl(df: DataFrame, conds: varargs[FormulaNode]): DataFrame =
   case filterIdx.kind
   of colBool:
     let nonZeroIdx = filteredIdx(filterIdx.bCol)
-    for k in keys(df):
-      result.asgn(k, df[k].filter(nonZeroIdx))
-      # fill each key with the non zero elements
-    result.len = nonZeroIdx.size
+    result = df.filterToIdx(nonZeroIdx)
   of colConstant:
     # assert value is true (scalar formula yielding true)
     doAssert filterIdx.cCol == %~ true, "Constant column needs to be true"
@@ -1804,15 +1824,9 @@ proc setDiff*(df1, df2: DataFrame, symmetric = false): DataFrame =
         # keep this row
         idxToKeep2.add idx
     # rebuild those from df1, then those from idx2
-    for k in keys:
-      result.asgn(k, df1[k].filter(toTensor(idxToKeep1)))
-      # fill each key with the non zero elements
-    result.len = idxToKeep1.len
+    result = df1.filterToIdx(idxToKeep1, keys)
     var df2Res = newDataFrame()
-    for k in keys:
-      df2Res.asgn(k, df2[k].filter(toTensor(idxToKeep2)))
-      # fill each key with the non zero elements
-    df2Res.len = idxToKeep2.len
+    df2Res = df2.filterToIdx(idxToKeep2, keys)
     # stack the two data frames
     result.add df2Res
   else:
@@ -1826,10 +1840,7 @@ proc setDiff*(df1, df2: DataFrame, symmetric = false): DataFrame =
         idxToKeep[i] = idx
         inc i
     # rebuild the idxToKeep columns
-    for k in keys:
-      result.asgn(k, df1[k].filter(idxToKeep))
-      # fill each key with the non zero elements
-    result.len = idxToKeep.size
+    result = df1.filterToIdx(idxToKeep, keys)
 
 proc head*(df: DataFrame, num: int): DataFrame =
   ## Returns the head of the DataFrame, i.e. the first `num` elements.
@@ -2033,10 +2044,7 @@ proc unique*(df: DataFrame, cols: varargs[string],
       inc idx
   # apply idxToKeep as filter
   let resCols = if keepAll: getKeys(df) else: mcols
-  for k in resCols:
-    result.asgn(k, df[k].filter(idxToKeep))
-    # fill each key with the non zero elements
-  result.len = idxToKeep.size
+  result = df.filterToIdx(idxToKeep, resCols)
 
 proc drop_null*(df: DataFrame, cols: varargs[string],
                 convertColumnKind = false,
