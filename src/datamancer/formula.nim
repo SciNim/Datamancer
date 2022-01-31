@@ -323,6 +323,10 @@ proc extractSymbols(n: NimNode): seq[NimNode] =
     # do not look at these, since they are untyped identifiers referring to
     # DF columns
     return
+  of nnkIfStmt: # ignore the actual `if` and only look at the bodies of each node)
+    for branch in n:
+      for ch in branch:
+        result.add extractSymbols(ch)
   else:
     for i in 0 ..< n.len:
       result.add extractSymbols(n[i])
@@ -1001,9 +1005,12 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
     result.add determineTypesImpl(n[0], tab,
                                   assignType(heuristicType,
                                              typ1))
-  #of nnkIfExpr:
-  #  Could add `ifExpr` because there we know that result type is type of argument. But better to rely on
-  #  type hints here (at least for now).
+  of nnkIfStmt:
+    # Could add `ifExpr` because there we know that result type is type of argument. But better to rely on
+    # type hints here (at least for now).
+    # check all branches
+    for branch in n:
+      result.add determineTypesImpl(branch, tab, heuristicType)
   else:
     for ch in n:
       result.add determineTypesImpl(ch, tab, heuristicType)
