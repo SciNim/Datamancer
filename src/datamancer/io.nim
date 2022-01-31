@@ -86,10 +86,8 @@ template copyBuf(data: ptr UncheckedArray[char], buf: var string,
                  idx, colStart: int): untyped =
   let nIdx = idx - colStart
   if nIdx > 0:
-    ## TODO: can we keep the buffer the same length and only copy the actual length?
-    buf = newString(nIdx)
+    buf.setLen(nIdx) # will auto reallocate if `len` is larger than capacity!
     copyMem(buf[0].addr, data[colStart].addr, nIdx)
-    buf.setLen(nIdx)
   else:
     buf.setLen(0)
 
