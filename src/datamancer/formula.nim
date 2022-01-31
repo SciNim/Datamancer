@@ -273,6 +273,22 @@ macro addSymbols(tabName, nodeName: string, n: typed): untyped =
     TypedSymbols[nStr] = initTable[string, NimNode]()
   TypedSymbols[nStr][nodeStr] = n
 
+
+macro typedChecker(n: typed): untyped = discard
+macro checkSymbolIsValid(n: untyped): untyped =
+  ## I've tried to avoid this as long as I could, but I don't know an alternative
+  ## at the moment. The issue is if we have something like:
+  ## `f{isNaN(idx("foo"))}`
+  ## the the ident `isNan` cannot call `addSymbols`, because the compiler will complain
+  ## that the symbol is `None`.
+  ## All I can think of is to emit a `when compiles` that calls a dummy checker
+  ## ("can it be made typed?" essentially) :(
+  result = quote do:
+    when compiles(typedChecker(`n`)):
+      true
+    else:
+      false
+
 proc isPureTree(n: NimNode): bool
 proc extractSymbols(n: NimNode): seq[NimNode] =
   if n.isPureTree:
@@ -1295,7 +1311,8 @@ proc compileFormula(n: NimNode): NimNode =
     for s in syms:
       let sName = buildName(s)
       result.add quote do:
-        addSymbols(`rawName`, `sName`, `s`)
+        when checkSymbolIsValid(`s`):
+          addSymbols(`rawName`, `sName`, `s`)
     var cpCall = nnkCall.newTree(ident"compileFormulaImpl",
                                  rawName,
                                  newLit funcKind)
