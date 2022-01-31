@@ -150,7 +150,7 @@ proc isColumnType*(n: NimNode): bool =
 proc checkIdent(n: NimNode, s: string): bool =
   result = n.len > 0 and n[0].kind == nnkIdent and n[0].strVal == s
 
-proc extractCall(stmts: NimNode, id: string): NimNode =
+proc extractCall*(stmts: NimNode, id: string): NimNode =
   expectKind(stmts, nnkStmtList)
   for ch in stmts:
     case ch.kind
@@ -159,21 +159,39 @@ proc extractCall(stmts: NimNode, id: string): NimNode =
         return ch
     else: continue
 
-proc parsePreface(n: NimNode): Preface =
+proc parsePreface*(n: NimNode): Preface =
+  proc extractDfNode(n: NimNode): NimNode =
+    ## returns the `df[<col>, <type>]` node found in `n`
+    case n.kind
+    of nnkInfix:
+      doAssert checkIdent(n, "in")
+      result = extractDfNode(n[2])
+    of nnkBracketExpr:
+      doAssert n[0].strVal == "df", "`in` must refer to a `df[<col>, <type>]`!"
+      result = n
+    else:
+      if n.len == 0: return newEmptyNode() # it's not this one
+      for ch in n:
+        let res = extractDfNode(ch)
+        if res.kind == nnkBracketExpr: return ch
+
   proc addInfixAssign(ch: NimNode): Assign =
     doAssert checkIdent(ch, "in")
     doAssert ch[1].kind == nnkIdent, "First element before `in` needs to be an ident!"
-    doAssert ch[2].kind == nnkBracketExpr, "`in` must refer to a `df[<col>, <type>]`!"
-    doAssert ch[2][0].strVal == "df", "`in` must refer to a `df[<col>, <type>]`!"
+    let dfNode = extractDfNode(ch)
     let elId = ch[1].strVal
-    let dtype = ch[2][2].strVal
+    let dtype = dfNode[2].strVal
+    # if user applied a transformation, add a replaced by version
+    let transformed = ch[2]
     doAssert dtype in Dtypes, "Column dtype " & $dtype & " not in " & $Dtypes & "!"
     result = Assign(asgnKind: byIndex,
                     node: ch,
                     element: ident(elId),
                     tensor: ident(elId & "T"),
                     col: ch[2][1],
-                    colType: ident(dtype))
+                    colType: ident(dtype),
+                    transformed: transformed
+    )
   proc addAsgnAssign(ch: NimNode): Assign =
     doAssert ch[0].kind == nnkIdent, "First element before `=` needs to be an ident!"
     doAssert ch[1].kind == nnkBracketExpr, "`=` must assign from a `df[<col>, <type>]`!"

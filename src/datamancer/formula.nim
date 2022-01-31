@@ -113,6 +113,10 @@ proc add(p: var PossibleTypes, p2: PossibleTypes) =
   of tkProcedure: p.procTypes.add p2.procTypes
   else: discard
 
+proc add(p: var Preface, p2: Preface) =
+  ## Adds the Assign fields of `p2` to `p`
+  p.args.add p2.args
+
 func isColIdxCall(n: NimNode): bool =
   (n.kind == nnkCall and n[0].kind == nnkIdent and n[0].strVal in ["idx", "col"])
 func isColCall(n: NimNode): bool =
@@ -1094,7 +1098,7 @@ macro compileFormulaImpl*(rawName: static string,
   ## formula syntax can only refer to full columns)
   ## Explicit `df` usage (`df["col"][idx]` needs to be put into a temp variable,
   ## `genSym("col", nskVar)`)
-  fct.preface = determineTypes(fct.loop, typeTab)
+  fct.preface.add determineTypes(fct.loop, typeTab)
   # compute the `resType`
   # use heuristics to determine a possible input / output type
   ## TODO: the type hint isn't really needed here anymore, is it?
@@ -1211,7 +1215,7 @@ proc isPureFormula(n: NimNode): bool =
       result = false
   else: discard
 
-proc compileFormula(n: NimNode): NimNode =
+proc compileFormula(n: NimNode, fullNode = false): NimNode =
   ## Preprocessing stage of formula macro. Performs preprocessing steps and extracts
   ## basic information:
   ## - possible type hints
@@ -1221,11 +1225,24 @@ proc compileFormula(n: NimNode): NimNode =
   ## - generates formula name
   ## - extracts pure subtrees and adds them to `TypedSymbols` CT table
   ## - calls second stage `compileFormulaImpl`
+
+  ## Generate a preliminary `FormulaCT` for the information we can collect in this
+  ## stage already
+  var fct = FormulaCT()
+  # starting with a possible preface
+  var node = n
+  if fullNode:
+    doAssert n.kind == nnkStmtList
+    let prefaceNode = extractCall(n, "preface")
+    if prefaceNode.kind != nnkNilLit:
+      fct.preface = parsePreface(extractCall(n, "preface"))
+    node = extractCall(node, "loop")[1][0]
+
   var isAssignment = false
   var isReduce = false
   var isVector = false
   # extract possible type hint
-  var node = n
+
   let typeHint = parseTypeHint(node)
   let tilde = recurseFind(node,
                           cond = ident"~")
@@ -1294,8 +1311,6 @@ proc compileFormula(n: NimNode): NimNode =
                elif isVector: fkVector
                else: fkNone
 
-    ## Generate a preliminary `FormulaCT` with the information we have so far
-    var fct = FormulaCT()
     # assign the name
     fct.name = if formulaName.kind != nnkNilLit: formulaName else: newLit(fnName)
     fct.rawName = fnName
@@ -1342,3 +1357,6 @@ macro `fn`*(x: untyped): untyped =
   let arg = if x.kind == nnkStmtList: x[0] else: x
   doAssert arg.kind in {nnkCurly, nnkTableConstr}
   result = compileFormula(arg[0])
+
+macro formula*(n: untyped): untyped =
+  result = compileFormula(n, true)
