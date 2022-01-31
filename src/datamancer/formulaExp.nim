@@ -33,6 +33,7 @@ type
     col*: NimNode # name of the column
     colType*: NimNode # e.g. `float`
     resType*: NimNode # the resulting type of the computation `Assign` is ``involved`` in!
+    transformed*: NimNode # an (optional) user defined transformation. Wraps the `df[<col>, <dtype>]` call
   Preface* = object
     args*: seq[Assign]
   FormulaCT* = object
@@ -43,6 +44,8 @@ type
     name*: NimNode # name of the formula -> refers to new column / assignment name
     rawName*: string # name of the formula body as lisp
     loop*: NimNode # loop needs to be patched to remove accented quotes etc
+    generateLoop*: bool # only of interest for `fkScalar`. Means instead of generating a
+                        # single `res = %~ <user body>` statement, generate a for loop w/ accumulation
   ## `Lift` stores a node which needs to be lifted out of a for loop, because it performs a
   ## reducing operation on a full DF column. It will be replaced by `liftedNode` in the loop
   ## body.
@@ -80,6 +83,7 @@ type
 const
   InIdent = "in"
   ResIdent = "res"
+  AccumIdent = "+="
   ResultIdent = "result"
   RIdent = "r"
   DFIdent = "df"
@@ -211,11 +215,16 @@ proc convertPreface(p: Preface): NimNode =
   ## Instead of generating a `let colT = df["col", dType]` we need to just call
   ## the function that
   proc toLet(a: Assign): NimNode =
+    var rhs: NimNode
+    if a.transformed.kind == nnkNilLit:
+      rhs = nnkBracketExpr.newTree(ident(DfIdent), a.col.removeCallAcc(),
+                                   ident(a.colType.strVal)) #convert nnkSym to nnkIdent
+    else:
+      rhs = a.transformed
     result = nnkIdentDefs.newTree(
       a.tensor,
       newEmptyNode(),
-      nnkBracketExpr.newTree(ident(DfIdent), a.col.removeCallAcc(),
-                             ident(a.colType.strVal)) #convert nnkSym to nnkIdent
+      rhs
     )
   result = nnkLetSection.newTree()
   var seenTensors = initHashSet[string]()
@@ -402,32 +411,48 @@ proc replaceByColumn(n: NimNode, preface: var Preface): NimNode =
       result.add replaceByColumn(ch, preface)
 
 proc fixupTensorIndices(loopStmts: NimNode, preface: var Preface,
+                        fkKind: FormulaKind, # to handle scalar and vector separately & safely
                         rbKind: ReplaceByKind): NimNode =
   ## If `toElements` is true, we rewrite everything by `t` (where `t` is an
   ## element of `tT` (Tensor). This includes
   expectKind(loopStmts, nnkStmtList)
   case rbKind
   of rbIndex:
-    let loop = loopStmts[0].replaceByIdx(preface)
-    case loop.kind
-    of nnkAsgn:
-      doAssert loop[0].kind == nnkBracketExpr and
-        loop[0][0].kind == nnkIdent and loop[0][0].strVal == "r" and
-        loop[0][1].kind == nnkIdent and loop[0][1].strVal == "idx"
-      ## TODO: make this prettier / fix this
-    else:
-      # turn this into an nnkAsgn node with `res` as LHS and `nnkAsgn` on RHS
-      result = nnkAsgn.newTree(
-        nnkBracketExpr.newTree(ident(ResIdent), ident(IdxIdent)),
-        loop)
+    case fkKind
+    of fkVector:
+      let loop = loopStmts[0].replaceByIdx(preface)
+      case loop.kind
+      of nnkAsgn:
+        doAssert loop[0].kind == nnkBracketExpr and
+          loop[0][0].kind == nnkIdent and loop[0][0].strVal == "r" and
+          loop[0][1].kind == nnkIdent and loop[0][1].strVal == "idx"
+        ## TODO: make this prettier / fix this
+      else:
+        # turn this into an nnkAsgn node with `res` as LHS and `nnkAsgn` on RHS
+        result = nnkAsgn.newTree(
+          nnkBracketExpr.newTree(ident(ResIdent), ident(IdxIdent)),
+          loop)
+    of fkScalar:
+      # generate a `res += <body>` infix call
+      let loop = loopStmts[0].replaceByIdx(preface)
+      result = nnkInfix.newTree(ident(AccumIdent), ident(ResIdent), loop)
+    else: doAssert false, "Impossible branch"
   of rbElement:
-    let loop = loopStmts[0].replaceByElement(preface)
-    case loop.kind
-    of nnkAsgn: doAssert loop[0].kind == nnkIdent and loop[0].strVal == RIdent
-    else:
-      # turn this into an nnkAsgn node with `res` as LHS and `nnkAsgn` on RHS
-      result = nnkAsgn.newTree(ident(RIdent), loop)
+    case fkKind
+    of fkVector:
+      let loop = loopStmts[0].replaceByElement(preface)
+      case loop.kind
+      of nnkAsgn: doAssert loop[0].kind == nnkIdent and loop[0].strVal == RIdent
+      else:
+        # turn this into an nnkAsgn node with `res` as LHS and `nnkAsgn` on RHS
+        result = nnkAsgn.newTree(ident(RIdent), loop)
+    of fkScalar:
+      # generate a `res += <body>` infix call
+      let loop = loopStmts[0].replaceByElement(preface)
+      result = nnkInfix.newTree(ident(AccumIdent), ident(ResIdent), loop)
+    else: doAssert false, "Impossible branch"
   of rbColumn:
+    # always fkScalar
     let loop = loopStmts[0].replaceByColumn(preface)
     case loop.kind
     of nnkAsgn: doAssert loop[0].kind == nnkIdent and loop[0].strVal == ResIdent
@@ -441,13 +466,17 @@ proc fixupTensorIndices(loopStmts: NimNode, preface: var Preface,
       )
 
 proc convertLoop(p: Preface, dtype, loop: NimNode,
-                 fnKind: FormulaKind): NimNode =
+                 fnKind: FormulaKind,
+                 generateLoop: bool
+                ): NimNode =
   let memCopyable = ["float", "int", "bool"]
   let isMemCopyable = dtype.strVal in memCopyable and
     p.args.allIt(it.colType.strVal in memCopyable)
-  proc genForLoop(p: Preface, loop: NimNode): NimNode =
+  proc genForLoop(p: Preface, loop: NimNode, fkKind: FormulaKind): NimNode =
     var mpreface = p
-    let loopIndexed = fixupTensorIndices(loop, mpreface, rbKind = rbIndex)
+    let loopIndexed = fixupTensorIndices(loop, mpreface,
+                                         fkKind = fkKind,
+                                         rbKind = rbIndex)
     let idx = ident(IdxIdent)
     let df = ident(DfIdent)
     var loop = quote do:
@@ -455,11 +484,14 @@ proc convertLoop(p: Preface, dtype, loop: NimNode,
         `loopIndexed`
     result = newStmtList(loop)
 
-  proc genForEach(p: Preface, loop: NimNode): NimNode =
+  proc genForEach(p: Preface, loop: NimNode, fkKind: FormulaKind): NimNode =
     var mpreface = p
-    let loopElements = fixupTensorIndices(loop, mpreface, rbKind = rbElement)
+    let loopElements = fixupTensorIndices(loop, mpreface,
+                                          fkKind = fkKind,
+                                          rbKind = rbElement)
     var forEach = nnkCommand.newTree(ident"forEach")
-    forEach.add nnkInfix.newTree(ident(InIdent), ident(RIdent), ident(ResIdent))
+    if fkKind == fkVector: ## add the `r in res` argument as first in case of vector (mutable assign)
+      forEach.add nnkInfix.newTree(ident(InIdent), ident(RIdent), ident(ResIdent))
     for arg in p.args:
       forEach.add nnkInfix.newTree(ident(InIdent), arg.element, arg.tensor)
     forEach.add nnkStmtList.newTree(loopElements)
@@ -474,19 +506,34 @@ proc convertLoop(p: Preface, dtype, loop: NimNode,
   case fnKind
   of fkVector:
     if not isMemCopyable:
-      result = genForLoop(p, loop)
+      result = genForLoop(p, loop, fkVector)
       result.add addResultVector()
     else:
-      result = genForEach(p, loop)
+      result = genForEach(p, loop, fkVector)
       result.add addResultVector()
   of fkScalar:
-    let resultId = ident(ResultIdent)
     var mpreface = p
-    let loopElements = fixupTensorIndices(loop, mpreface, rbKind = rbColumn)
+    var loopImpl: NimNode
+    if generateLoop: # despite being `fkScalar` generate an (accumulating) for loop
+      if not isMemCopyable:
+        loopImpl = genForLoop(p, loop, fkScalar)
+      else:
+        loopImpl = genForEach(p, loop, fkScalar)
+    else:
+      loopImpl = fixupTensorIndices(loop, mpreface,
+                                fkKind = fkScalar,
+                                rbKind = rbColumn)
+    let resultId = ident(ResultIdent)
     let resId = ident(ResIdent)
-    result = quote do:
-      `loopElements`
-      `resultId` = %~ `resId`
+    if generateLoop:
+      result = quote do:
+        var `resId`: float
+        `loopImpl`
+        `resultId` = %~ `resId`
+    else:
+      result = quote do:
+        `loopImpl`
+        `resultId` = %~ `resId`
   else:
     error("Invalid FormulaKind `" & $(fnKind.repr) & "` in `convertLoop`. Already handled " &
       "in `compileFormula`!")
@@ -508,7 +555,7 @@ proc generateClosure*(fct: FormulaCT): NimNode =
   procBody.add convertPreface(fct.preface)
   if fct.funcKind == fkVector:
     procBody.add convertDtype(fct.resType)
-  procBody.add convertLoop(fct.preface, fct.resType, fct.loop, fct.funcKind)
+  procBody.add convertLoop(fct.preface, fct.resType, fct.loop, fct.funcKind, fct.generateLoop)
   result = procBody
   var params: array[2, NimNode]
   case fct.funcKind

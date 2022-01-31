@@ -1160,9 +1160,9 @@ macro compileFormulaImpl*(rawName: static string,
         "kind:\n\t`" & $funcKind & "` (mapping)\nand automatically determined formula kind:\n\t" &
         "<< (reducing)\nPlease adjust the given kind to `<<`.")
     elif not allScalar and funcKind == fkScalar:
-      error("Formula " & $fct.rawName & " has a mismatch between given formula " &
-        "kind:\n\t`" & $funcKind & "` (reducing)\nand automatically determined formula kind:\n\t" &
-        "`~` (mapping)\nPlease adjust the given kind to `~`.")
+      ## user seems to be accessing a tensor in context of a scalar body. Probably wants
+      ## to accumulate with some condition. Generate a for loop with explicit accumulation
+      fct.generateLoop = true
     # use the user given formula kind
     fct.funcKind = funcKind
   else:
