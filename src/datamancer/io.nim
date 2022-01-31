@@ -672,15 +672,20 @@ tr:nth-child(even) {
     header: string
     body: string
   header = "<thead>\n<tr>"
+  header.add &"<th> Index </th>"
   for k in df.getKeys:
     header.add &"<th> {k} <br><br> {df[k].kind.toNimType} </th>"
   header.add "</tr>\n</thead>"
   body = "<tbody>"
+  var idx = 0
   for row in df:
     body.add "<tr>\n"
+    # first add column for index
+    body.add &"<td>{idx}</td>"
     for x in row:
       body.add &"<td>{pretty(x)}</td>"
     body.add "\n</tr>"
+    inc idx
   body.add "</tbody>"
   let fname = path / fname
   writeFile(fname, tmpl % [header & body])
