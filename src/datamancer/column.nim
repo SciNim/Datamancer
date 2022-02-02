@@ -633,12 +633,12 @@ proc add*(c1, c2: Column): Column =
     case c1.kind
     of colInt:
       # c1 is int, c2 is float
-      assert c2.kind == colFloat
-      result = toColumn concat(c1.iCol.asType(float), c2.fCol, axis = 0)
+      let c2T = c2.constantToFull().toTensor(float)
+      result = toColumn concat(c1.iCol.asType(float), c2T, axis = 0)
     of colFloat:
       # c1 is float, c2 is int
-      assert c2.kind == colInt
-      result = toColumn concat(c1.fCol, c2.iCol.asType(float), axis = 0)
+      let c2T = c2.constantToFull().toTensor(float)
+      result = toColumn concat(c1.fCol, c2T, axis = 0)
     else:
       # one of the two is constant and same type as the other
       # `constantToFull` is a no-op for the non-constant column
