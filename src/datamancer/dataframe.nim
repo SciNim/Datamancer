@@ -28,6 +28,8 @@ const ValueNull* = Value(kind: VNull)
 
 import ast_utils
 
+from gencase import getInnerType
+
 proc getDataIdentDefs(n: NimNode): NimNode =
   case n.kind
   of nnkRefTy: result = n[0][2][1]
@@ -58,37 +60,51 @@ macro getColumnType(typ: typed): untyped =
   let dataBranch = typImp.getDataIdentDefs()
   result = dataBranch[1][2]
 
-macro patchDataFrame*(typ: typed): untyped =
-  let typ0 = typ.getInnerType()
-  #echo typ0.treerepr
-  var typImp = getTypeInst(DataFrame).getImpl
-  var refTy = getRefType(typImp)
-  let dataBranch = refTy.getDataIdentDefs()
-  ## XXX: add check if exists, else generate column from here!
-  dataBranch[1][2] = TypeNames[genColNameStr(@[typ0])] #TypeNames[@[typ0.strVal]]
-  #echo dataBranch.treerepr
-  typImp[2][0][2][1] = dataBranch
-  let dfId = genSym(nskType, "DataFrame")
-  result = refTy
-  result = quote do:
-    type
-      `dfId` = `result`
-    `dfId`
-  result = result.replaceSymsByIdents()
-  #echo result.repr
+#macro patchDataFrame*(typ: typed): untyped =
+#  let typ0 = typ.getInnerType()
+#  #echo typ0.treerepr
+#  var typImp = getTypeInst(DataFrame).getImpl
+#  var refTy = getRefType(typImp)
+#  let dataBranch = refTy.getDataIdentDefs()
+#  ## XXX: add check if exists, else generate column from here!
+#  dataBranch[1][2] = TypeNames[genColNameStr(@[typ0])] #TypeNames[@[typ0.strVal]]
+#  #echo dataBranch.treerepr
+#  typImp[2][0][2][1] = dataBranch
+#  let dfId = genSym(nskType, "DataFrame")
+#  result = refTy
+#  result = quote do:
+#    type
+#      `dfId` = `result`
+#    `dfId`
+#  result = result.replaceSymsByIdents()
+#  #echo result.repr
 
-proc convertToDfColType[T: DataFrameLike; U: ColumnLike](dtype: typedesc[T], c: U): auto =
-  type retType = getColumnType(T)
-  result = retType(len: c.len,
-                   kind: c.kind)
+macro unionType*(t1, t2: typed): untyped =
+  let t1I = t1.getInnerType()
+  let t2I = t2.getInnerType()
+  let ts = genColNameStr(@[t1I, t2I])
+  echo "ts ? ", ts
+  if ts in TypeNames:
+    result = TypeNames[ts]
+  else:
+    # generate?
+    ## XXX: strip the `Column` from type names
+    error("Please generate the type using `patchColumn(" & $t1I.repr & ", " & $t2I.repr & ")` before using it.")
+    #type resTyp = patchColumn(t1I, t2I)
+    #result = resTyp
+
+proc convertToDfColType[T: ColumnLike; U: ColumnLike](dtype: typedesc[T], c: U): T =
+  #type retType = getColumnType(T)
+  result = T(len: c.len,
+             kind: c.kind)
   withNativeTensor(c, t):
     assignData(result, t)
 
 # ---------- Simple 1 line helper procs ----------
-template ncols*(df: DataFrameLike): int =
+template ncols*[T](df: DataFrame[T]): int =
   ## Returns the number of columns in the `DataFrame df`.
   df.data.len
-proc high*(df: DataFrameLike): int =
+proc high*[T](df: DataFrame[T]): int =
   ## Returns the highest possible index in any column of the input `DataFrame df`.
   df.len - 1
 
@@ -97,27 +113,27 @@ proc high*(df: DataFrameLike): int =
 # ---------- DataFrame construction ----------
 
 proc newDataFrame*(size = 8,
-                   kind = dfNormal): DataFrame =
+                   kind = dfNormal): DataFrame[Column] =
   ## Initialize a DataFrame by initializing the underlying table for `size` number
   ## of columns. The given size will be rounded up to the next power of 2!
   ##
   ## The `kind` argument can be used to create a grouped `DataFrame` from the start.
   ## Be very careful with this and instead use `groub_by` to create a grouped DF!
-  result = DataFrame(kind: kind,
-                     data: initOrderedTable[string, Column](nextPowerOfTwo(size)),
-                     len: 0)
+  result = DataFrame[Column](kind: kind,
+                        data: initOrderedTable[string, Column](nextPowerOfTwo(size)),
+                        len: 0)
 
 proc newDataFrameLike*[T](size = 8,
-                          kind = dfNormal): auto =
+                          kind = dfNormal): DataFrame[T] =
   ## Initialize a DataFrame by initializing the underlying table for `size` number
   ## of columns. The given size will be rounded up to the next power of 2!
   ##
   ## The `kind` argument can be used to create a grouped `DataFrame` from the start.
   ## Be very careful with this and instead use `groub_by` to create a grouped DF!
-  type colType = getColumnType(T)
-  result = T(kind: kind,
-             data: initOrderedTable[string, colType](nextPowerOfTwo(size)),
-             len: 0)
+  #type colType = getColumnType(T)
+  result = DataFrame[T](kind: kind,
+                        data: initOrderedTable[string, T](nextPowerOfTwo(size)),
+                        len: 0)
 
 proc clone(data: OrderedTable[string, Column]): OrderedTable[string, Column] =
   ## clones the given table by making sure the columns are copied
@@ -125,7 +141,7 @@ proc clone(data: OrderedTable[string, Column]): OrderedTable[string, Column] =
   for key in keys(data):
     result[key] = data[key].clone
 
-proc clone*[T: DataFrameLike](df: T): auto =
+proc clone*[T: ColumnLike](df: DataFrame[T]): DataFrame[T] =
   ## Returns a cloned version of `df`, which deep copies the tensors of the
   ## `DataFrame`. This makes sure there is *no* data sharing due to reference
   ## semantics between the input and output DF.
@@ -137,7 +153,7 @@ proc clone*[T: DataFrameLike](df: T): auto =
     result.groupMap = df.groupMap
   else: discard
 
-proc shallowCopy*[T: DataFrameLike](df: T): auto = df
+proc shallowCopy*[T: ColumnLike](df: DataFrame[T]): DataFrame[T] = df
 #  ## Creates a shallowCopy of the `DataFrame` that does ``not`` deep copy the tensors.
 #  ##
 #  ## Used to return a different DF that contains the same data for those columns
@@ -162,11 +178,11 @@ func len*[T](t: Tensor[T]): int =
   assert t.rank == 1
   result = t.size
 
-proc contains*(df: DataFrameLike, key: string): bool =
+proc contains*[T](df: DataFrame[T], key: string): bool =
   ## Checks if the `key` names column in the `DataFrame`.
   result = df.data.hasKey(key)
 
-iterator keys*(df: DataFrameLike): string =
+iterator keys*[T](df: DataFrame[T]): string =
   ## Iterates over all column keys of the input `DataFrame`.
   for k in keys(df.data):
     yield k
@@ -176,7 +192,7 @@ proc getKeys[T](tab: OrderedTable[string, T]): seq[string] =
   for k in keys(tab):
     result.add k
 
-proc getKeys*(df: DataFrameLike): seq[string] =
+proc getKeys*[T](df: DataFrame[T]): seq[string] =
   ## Returns the column keys of a `DataFrame` as a sequence.
   ##
   ## The order is the same as the order of the keys in the DF.
@@ -187,18 +203,18 @@ proc getKeys*(df: DataFrameLike): seq[string] =
 # ---------- Accessors ----------
 # -------------------------------
 
-proc `[]`*(df: DataFrameLike, k: string): auto {.inline.} =
+proc `[]`*[T](df: DataFrame[T], k: string): var T {.inline.} =
   ## Returns the column `k` from the `DataFrame` as a mutable object.
   assert not df.isNil, "DF is used in uninitialized context!"
   result = df.data[k]
 
-proc `[]`*(df: DataFrameLike, k: Value): auto {.inline.} =
+proc `[]`*[T](df: DataFrame[T], k: Value): auto {.inline.} =
   ## Returns the column `k` from the `DataFrame` for a `Value` object
   ## storing a column reference.
   assert not df.isNil, "DF is used in uninitialized context!"
   result = df.data[k.toStr]
 
-proc `[]`*(df: DataFrameLike, k: string, idx: int): Value {.inline.} =
+proc `[]`*[T](df: DataFrame[T], k: string, idx: int): Value {.inline.} =
   ## Returns the element at index `idx` in column `k` directly as a `Value`, without
   ## converting (to `Value`) and returning the whole column first.
   ##
@@ -209,7 +225,7 @@ proc `[]`*(df: DataFrameLike, k: string, idx: int): Value {.inline.} =
   assert not df.isNil, "DF is used in uninitialized context!"
   result = df.data[k][idx, Value]
 
-proc `[]`*[T](df: DataFrameLike, k: string, idx: int, dtype: typedesc[T]): T {.inline.} =
+proc `[]`*[T](df: DataFrame[T], k: string, idx: int, dtype: typedesc[T]): T {.inline.} =
   ## Returns the element at index `idx` in column `k` directly, without returning
   ## returning the whole column first.
   ##
@@ -223,7 +239,7 @@ proc `[]`*[T](df: DataFrameLike, k: string, idx: int, dtype: typedesc[T]): T {.i
   assert not df.isNil, "DF is used in uninitialized context!"
   result = df.data[k][idx, dtype]
 
-proc `[]`*[T](df: DataFrameLike, k: string, slice: Slice[int], dtype: typedesc[T]): Tensor[T] {.inline.} =
+proc `[]`*[T](df: DataFrame[T], k: string, slice: Slice[int], dtype: typedesc[T]): Tensor[T] {.inline.} =
   ## Returns the elements in `slice` in column `k` directly, without returning the
   ## whole column first as a tensor of type `dtype`.
   ##
@@ -236,7 +252,7 @@ proc `[]`*[T](df: DataFrameLike, k: string, slice: Slice[int], dtype: typedesc[T
   assert not df.isNil, "DF is used in uninitialized context!"
   result = df.data[k][slice.a .. slice.b, dtype]
 
-proc `[]`*(df: DataFrameLike, k: string, slice: Slice[int]): auto {.inline.} =
+proc `[]`*[T](df: DataFrame[T], k: string, slice: Slice[int]): T {.inline.} =
   ## Returns the elements in `slice` in column `k` directly as a new `Column`
   ## without returning the full column first.
   assert not df.isNil, "DF is used in uninitialized context!"
@@ -245,7 +261,7 @@ proc `[]`*(df: DataFrameLike, k: string, slice: Slice[int]): auto {.inline.} =
 template `^^`(df, i: untyped): untyped =
   (when i is BackwardsIndex: df.len - int(i) else: int(i))
 
-proc `[]`*[T: DataFrameLike; U, V](df: T, rowSlice: HSlice[U, V]): auto =
+proc `[]`*[T; U, V](df: DataFrame[T], rowSlice: HSlice[U, V]): DataFrame[T] =
   ## Returns a slice of the data frame given by `rowSlice`, which is simply a
   ## subset of the input data frame.
   let keys = getKeys(df)
@@ -257,7 +273,7 @@ proc `[]`*[T: DataFrameLike; U, V](df: T, rowSlice: HSlice[U, V]): auto =
   # add 1, because it's an ``inclusive`` slice!
   result.len = (b - a) + 1
 
-proc `[]`*[T](df: DataFrameLike, key: string, dtype: typedesc[T]): Tensor[T] =
+proc `[]`*[T; U](df: DataFrame[T], key: string, dtype: typedesc[U]): Tensor[U] =
   ## Returns the column `key` as a Tensor of type `dtype`.
   ##
   ## If `dtype` matches the actual data type of the `Tensor` underlying the column,
@@ -273,7 +289,7 @@ proc `[]`*[T](df: DataFrameLike, key: string, dtype: typedesc[T]): Tensor[T] =
     doAssert t.sum == 15
   result = df.data[key].toTensor(dtype)
 
-proc get*(df: DataFrameLike, key: string): auto {.inline.} =
+proc get*[T](df: DataFrame[T], key: string): T {.inline.} =
   ## Returns the column of `key`.
   ##
   ## Includes an explicit check on whether the column exists in the `DataFrame`
@@ -289,7 +305,7 @@ proc get*(df: DataFrameLike, key: string): auto {.inline.} =
     # create column of constants or raise?
     raise newException(KeyError, "Given string " & $key & " is not a valid column!")
 
-proc `[]=`*[T: DataFrameLike](df: var T, k: string, col: ColumnLike) {.inline.} =
+proc `[]=`*[T](df: var DataFrame[T], k: string, col: T) {.inline.} =
   ## Assigns the column `col` as a column with key `k` to the `DataFrame`.
   ##
   ## If the length of the column does not match the existing DF length (unless
@@ -303,7 +319,7 @@ proc `[]=`*[T: DataFrameLike](df: var T, k: string, col: ColumnLike) {.inline.} 
     raise newException(ValueError, "Given column length of " & $col.len &
       " does not match DF length of: " & $df.len & "!")
 
-proc `[]=`*[T: SomeNumber | string | bool](df: var DataFrameLike, k: string, t: T) {.inline.} =
+proc `[]=`*[T: SomeNumber | string | bool](df: var DataFrame[T], k: string, t: T) {.inline.} =
   ## Assigns a scalar `t` as a constant column to the `DataFrame`.
   runnableExamples:
     var df = seqsToDf({"x" : @[1,2,3]})
@@ -315,14 +331,15 @@ proc `[]=`*[T: SomeNumber | string | bool](df: var DataFrameLike, k: string, t: 
     doAssert df["y", 2, int] == 5
   df[k] = constantColumn(t, df.len)
 
-proc `[]=`*[T: Tensor | seq | array](df: var DataFrameLike, k: string, t: T) {.inline.} =
+proc `[]=`*[T: ColumnLike; U: Tensor | seq | array](df: var DataFrame[T], k: string, t: U) {.inline.} =
   ## Assigns a `Tensor`, `seq` or `array` to the `DataFrame df` as column key `k`.
   ##
   ## If the length of the input `t` does not match the existing DF's length, a `ValueError`
   ## is raised.
+  # XXX: assert `U` fits into `df`. Else raise CT error!
   df[k] = toColumn t
 
-proc `[]=`*[T](df: var DataFrameLike, k: string, idx: int, val: T) {.inline.} =
+proc `[]=`*[T](df: var DataFrame[T], k: string, idx: int, val: T) {.inline.} =
   ## A low-level helper to assign a value `val` of type `T` directly to column `k` in
   ## the `DataFrame df` at index `idx`.
   ##
@@ -390,7 +407,7 @@ macro printTypes(arg1, arg2: typed): untyped =
   printall(arg2)
 
 
-proc asgn*[T: DataFrameLike; U: ColumnLike](df: var T, k: string, col: U) {.inline.} =
+proc asgn*[T: ColumnLike; U](df: var DataFrame[T], k: string, col: U) {.inline.} =
   ## Low-level assign, which does not care about sizes of column. If used with a given
   ## column of different length than the `DataFrame` length, it results in a ragged
   ## DF. ``Only`` use this if you intend to extend these columns later or won't use
@@ -400,11 +417,12 @@ proc asgn*[T: DataFrameLike; U: ColumnLike](df: var T, k: string, col: U) {.inli
   ## `extendShortColumns`.
   #printTypes(df.data, col)
   ## if `col` isn't the right type, convert
-  df.data[k] = convertToDfColType(T, col)
+  ## XXX: error at CT if not fit? modify?
+  df.data[k] = toColumn col #, T) #convertToDfColType(T, col)
 
 # ---------- Data frame construction from data ----------
 
-proc extendShortColumns*(df: var DataFrame) =
+proc extendShortColumns*[T](df: var DataFrame[T]) =
   ## initial calls to `seqsToDf` and other procs may result in a ragged DF, which
   ## has less entries in certain columns than the data frame length.
   ## This proc fills up the mutable dataframe in those columns
@@ -457,15 +475,34 @@ macro toTab*(args: varargs[untyped]): untyped =
   #echo result.treerepr
   #echo result.repr
 
-proc extendDataFrame*[T](df: DataFrameLike, key: string, arg: T): auto =
+proc convertDataFrame*[T; U](df: DataFrame[T], dtype: typedesc[U]): auto =
   ## Given a type that is not a normal DF type, returns a new DF type that can store
   ## it and puts it as `key`
-  type retType = patchDataFrame(T)
-  result = newDataFrameLike[retType]()
-  for k in keys(df):
-    let newCol = convertToDfColType(retType, df[k])
-    result[k] = newCol
+  ## join T + U to generate `df` return type
+  #type retType = patchDataFrame(T)
+  when T is U: result = df
+  else:
+    type unionType = unionType(T, U)
+    result = newDataFrameLike[unionType]()
+    for k in keys(df):
+      result[k] = convertToDfColType(unionType, df[k])
+
+proc extendDataFrame*[T: ColumnLike; U](df: DataFrame[T], key: string, arg: U): auto =
+  ## Given a type that is not a normal DF type, returns a new DF type that can store
+  ## it and puts it as `key`
+  ## join T + U to generate `df` return type
+  #type retType = patchDataFrame(T)
+  result = df.convertDataFrame(U)
   result[key] = toColumn(arg)
+
+#proc extendDataFrame*[T: ColumnLike; U: not ColumnLike](df: DataFrame[T], key: string, arg: U): auto =
+#  ## Given a type that is not a normal DF type, returns a new DF type that can store
+#  ## it and puts it as `key`
+#  ## join T + U to generate `df` return type
+#  #type retType = patchDataFrame(T)
+#  type V = patchColumn(U)
+#  result = result.extendDataFrame(key, arg)
+#  #result[key] = toColumn(arg)
 
 template seqsToDf*(s: varargs[untyped]): untyped =
   ## converts an arbitrary number of sequences to a `DataFrame` or any
@@ -559,7 +596,7 @@ proc toDf*(t: OrderedTable[string, seq[Value]]): DataFrame =
     result.len = max(v.len, result.len)
   result.extendShortColumns()
 
-proc row*(df: DataFrameLike, idx: int, cols: varargs[string]): Value {.inline.} =
+proc row*[T](df: DataFrame[T], idx: int, cols: varargs[string]): Value {.inline.} =
   ## Returns the row `idx` of the DataFrame `df` as a `Value` of kind `VObject`.
   ##
   ## If any `cols` are given, only those columns will appear in the resulting `Value`.
@@ -577,12 +614,12 @@ proc row*(df: DataFrameLike, idx: int, cols: varargs[string]): Value {.inline.} 
   for col in mcols:
     result[col] = df[col][idx, Value]
 
-proc assignRow(v: var Value, df: DataFrameLike, idx: int) =
+proc assignRow[T](v: var Value, df: DataFrame[T], idx: int) =
   ## `v` needs to be a VObject with the exact same keys as `df`! Only used internally.
   for col in keys(df.data):
     v[col] = df[col][idx, Value]
 
-iterator items*(df: DataFrameLike): Value =
+iterator items*[T](df: DataFrame[T]): Value =
   ## Returns each row of the `DataFrame df` as a Value of kind VObject.
   ##
   ## This is an inefficient way to iterate over all rows in a data frame, as we don't
@@ -596,7 +633,7 @@ iterator items*(df: DataFrameLike): Value =
     row.assignRow(df, i)
     yield row
 
-iterator values*(df: DataFrameLike, cols: varargs[string]): Tensor[Value] {.inline.} =
+iterator values*[T](df: DataFrame[T], cols: varargs[string]): Tensor[Value] {.inline.} =
   ## Yields all columns `cols` of `DataFrame df` as `Tensor[Value]` rows.
   ##
   ## Each row is yielded without column key information. The tensor is filled in the order
@@ -615,7 +652,7 @@ iterator values*(df: DataFrameLike, cols: varargs[string]): Tensor[Value] {.inli
       res[j] = colSeq[j][idx, Value]
     yield res
 
-func isColumn*(fn: FormulaNode, df: DataFrameLike): bool =
+func isColumn*[T](fn: FormulaNode, df: DataFrame[T]): bool =
   ## Checks if the given `FormulaNode` as a string representation corresponds to a
   ## column in the `DataFrame`.
   runnableExamples:
@@ -626,7 +663,7 @@ func isColumn*(fn: FormulaNode, df: DataFrameLike): bool =
 
   result = $fn in df
 
-func isConstant*(fn: FormulaNode, df: DataFrameLike): bool =
+func isConstant*[T](fn: FormulaNode, df: DataFrame[T]): bool =
   ## Checks if the column referenced by the `FormulaNode fn` is a constant column
   ## in the `DataFrame`.
   ##
@@ -640,7 +677,7 @@ func isConstant*(fn: FormulaNode, df: DataFrameLike): bool =
 
   result = $fn in df and df[$fn].isConstant
 
-template withCombinedType*(df: DataFrameLike,
+template withCombinedType*[T](df: DataFrame[T],
                            cols: seq[string],
                            body: untyped): untyped =
   ## A helper template to work with a `dtype` that encompasses all data types
@@ -676,7 +713,7 @@ template withCombinedType*(df: DataFrameLike,
     body
   of colNone, colConstant, colGeneric: doAssert false, "No valid type!"
 
-proc add*[T: tuple](df: var DataFrameLike, args: T) =
+proc add*[T: tuple](df: var DataFrame[T], args: T) =
   ## This procedure adds a given tuple as a new row to the DF.
   ##
   ## If the `DataFrame df` does not have any column yet, columns of the names
@@ -724,7 +761,7 @@ macro varargsToTuple(args: varargs[untyped]): untyped =
   for arg in args:
     result.add arg
 
-template add*(df: var DataFrameLike, args: varargs[untyped]): untyped =
+template add*[T](df: var DataFrame[T], args: varargs[untyped]): untyped =
   ## Helper overload for `add` above, which takes a varargs of values that are combined to
   ## a tuple automatically.
   ##
@@ -734,7 +771,7 @@ template add*(df: var DataFrameLike, args: varargs[untyped]): untyped =
   let tup = varargsToTuple(args)
   df.add(tup)
 
-proc pretty*(df: DataFrameLike, numLines = 20, precision = 4, header = true): string =
+proc pretty*[T](df: DataFrame[T], numLines = 20, precision = 4, header = true): string =
   ## Converts the first `numLines` of the input `DataFrame df` to a string table.
   ##
   ## If the `numLines` argument is negative, will print all rows of the data frame.
@@ -778,19 +815,19 @@ proc pretty*(df: DataFrameLike, numLines = 20, precision = 4, header = true): st
                          alignBy)
     result.add "\n"
 
-template `$`*(df: DataFrameLike): string = df.pretty
+template `$`*[T](df: DataFrame[T]): string = df.pretty
 
-proc drop*(df: var DataFrameLike, key: string) {.inline.} =
+proc drop*[T](df: var DataFrame[T], key: string) {.inline.} =
   ## Drops the given key from the `DataFrame`.
   df.data.del(key)
 
-proc drop*(df: DataFrameLike, keys: varargs[string]): auto =
+proc drop*[T](df: DataFrame[T], keys: varargs[string]): DataFrame[T] =
   ## Returns a `DataFrame` with the given keys dropped.
   result = df.shallowCopy()
   for k in keys:
     result.drop(k)
 
-proc colMax*(df: DataFrameLike, col: string, ignoreInf = true): float =
+proc colMax*[T](df: DataFrame[T], col: string, ignoreInf = true): float =
   ## Returns the maximum value along a given column, which must be readable
   ## as a float tensor.
   ##
@@ -810,7 +847,7 @@ proc colMax*(df: DataFrameLike, col: string, ignoreInf = true): float =
     result = max(x, result)
     inc idx
 
-proc colMin*(df: DataFrameLike, col: string, ignoreInf = true): float =
+proc colMin*[T](df: DataFrame[T], col: string, ignoreInf = true): float =
   ## Returns the minimum value along a given column, which must be readable
   ## as a float tensor.
   ##
@@ -830,7 +867,7 @@ proc colMin*(df: DataFrameLike, col: string, ignoreInf = true): float =
     result = min(x, result)
     inc idx
 
-proc bind_rows*[T: DataFrameLike](dfs: varargs[(string, T)], id: string = ""): auto =
+proc bind_rows*[T: ColumnLike](dfs: varargs[(string, T)], id: string = ""): DataFrame[T] =
   ## `bind_rows` combines several data frames row wise (i.e. data frames are
   ## stacked on top of one another).
   ##
@@ -903,7 +940,7 @@ proc bind_rows*[T: DataFrameLike](dfs: varargs[(string, T)], id: string = ""): a
       result.asgn(k, result[k].add nullColumn(result.len - result[k].len))
   doAssert totLen == result.len, " totLen was: " & $totLen & " and result.len " & $result.len
 
-template bind_rows*(dfs: varargs[DataFrameLike], id: string = ""): auto =
+template bind_rows*[T](dfs: varargs[DataFrame[T]], id: string = ""): auto =
   ## Overload of `bind_rows` above, for automatic creation of the `id` values.
   ##
   ## Using this proc, the different data frames will just be numbered by their
@@ -946,7 +983,7 @@ template bind_rows*(dfs: varargs[DataFrameLike], id: string = ""): auto =
   let args = zip(ids, dfs)
   bind_rows(args, id)
 
-proc add*(df: var DataFrameLike, dfToAdd: DataFrameLike) =
+proc add*[T](df: var DataFrame[T], dfToAdd: DataFrame[T]) =
   ## The simplest form of "adding" a data frame, resulting in both data frames stacked
   ## vertically on top of one another.
   ##
@@ -983,7 +1020,7 @@ proc add*(df: var DataFrameLike, dfToAdd: DataFrameLike) =
        raise newException(ValueError, "All keys must match to add data frames!")
     df = bind_rows([("", df), ("", dfToAdd)])
 
-proc assignStack*(dfs: seq[DataFrameLike]): auto =
+proc assignStack*[T](dfs: seq[DataFrame[T]]): auto =
   ## Returns a data frame built as a stack of the data frames in the sequence.
   ##
   ## This is a somewhat unsafe procedure as it trades performance for safety. It's
@@ -1035,7 +1072,7 @@ proc hashColumn(s: var seq[Hash], c: Column, finish: static bool = false) =
       else:
         s[idx] = !$(s[idx] !& hash(t[idx]))
 
-proc buildColHashes(df: DataFrameLike, keys: seq[string]): seq[seq[Value]] =
+proc buildColHashes[T](df: DataFrame[T], keys: seq[string]): seq[seq[Value]] =
   ## Computes a sequence of `Value VObject` elements from the given
   ## columns. This is to avoid issue #12 (hash collisions if many input
   ## values present).
@@ -1058,7 +1095,7 @@ proc buildColHashes(df: DataFrameLike, keys: seq[string]): seq[seq[Value]] =
       row[j] = colCols[j][i]
     result[i] = row
 
-proc selectTensors(df: DataFrameLike, keys: seq[string]): seq[Tensor[Value]] =
+proc selectTensors[T](df: DataFrame[T], keys: seq[string]): seq[Tensor[Value]] =
   ## Returns a subset of the `df` containing all given column of the `keys`
   ## in a sequence of `Tensor[Value]`.
   ##
@@ -1091,7 +1128,7 @@ proc arrangeSortImpl[T](toSort: var seq[(int, T)], order: SortOrder) =
       order = order
     )
 
-proc sortBySubset(df: DataFrameLike, by: string, idx: seq[int], order: SortOrder): seq[int] =
+proc sortBySubset[T](df: DataFrame[T], by: string, idx: seq[int], order: SortOrder): seq[int] =
   withNativeDtype(df[by]):
     var res = newSeq[(int, dtype)](idx.len)
     let t = toTensor(df[by], dtype)
@@ -1103,15 +1140,15 @@ proc sortBySubset(df: DataFrameLike, by: string, idx: seq[int], order: SortOrder
     # the remaining indices. Recursively do this until
     result = res.mapIt(it[0])
 
-proc sortRecurse(df: DataFrameLike, by: seq[string],
-                 startIdx: int,
-                 resIdx: seq[int],
-                 order: SortOrder): seq[int]
+proc sortRecurse[T](df: DataFrame[T], by: seq[string],
+                    startIdx: int,
+                    resIdx: seq[int],
+                    order: SortOrder): seq[int]
 
-proc sortRecurseImpl[T](result: var seq[int], df: DataFrameLike, by: seq[string],
-                        startIdx: int,
-                        resIdx: seq[int],
-                        order: SortOrder) =
+proc sortRecurseImpl[T; U](result: var seq[int], df: DataFrame[U], by: seq[string],
+                           startIdx: int,
+                           resIdx: seq[int],
+                           order: SortOrder) =
   var res = newSeq[(int, T)](result.len)
   let t = toTensor(df[by[0]], T)
   for i, val in result:
@@ -1157,16 +1194,18 @@ proc sortRecurseImpl[T](result: var seq[int], df: DataFrameLike, by: seq[string]
     last = res[i][1]
     inc i
 
-proc sortRecurse(df: DataFrameLike, by: seq[string],
-                 startIdx: int,
-                 resIdx: seq[int],
-                 order: SortOrder): seq[int] =
+proc sortRecurse[T](df: DataFrame[T], by: seq[string],
+                    startIdx: int,
+                    resIdx: seq[int],
+                    order: SortOrder): seq[int] =
   result = resIdx
   withNativeDtype(df[by[0]]):
-    sortRecurseImpl[dtype](result, df, by, startIdx, resIdx, order)
+    sortRecurseImpl[dtype, T](result, df, by, startIdx, resIdx, order)
 
-proc sortBys(df: DataFrameLike, by: seq[string], order: SortOrder): seq[int] =
+proc sortBys[T](df: DataFrame[T], by: seq[string], order: SortOrder): seq[int] =
+  echo "sort bys !!! ", df, " by ", by
   withNativeDtype(df[by[0]]):
+    echo "by ?? ", dtype
     var res = newSeq[(int, dtype)](df.len)
     var idx = 0
     let t = toTensor(df[by[0]], dtype)
@@ -1184,7 +1223,7 @@ proc sortBys(df: DataFrameLike, by: seq[string], order: SortOrder): seq[int] =
       resIdx = sortRecurse(df, by, startIdx = 1, resIdx = resIdx, order = order)
     result = resIdx
 
-proc arrange*(df: DataFrameLike, by: varargs[string], order = SortOrder.Ascending): auto =
+proc arrange*[T](df: DataFrame[T], by: varargs[string], order = SortOrder.Ascending): auto =
   ## Sorts the data frame in ascending / descending `order` by key `by`.
   ##
   ## The sort order is handled as in Nim's standard library using the `SortOrder` enum.
@@ -1213,20 +1252,21 @@ proc arrange*(df: DataFrameLike, by: varargs[string], order = SortOrder.Ascendin
 
   # now sort by cols in ascending order of each col, i.e. ties will be broken
   # in ascending order of the columns
-  result = newDataFrame(df.ncols)
+  result = newDataFrameLike[T](df.ncols)
   let idxCol = sortBys(df, @by, order = order)
   result.len = df.len
-  var data = newColumn()
+  var data = newColumnLike[T]()
   for k in keys(df):
     withNativeDtype(df[k]):
       let col = df[k].toTensor(dtype)
       var res = newTensor[dtype](df.len)
+      echo col.len, " idx ", idxCol
       for i in 0 ..< df.len:
         res[i] = col[idxCol[i]]
-      data = toColumn res
+      data = toColumn(res, T)
     result.asgn(k, data)
 
-iterator groups*(df: DataFrameLike, order = SortOrder.Ascending): (seq[(string, Value)], auto) =
+iterator groups*[T](df: DataFrame[T], order = SortOrder.Ascending): (seq[(string, Value)], auto) =
   ## Yields the subgroups of a grouped DataFrame `df` and the `(key, Value)`
   ## pairs that were used to create the subgroup.
   ##
@@ -1259,7 +1299,7 @@ iterator groups*(df: DataFrameLike, order = SortOrder.Ascending): (seq[(string, 
   # having the data frame in a sorted order, walk it and return each combination
   let hashes = dfArranged.selectTensors(keys)
 
-  proc buildClassLabel(df: DataFrameLike, keys: seq[string],
+  proc buildClassLabel(df: DataFrame[T], keys: seq[string],
                        idx: int): seq[(string, Value)] =
     result = newSeq[(string, Value)](keys.len)
     for j, key in keys:
@@ -1291,124 +1331,124 @@ iterator groups*(df: DataFrameLike, order = SortOrder.Ascending): (seq[(string, 
   # have a single key
   yield (buildClassLabel(dfArranged, keys, dfArranged.high), dfArranged[startIdx .. dfArranged.high])
 
-proc filterImpl[T](resCol: var Column, col: Column, filterIdx: Tensor[int]) =
-  let t = toTensor(col, T)
-  var res = newTensorUninit[T](filterIdx.size)
-  if filterIdx.size > 0:
-    var i = 0
-    for idx in 0 ..< filterIdx.size:
-      res[i] = t[filterIdx[idx]]
-      inc i
-  resCol = res.toColumn
-
-proc filter(col: Column, filterIdx: Tensor[int]): Column =
-  ## perform filterting of the given column `key`
-  withNativeDtype(col):
-    filterImpl[dtype](result, col, filterIdx)
-
-proc countTrue(t: Tensor[bool]): int {.inline.} =
-  for el in t:
-    if el:
-      inc result
-
-proc filteredIdx(t: Tensor[bool]): Tensor[int] {.inline, noinit.} =
-  let numNonZero = countTrue(t)
-  result = newTensorUninit[int](numNonZero)
-  var idx = 0
-  var j = 0
-  for cond in t:
-    if cond:
-      result[idx] = j
-      inc idx
-    inc j
-
-proc applyFilterFormula(df: DataFrameLike, fn: FormulaNode): auto =
-  case fn.kind
-  of fkVector:
-    if fn.resType != colBool:
-      raise newException(FormulaMismatchError, "Input mapping formula " & $fn.name & " does not " &
-        "return boolean values, but " & $fn.resType & ". Only boolean mapping formulae " &
-        "are supported in `filter`.")
-    result = fn.fnV(df)
-  of fkScalar:
-    if fn.valKind != VBool:
-      raise newException(FormulaMismatchError, "Input reducing formula " & $fn.name & " does not " &
-        "return boolean value, but " & $fn.valKind & ". Only boolean reducing formulae " &
-        "are supported in `filter`.")
-    let scaleVal = fn.fnS(df)
-    result = constantColumn(scaleVal.toBool, df.len)
-  else:
-    raise newException(FormulaMismatchError, "Given formula " & $fn.name & " is of unsupported kind " &
-      $fn.kind & ". Only reducing `<<` and mapping `~` formulas are supported in `filter`.")
-
-proc filterImpl(df: DataFrameLike, conds: varargs[FormulaNode]): auto =
-  ## Implements filtering of mapping and scalar formulas on a `DataFrame`.
-  ## Does not differentiate between grouped and ungrouped inputs (done in
-  ## exported `filter` below).
-  result = newDataFrame(df.ncols)
-  var fullCondition: FormulaNode
-  var filterIdx = newColumn(colBool)
-  for c in conds:
-    if filterIdx.kind == colBool and filterIdx.len > 0:
-      # combine two tensors
-      let newIdx = df.applyFilterFormula(c)
-      if newIdx.kind == colConstant and newIdx.cCol == %~ false:
-        return newDataFrame()
-      elif newIdx.kind == colConstant:
-        # reducing formula evaluated true, do not have to combine anything
-        continue
-      else:
-        # combine existing indices and new indices
-        filterIdx.bCol.apply2_inline(newIdx.bCol):
-          # calculate logic and
-          x and y
-    else:
-      # eval boolean scalar function on DF. Predicate decides to keep or drop full frame
-      filterIdx = df.applyFilterFormula(c)
-      if filterIdx.kind == colConstant and filterIdx.cCol == %~ false:
-        return newDataFrame()
-
-  case filterIdx.kind
-  of colBool:
-    let nonZeroIdx = filteredIdx(filterIdx.bCol)
-    for k in keys(df):
-      result.asgn(k, df[k].filter(nonZeroIdx))
-      # fill each key with the non zero elements
-    result.len = nonZeroIdx.size
-  of colConstant:
-    # assert value is true (scalar formula yielding true)
-    doAssert filterIdx.cCol == %~ true, "Constant column needs to be true"
-    result = df
-  else: doAssert false, "Invalid branch"
-
-proc filter*(df: DataFrameLike, conds: varargs[FormulaNode]): auto =
-  ## Returns the data frame filtered by the conditions given. Multiple conditions are
-  ## evaluated successively and all only elements matching all conditions as true will
-  ## remain. If the input data frame is grouped, the subgroups are evaluated individually.
-  ##
-  ## Both mapping and reducing formulas are supported, but each formula kind must return
-  ## a boolean value. In a case of a mismatch `FormulaMismatchError` is thrown.
-  runnableExamples:
-    let df = seqsToDf({ "x" : @[1, 2, 3, 4, 5], "y" : @["a", "b", "c", "d", "e"] })
-    let dfRes = df.filter(f{ `x` < 3 or `y` == "e" }) ## arbitrary boolean expressions supported
-    doAssert dfRes["x", int] == [1, 2, 5].toTensor
-    doAssert dfRes["y", string] == ["a", "b", "e"].toTensor
-
-  case df.kind
-  of dfGrouped:
-    var dfs = newSeq[DataFrame]()
-    var i = 0
-    for (tup, subDf) in groups(df):
-      var mdf = subDf.filterImpl(conds)
-      for (str, val) in tup:
-        mdf[str] = constantColumn(val, mdf.len)
-      dfs.add mdf
-      inc i
-    result = assignStack(dfs)
-  else:
-    result = df.filterImpl(conds)
-
-proc calcNewColumn*(df: DataFrameLike, fn: FormulaNode): (string, auto) =
+#proc filterImpl[T](resCol: var Column, col: Column, filterIdx: Tensor[int]) =
+#  let t = toTensor(col, T)
+#  var res = newTensorUninit[T](filterIdx.size)
+#  if filterIdx.size > 0:
+#    var i = 0
+#    for idx in 0 ..< filterIdx.size:
+#      #XXX: res[i] = t[filterIdx[idx]]
+#      inc i
+#  resCol = res.toColumn
+#
+#proc filter(col: Column, filterIdx: Tensor[int]): Column =
+#  ## perform filterting of the given column `key`
+#  withNativeDtype(col):
+#    filterImpl[dtype](result, col, filterIdx)
+#
+#proc countTrue(t: Tensor[bool]): int {.inline.} =
+#  for el in t:
+#    if el:
+#      inc result
+#
+#proc filteredIdx(t: Tensor[bool]): Tensor[int] {.inline, noinit.} =
+#  let numNonZero = countTrue(t)
+#  result = newTensorUninit[int](numNonZero)
+#  var idx = 0
+#  var j = 0
+#  for cond in t:
+#    if cond:
+#      result[idx] = j
+#      inc idx
+#    inc j
+#
+#proc applyFilterFormula[T; U](df: DataFrame[T], fn: FormulaNode[T; U]): auto =
+#  case fn.kind
+#  of fkVector:
+#    if fn.resType != colBool:
+#      raise newException(FormulaMismatchError, "Input mapping formula " & $fn.name & " does not " &
+#        "return boolean values, but " & $fn.resType & ". Only boolean mapping formulae " &
+#        "are supported in `filter`.")
+#    result = fn.fnV(df)
+#  of fkScalar:
+#    if fn.valKind != VBool:
+#      raise newException(FormulaMismatchError, "Input reducing formula " & $fn.name & " does not " &
+#        "return boolean value, but " & $fn.valKind & ". Only boolean reducing formulae " &
+#        "are supported in `filter`.")
+#    let scaleVal = fn.fnS(df)
+#    result = constantColumn(scaleVal.toBool, df.len)
+#  else:
+#    raise newException(FormulaMismatchError, "Given formula " & $fn.name & " is of unsupported kind " &
+#      $fn.kind & ". Only reducing `<<` and mapping `~` formulas are supported in `filter`.")
+#
+#proc filterImpl[T; U](df: DataFrame[T], conds: varargs[FormulaNode[T; U]]): DataFrame[T] =
+#  ## Implements filtering of mapping and scalar formulas on a `DataFrame`.
+#  ## Does not differentiate between grouped and ungrouped inputs (done in
+#  ## exported `filter` below).
+#  result = newDataFrame(df.ncols)
+#  var fullCondition: FormulaNode[T; U]
+#  var filterIdx = newColumn(colBool)
+#  for c in conds:
+#    if filterIdx.kind == colBool and filterIdx.len > 0:
+#      # combine two tensors
+#      let newIdx = df.applyFilterFormula(c)
+#      if newIdx.kind == colConstant and newIdx.cCol == %~ false:
+#        return newDataFrame()
+#      elif newIdx.kind == colConstant:
+#        # reducing formula evaluated true, do not have to combine anything
+#        continue
+#      else:
+#        # combine existing indices and new indices
+#        filterIdx.bCol.apply2_inline(newIdx.bCol):
+#          # calculate logic and
+#          x and y
+#    else:
+#      # eval boolean scalar function on DF. Predicate decides to keep or drop full frame
+#      filterIdx = df.applyFilterFormula(c)
+#      if filterIdx.kind == colConstant and filterIdx.cCol == %~ false:
+#        return newDataFrame()
+#
+#  case filterIdx.kind
+#  of colBool:
+#    let nonZeroIdx = filteredIdx(filterIdx.bCol)
+#    for k in keys(df):
+#      result.asgn(k, df[k].filter(nonZeroIdx))
+#      # fill each key with the non zero elements
+#    result.len = nonZeroIdx.size
+#  of colConstant:
+#    # assert value is true (scalar formula yielding true)
+#    doAssert filterIdx.cCol == %~ true, "Constant column needs to be true"
+#    result = df
+#  else: doAssert false, "Invalid branch"
+#
+#proc filter*[T; U](df: DataFrame[T], conds: varargs[FormulaNode[T; U]]): auto =
+#  ## Returns the data frame filtered by the conditions given. Multiple conditions are
+#  ## evaluated successively and all only elements matching all conditions as true will
+#  ## remain. If the input data frame is grouped, the subgroups are evaluated individually.
+#  ##
+#  ## Both mapping and reducing formulas are supported, but each formula kind must return
+#  ## a boolean value. In a case of a mismatch `FormulaMismatchError` is thrown.
+#  runnableExamples:
+#    let df = seqsToDf({ "x" : @[1, 2, 3, 4, 5], "y" : @["a", "b", "c", "d", "e"] })
+#    let dfRes = df.filter(f{ `x` < 3 or `y` == "e" }) ## arbitrary boolean expressions supported
+#    doAssert dfRes["x", int] == [1, 2, 5].toTensor
+#    doAssert dfRes["y", string] == ["a", "b", "e"].toTensor
+#
+#  case df.kind
+#  of dfGrouped:
+#    var dfs = newSeq[DataFrame[T]]()
+#    var i = 0
+#    for (tup, subDf) in groups(df):
+#      var mdf = subDf.filterImpl(conds)
+#      for (str, val) in tup:
+#        mdf[str] = constantColumn(val, mdf.len)
+#      dfs.add mdf
+#      inc i
+#    result = assignStack(dfs)
+#  else:
+#    result = df.filterImpl(conds)
+#
+proc calcNewColumn*[T](df: DataFrame[T], fn: FormulaNode): (string, auto) =
   ## Calculates a new column based on the `fn` given. Returns the name of the resulting
   ## column (derived from the formula) as well as the column.
   ##
@@ -1416,7 +1456,7 @@ proc calcNewColumn*(df: DataFrameLike, fn: FormulaNode): (string, auto) =
 
   result = (fn.colName, fn.fnV(df))
 
-proc calcNewConstColumnFromScalar*(df: DataFrameLike, fn: FormulaNode): (string, Column) =
+proc calcNewConstColumnFromScalar*[T](df: DataFrame[T], fn: FormulaNode): (string, Column) =
   ## Calculates a new constant column based on the scalar (reducing) `fn` given.
   ## Returns the name of the resulting column (derived from the formula) as well as the column.
   ##
@@ -1424,7 +1464,7 @@ proc calcNewConstColumnFromScalar*(df: DataFrameLike, fn: FormulaNode): (string,
   assert fn.kind == fkScalar
   result = (fn.valName, constantColumn(fn.fnS(df), df.len))
 
-proc selectInplace*[T: string | FormulaNode](df: var DataFrameLike, cols: varargs[T]) =
+proc selectInplace*[T: string | FormulaNode](df: var DataFrame[T], cols: varargs[T]) =
   ## Inplace variant of `select` below.
   var toDrop = toHashSet(df.getKeys)
   for fn in cols:
@@ -1445,7 +1485,7 @@ proc selectInplace*[T: string | FormulaNode](df: var DataFrameLike, cols: vararg
   # now drop all required keys
   for key in items(toDrop): df.drop(key)
 
-proc select*[T: string | FormulaNode](df: DataFrameLike, cols: varargs[T]): auto =
+proc select*[T: string | FormulaNode](df: DataFrame[T], cols: varargs[T]): auto =
   ## Returns the data frame cut to the names given as `cols`. The argument
   ## may either be the name of a column as a string, or a `FormulaNode`.
   ##
@@ -1477,8 +1517,8 @@ proc select*[T: string | FormulaNode](df: DataFrameLike, cols: varargs[T]): auto
   result = df.shallowCopy()
   result.selectInplace(cols)
 
-proc mutateImpl(df: var DataFrameLike, fns: varargs[FormulaNode],
-                dropCols: static bool) =
+proc mutateImpl[T; U](df: var DataFrame[T], fns: varargs[FormulaNode[T, U]],
+                      dropCols: static bool) =
   ## implementation of mutation / transmutation. Allows to statically
   ## decide whether to only keep touched columns or not.
   var colsToKeep: seq[string]
@@ -1511,7 +1551,7 @@ proc mutateImpl(df: var DataFrameLike, fns: varargs[FormulaNode],
   when dropCols:
     df.selectInplace(colsToKeep)
 
-proc mutateInplace*(df: var DataFrameLike, fns: varargs[FormulaNode]) =
+proc mutateInplace*[T](df: var DataFrame[T], fns: varargs[FormulaNode]) =
   ## Inplace variasnt of `mutate` below.
   #case df.kind
   #of dfGrouped:
@@ -1526,7 +1566,7 @@ proc mutateInplace*(df: var DataFrameLike, fns: varargs[FormulaNode]) =
   #else:
   df.mutateImpl(fns, dropCols = false)
 
-proc mutate*(df: DataFrameLike, fns: varargs[FormulaNode]): auto =
+proc mutate*[T](df: DataFrame[T], fns: varargs[FormulaNode[T, T]]): DataFrame[T] =
   ## Returns the data frame with additional mutated columns, described
   ## by the functions `fns`.
   ##
@@ -1568,11 +1608,18 @@ proc mutate*(df: DataFrameLike, fns: varargs[FormulaNode]): auto =
   result = df.shallowCopy()
   result.mutateInplace(fns)
 
-proc transmuteInplace*(df: var DataFrameLike, fns: varargs[FormulaNode]) =
+proc mutate*[T; U](df: DataFrame[T], fn: FormulaNode[T, U]): auto = #DataFrame[U] =
+  ## Return type is `auto` for the case that `U` is actually a "lesser" type than `T`.
+  ## I.e. `T = ColumnKiloGram` and `U = Column`
+  # we know the types are different (hence this overload), convert and call mutate
+  result = df.convertDataFrame(U)
+  result = result.mutate(fn)
+
+proc transmuteInplace*[T; U](df: var DataFrame[T], fns: varargs[FormulaNode[T, U]]) =
   ## Inplace variant of `transmute` below.
   case df.kind
   of dfGrouped:
-    var dfs = newSeq[DataFrame]()
+    var dfs = newSeq[DataFrame[T]]()
     var i = 0
     for (tup, subDf) in groups(df):
       var mdf = subDf
@@ -1583,7 +1630,7 @@ proc transmuteInplace*(df: var DataFrameLike, fns: varargs[FormulaNode]) =
   else:
     df.mutateImpl(fns, dropCols = true)
 
-proc transmute*(df: DataFrameLike, fns: varargs[FormulaNode]): auto =
+proc transmute*[T](df: DataFrame[T], fns: varargs[FormulaNode]): auto =
   ## Returns the data frame cut to the columns created by `fns`, which
   ## should involve a calculation. To only cut to one or more columns
   ## use the `select` proc.
@@ -1609,7 +1656,7 @@ proc transmute*(df: DataFrameLike, fns: varargs[FormulaNode]): auto =
   result = df.shallowCopy()
   result.transmuteInplace(fns)
 
-proc rename*(df: DataFrameLike, cols: varargs[FormulaNode]): auto =
+proc rename*[T](df: DataFrame[T], cols: varargs[FormulaNode]): auto =
   ## Returns the data frame with the columns described by `cols` renamed to
   ## the names on the LHS of the given `FormulaNode`. All other columns will
   ## be left untouched.
@@ -1633,7 +1680,7 @@ proc rename*(df: DataFrameLike, cols: varargs[FormulaNode]): auto =
     # remove the column of the old name
     result.drop(fn.rhs.toStr)
 
-proc assign(df: var DataFrameLike, key: string, idx1: int, c2: Column, idx2: int) =
+proc assign[T](df: var DataFrame[T], key: string, idx1: int, c2: T, idx2: int) =
   ## Assigns the value in `df` in col `key` at index `idx1` to the value of
   ## index `idx2` of column `c2`
   ##
@@ -1641,7 +1688,7 @@ proc assign(df: var DataFrameLike, key: string, idx1: int, c2: Column, idx2: int
   withNativeDtype(df[key]):
     df[key, idx1] = c2[idx2, dtype]
 
-proc innerJoin*(df1, df2: DataFrameLike, by: string): auto =
+proc innerJoin*[T](df1, df2: DataFrame[T], by: string): auto =
   ## Returns a data frame joined by the given key `by` in such a way as to only keep
   ## rows found in both data frames.
   ##
@@ -1742,7 +1789,7 @@ proc toHashSet*[T](t: Tensor[T]): HashSet[T] =
   for el in t:
     result.incl el
 
-proc group_by*(df: DataFrameLike, by: varargs[string], add = false): auto =
+proc group_by*[T](df: DataFrame[T], by: varargs[string], add = false): auto =
   ## Returns a grouped data frame grouped by all unique keys in `by`.
   ##
   ## Grouping a data frame is an ``almost`` lazy affair. It only calculates the groups
@@ -1766,7 +1813,7 @@ proc group_by*(df: DataFrameLike, by: varargs[string], add = false): auto =
   for key in by:
     result.groupMap[key] = toHashSet(result[key].toTensor(Value))
 
-#proc summarize*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
+#proc summarize*[T](df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
 #  ## Returns a data frame with the summaries applied given by `fn`. They are applied
 #  ## in the order in which they are given.
 #  ##
@@ -1829,7 +1876,7 @@ proc group_by*(df: DataFrameLike, by: varargs[string], add = false): auto =
 #      result.asgn(k, toNativeColumn vals)
 #      result.len = vals.len
 
-proc count*(df: DataFrameLike, col: string, name = "n"): auto =
+proc count*[T](df: DataFrame[T], col: string, name = "n"): auto =
   ## Counts the number of elements per type in `col` of the data frame.
   ##
   ## The counts are stored in a new column given by `name`.
@@ -1860,7 +1907,7 @@ proc count*(df: DataFrameLike, col: string, name = "n"): auto =
   result.asgn(name, toColumn counts)
   result.len = idx
 
-proc setDiff*(df1, df2: DataFrameLike, symmetric = false): auto =
+proc setDiff*[T](df1, df2: DataFrame[T], symmetric = false): auto =
   ## Returns a `DataFrame` with all elements in `df1` that are ``not`` found in
   ## `df2`.
   ##
@@ -1926,16 +1973,16 @@ proc setDiff*(df1, df2: DataFrameLike, symmetric = false): auto =
       # fill each key with the non zero elements
     result.len = idxToKeep.size
 
-proc head*(df: DataFrameLike, num: int): auto =
+proc head*[T](df: DataFrame[T], num: int): auto =
   ## Returns the head of the DataFrame, i.e. the first `num` elements.
   result = df[0 ..< num]
 
-proc tail*(df: DataFrameLike, num: int): auto =
+proc tail*[T](df: DataFrame[T], num: int): auto =
   ## Returns the tail of the DataFrame, i.e. the last `num` elements.
   result = df[^num .. df.high]
 
-proc gather*(df: DataFrameLike, cols: varargs[string],
-             key = "key", value = "value", dropNulls = false): auto =
+proc gather*[T](df: DataFrame[T], cols: varargs[string],
+                key = "key", value = "value", dropNulls = false): DataFrame[T] =
   ## Gathers the `cols` from `df` and merges these columns into two new columns,
   ## where the `key` column contains the name of the column from which the `value`
   ## entry is taken. I.e. transforms `cols` from wide to long format.
@@ -1986,7 +2033,7 @@ proc gather*(df: DataFrameLike, cols: varargs[string],
       result[rem] = toColumn(fullCol)
   result.len = newLen
 
-proc spread*[T](df: DataFrameLike, namesFrom, valuesFrom: string,
+proc spread*[T](df: DataFrame[T], namesFrom, valuesFrom: string,
                 valuesFill: T = 0): auto =
   ## The inverse operation to `gather`. A conversion from long format to
   ## a wide format data frame.
@@ -2061,79 +2108,79 @@ proc spread*[T](df: DataFrameLike, namesFrom, valuesFrom: string,
           result[row[namesFrom].toStr, idx] = x
         inc idx
 
-proc unique*(c: Column): Column =
-  ## Returns a `Column` of all unique values in `c` (duplicates are removed).
-  runnableExamples:
-    let x = toColumn [1, 2, 1, 4, 5]
-    doAssert x.unique.toTensor(int) == [1, 2, 4, 5].toTensor
-  let cV = c.toTensor(Value)
-  var hSet = toHashSet(cV)
-  var idxToKeep = newTensor[int](hSet.card)
-  var idx = 0
-  for i in 0 ..< c.len:
-    if cV[i] in hSet:
-      idxToKeep[idx] = i
-      # remove from set to not get duplicates!
-      hSet.excl cV[i]
-      inc idx
-  # apply idxToKeep as filter
-  result = c.filter(idxToKeep)
-  result.len = idxToKeep.size
+#proc unique*(c: Column): Column =
+#  ## Returns a `Column` of all unique values in `c` (duplicates are removed).
+#  runnableExamples:
+#    let x = toColumn [1, 2, 1, 4, 5]
+#    doAssert x.unique.toTensor(int) == [1, 2, 4, 5].toTensor
+#  let cV = c.toTensor(Value)
+#  var hSet = toHashSet(cV)
+#  var idxToKeep = newTensor[int](hSet.card)
+#  var idx = 0
+#  for i in 0 ..< c.len:
+#    if cV[i] in hSet:
+#      idxToKeep[idx] = i
+#      # remove from set to not get duplicates!
+#      hSet.excl cV[i]
+#      inc idx
+#  # apply idxToKeep as filter
+#  result = c.filter(idxToKeep)
+#  result.len = idxToKeep.size
+#
+#proc unique*[T](df: DataFrame[T], cols: varargs[string],
+#                keepAll = true): DataFrame[T] =
+#  ## Returns a DF with only distinct rows. If one or more `cols` are given
+#  ## the uniqueness of a row is only determined based on those columns. By
+#  ## default all columns are considered.
+#  ##
+#  ## If not all columns are considered and `keepAll` is true the resulting
+#  ## DF contains all other columns. Of those the first duplicated row
+#  ## is kept!
+#  ##
+#  ## Note: The corresponding `dplyr` function is `distinct`. The choice for
+#  ## `unique` was made, since `distinct` is a keyword in Nim!
+#  runnableExamples:
+#    let df = seqsToDf({ "x" : @[1, 2, 2, 2, 4], "y" : @[5.0, 6.0, 7.0, 8.0, 9.0],
+#                        "z" : @["a", "b", "b", "d", "e"]})
+#    block:
+#      let dfRes = df.unique() ## consider uniqueness of all columns, nothing removed
+#      doAssert dfRes["x", int] == df["x", int]
+#      doAssert dfRes["y", float] == df["y", float]
+#      doAssert dfRes["z", string] == df["z", string]
+#    block:
+#      let dfRes = df.unique("x") ## only consider `x`, only keeps keeps 1st, 2nd, last row
+#      doAssert dfRes["x", int] == [1, 2, 4].toTensor
+#      doAssert dfRes["y", float] == [5.0, 6.0, 9.0].toTensor
+#      doAssert dfRes["z", string] == ["a", "b", "e"].toTensor
+#    block:
+#      let dfRes = df.unique(["x", "z"]) ## considers `x` and `z`, one more unique (4th row)
+#      doAssert dfRes["x", int] == [1, 2, 2, 4].toTensor
+#      doAssert dfRes["y", float] == [5.0, 6.0, 8.0, 9.0].toTensor
+#      doAssert dfRes["z", string] == ["a", "b", "d", "e"].toTensor
+#
+#  result = newDataFrame(df.ncols)
+#  var mcols = @cols
+#  if mcols.len == 0:
+#    mcols = getKeys(df)
+#  let hashes = buildColHashes(df, mcols)
+#  var hSet = toHashSet(hashes)
+#  # walk df, build indices from `hashes` which differ
+#  var idxToKeep = newTensor[int](hSet.card)
+#  var idx = 0
+#  for i in 0 ..< df.len:
+#    if hashes[i] in hSet:
+#      idxToKeep[idx] = i
+#      # remove from set to not get duplicates!
+#      hSet.excl hashes[i]
+#      inc idx
+#  # apply idxToKeep as filter
+#  let resCols = if keepAll: getKeys(df) else: mcols
+#  for k in resCols:
+#    result.asgn(k, df[k].filter(idxToKeep))
+#    # fill each key with the non zero elements
+#  result.len = idxToKeep.size
 
-proc unique*(df: DataFrameLike, cols: varargs[string],
-             keepAll = true): auto =
-  ## Returns a DF with only distinct rows. If one or more `cols` are given
-  ## the uniqueness of a row is only determined based on those columns. By
-  ## default all columns are considered.
-  ##
-  ## If not all columns are considered and `keepAll` is true the resulting
-  ## DF contains all other columns. Of those the first duplicated row
-  ## is kept!
-  ##
-  ## Note: The corresponding `dplyr` function is `distinct`. The choice for
-  ## `unique` was made, since `distinct` is a keyword in Nim!
-  runnableExamples:
-    let df = seqsToDf({ "x" : @[1, 2, 2, 2, 4], "y" : @[5.0, 6.0, 7.0, 8.0, 9.0],
-                        "z" : @["a", "b", "b", "d", "e"]})
-    block:
-      let dfRes = df.unique() ## consider uniqueness of all columns, nothing removed
-      doAssert dfRes["x", int] == df["x", int]
-      doAssert dfRes["y", float] == df["y", float]
-      doAssert dfRes["z", string] == df["z", string]
-    block:
-      let dfRes = df.unique("x") ## only consider `x`, only keeps keeps 1st, 2nd, last row
-      doAssert dfRes["x", int] == [1, 2, 4].toTensor
-      doAssert dfRes["y", float] == [5.0, 6.0, 9.0].toTensor
-      doAssert dfRes["z", string] == ["a", "b", "e"].toTensor
-    block:
-      let dfRes = df.unique(["x", "z"]) ## considers `x` and `z`, one more unique (4th row)
-      doAssert dfRes["x", int] == [1, 2, 2, 4].toTensor
-      doAssert dfRes["y", float] == [5.0, 6.0, 8.0, 9.0].toTensor
-      doAssert dfRes["z", string] == ["a", "b", "d", "e"].toTensor
-
-  result = newDataFrame(df.ncols)
-  var mcols = @cols
-  if mcols.len == 0:
-    mcols = getKeys(df)
-  let hashes = buildColHashes(df, mcols)
-  var hSet = toHashSet(hashes)
-  # walk df, build indices from `hashes` which differ
-  var idxToKeep = newTensor[int](hSet.card)
-  var idx = 0
-  for i in 0 ..< df.len:
-    if hashes[i] in hSet:
-      idxToKeep[idx] = i
-      # remove from set to not get duplicates!
-      hSet.excl hashes[i]
-      inc idx
-  # apply idxToKeep as filter
-  let resCols = if keepAll: getKeys(df) else: mcols
-  for k in resCols:
-    result.asgn(k, df[k].filter(idxToKeep))
-    # fill each key with the non zero elements
-  result.len = idxToKeep.size
-
-proc drop_null*(df: DataFrameLike, cols: varargs[string],
+proc drop_null*[T](df: DataFrame[T], cols: varargs[string],
                 convertColumnKind = false,
                 failIfConversionFails: bool = false): auto =
   ## Returns a DF with only those rows left, which contain no null values. Null
@@ -2190,7 +2237,7 @@ func evaluate*(node: FormulaNode): Value =
   of fkVector: result = %~ node.colName
   of fkNone: result = ValueNull
 
-proc evaluate*(node: FormulaNode, df: DataFrameLike): auto =
+proc evaluate*[T](node: FormulaNode, df: DataFrame[T]): auto =
   ## Tries to return a `Column` from a `FormulaNode` by evaluating it
   ## on a `DataFrame df`.
   ##
@@ -2209,7 +2256,7 @@ proc evaluate*(node: FormulaNode, df: DataFrameLike): auto =
   of fkScalar: result = constantColumn(node.fnS(df), df.len)
   of fkNone: result = newColumn(colNone, df.len)
 
-proc reduce*(node: FormulaNode, df: DataFrameLike): Value =
+proc reduce*[T](node: FormulaNode, df: DataFrame[T]): Value =
   ## Tries to a single `Value` from a reducing `FormulaNode` by evaluating it
   ## on a `DataFrame df`.
   ##
