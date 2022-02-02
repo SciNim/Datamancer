@@ -43,6 +43,9 @@ type
     name*: NimNode # name of the formula -> refers to new column / assignment name
     rawName*: string # name of the formula body as lisp
     loop*: NimNode # loop needs to be patched to remove accented quotes etc
+    df*: Option[NimNode] # the (optional) DataFrame from which to deduce the type of the closure argument DF
+    dfType*: NimNode # the extracted/default type of the `DataFrame` argument to the closure
+    colResType*: NimNode # the returned `Column` type of a `fkVektor` closure (usually `Column`)
   ## `Lift` stores a node which needs to be lifted out of a for loop, because it performs a
   ## reducing operation on a full DF column. It will be replaced by `liftedNode` in the loop
   ## body.
@@ -84,8 +87,9 @@ const
   RIdent = "r"
   DFIdent = "df"
   IdxIdent = "idx"
-  ColIdent = "Column"
+  ColIdent* = "Column"
   ValueIdent = "Value"
+  InputDF* = "InputDataFrame" # the data frame given as input to deduce types from
 
 const Dtypes* = ["float", "int", "string", "bool", "Value"]
 const DtypesAll* = ["float", "float64", "int", "int64", "string", "bool", "Value"]
@@ -510,12 +514,13 @@ proc generateClosure*(fct: FormulaCT): NimNode =
     procBody.add convertDtype(fct.resType)
   procBody.add convertLoop(fct.preface, fct.resType, fct.loop, fct.funcKind)
   result = procBody
+  let dfTyp = fct.dfType
   var params: array[2, NimNode]
   case fct.funcKind
   of fkVector:
-    params = [ident(ColIdent),
+    params = [fct.colResType,
               nnkIdentDefs.newTree(ident(DfIdent),
-                                   ident"DataFrame",
+                                   nnkBracketExpr.newTree(ident"DataFrame", dfTyp),
                                    newEmptyNode())]
   of fkScalar:
     when (NimMajor, NimMinor, NimPatch) < (1, 5, 0):
@@ -525,7 +530,7 @@ proc generateClosure*(fct: FormulaCT): NimNode =
     # to avoid clashes with other `Value` objects, fully clarify we mean ours
     params = [valueId,
               nnkIdentDefs.newTree(ident(DfIdent),
-                                   ident"DataFrame",
+                                   nnkBracketExpr.newTree(ident"DataFrame", dfTyp),
                                    newEmptyNode())]
   else:
     error("Invalid FormulaKind `" & $(fct.funcKind.repr) & "` in `convertLoop`. Already handled " &

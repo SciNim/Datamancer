@@ -340,9 +340,9 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
         copyBuf(data, buf, idx, colStart)
         col.oCol[row] = %~ buf
     of colConstant: discard # already set
-    of colNone:
+    of colNone, colGeneric:
       raise newException(IOError, "Invalid column type to parse into: `colNone`. " &
-        "This shouldn't have happened! row = " & $row & ", col = " & $col)
+        "This shouldn't have happened! row = " & $row & ", col = ")# & $col)
 
 template advanceToNextRow() {.dirty.} =
   ## The steps done after a line break is found & we advance to the next row.

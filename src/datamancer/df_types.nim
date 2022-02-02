@@ -7,12 +7,17 @@ type
 
   # where value is as usual
   # then
-  DataFrame* = ref object
+  DataFrame*[T] = ref object
     len*: int
-    data*: OrderedTable[string, Column]
+    data*: OrderedTable[string, T] ## `T` is the column kind
     case kind*: DataFrameKind
     of dfGrouped:
       # a grouped data frame stores the keys of the groups and maps them to
       # a set of the categories
       groupMap*: OrderedTable[string, HashSet[Value]]
     else: discard
+
+  DataFrameLike* = concept x
+    x.len is int
+    x.data[string].kind is ColKind
+    x.kind is DataFrameKind
