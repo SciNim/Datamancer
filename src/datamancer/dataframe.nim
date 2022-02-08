@@ -975,27 +975,12 @@ proc buildColHashes(df: DataFrame, keys: seq[string]): seq[seq[Value]] =
       row[j] = colCols[j][i]
     result[i] = row
 
-proc selectTensors(df: DataFrame, keys: seq[string]): seq[Tensor[Value]] =
-  ## Returns a subset of the `df` containing all given column of the `keys`
-  ## in a sequence of `Tensor[Value]`.
-  ##
-  ## Used as a workaround to issue #12.
-  result = newSeq[Tensor[Value]](keys.len)
-  for i, k in keys:
-    result[i] = df[k, Value]
-
-proc row(cols: seq[Tensor[Value]], idx: int): seq[Value] =
-  ## From the result of `selectTensors`, returns a single `seq[Value]` of the
-  ## "row" at index `idx`.
-  result = newSeq[Value](cols.len)
-  for i, col in cols:
-    result[i] = col[idx]
-
-proc assignRow(row: var seq[Value], cols: seq[Tensor[Value]], idx: int) =
-  ## From the result of `selectTensors`, assigns the mutable `seq[Value]` the values for
-  ## "row" at index `idx`.
-  for i, col in mpairs(row):
-    col = cols[i][idx]
+proc compareRows(cols: seq[Column], i, j: int): bool =
+  result = true
+  for c in cols:
+    withNativeDtype(c):
+      result = c[i, dtype] == c[j, dtype]
+    if not result: return false
 
 proc arrange*(df: DataFrame, by: varargs[string], order = SortOrder.Ascending): DataFrame
 iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Value)], DataFrame) =
@@ -1028,8 +1013,8 @@ iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Valu
   let keys = getKeys(df.groupMap)
   # arrange by all keys in ascending order
   let dfArranged = df.arrange(keys, order = order)
-  # having the data frame in a sorted order, walk it and return each combination
-  let hashes = dfArranged.selectTensors(keys)
+  # get all columns by which we group in a seq
+  let cols = keys.mapIt(dfArranged[it])
 
   proc buildClassLabel(df: DataFrame, keys: seq[string],
                        idx: int): seq[(string, Value)] =
@@ -1037,13 +1022,10 @@ iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Valu
     for j, key in keys:
       result[j] = (key, df[key][idx, Value])
 
-  var
-    currentHash = hashes.row(0) # [0]
-    lastHash = hashes.row(0) # [0]
-    startIdx, stopIdx: int # indices which indicate from where to where a subgroup is located
+  var startIdx, stopIdx: int # indices which indicate from where to where a subgroup is located
+  var lastIdx = 0 # essentially just i - 1, handling i = 0
   for i in 0 ..< dfArranged.len:
-    currentHash.assignRow(hashes, i) # [i]
-    if currentHash == lastHash:
+    if compareRows(cols, i, lastIdx): # if row is the same, continue
       # continue accumulating
       discard
     elif i > 0:
@@ -1054,11 +1036,11 @@ iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Valu
       yield (buildClassLabel(dfArranged, keys, stopIdx), dfArranged[startIdx .. stopIdx])
       # set new start and stop idx
       startIdx = i
-      lastHash = currentHash
     else:
       # should only happen for i == 0
       doAssert i == 0
-      lastHash = currentHash
+    if i > 0:
+      inc lastIdx
   # finally yield the last subgroup or the whole group, in case we only
   # have a single key
   yield (buildClassLabel(dfArranged, keys, dfArranged.high), dfArranged[startIdx .. dfArranged.high])
