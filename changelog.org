@@ -73,6 +73,8 @@
   shifted ones are dropped).
 - the =showBrowser= helper to view a =DataFrame= in the browser now
   adds an additional "index" column
+- improve performance of =groups= iterator (particularly in cases
+  where the DF is already sorted / the sorting is cheap)  
 * v0.1.11
 - add convenience comparison operators for =Value= elements of a
   column with regular types *within a =f{}= formula* (they are emitted
