@@ -4,11 +4,6 @@ import memfiles, streams, strutils, tables, parsecsv, sequtils
 # for `showBrowser`
 import browsers, strformat, os
 
-# no-op for backward compatibility with `toDf(readCsv(...))`
-proc toDf*(df: DataFrame): DataFrame {.deprecated: "`toDf` is not required anymore, because `readCsv` " &
-  "already returns an actual `DataFrame` nowadays. Feel free to remove the `toDf` call."} =
-  df
-
 proc checkHeader(s: Stream, fname, header: string, colNames: seq[string]): bool =
   ## checks whether the given file contains the header `header`
   result = true

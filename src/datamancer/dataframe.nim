@@ -199,7 +199,7 @@ proc `[]`*[T](df: DataFrame, key: string, dtype: typedesc[T]): Tensor[T] =
   ## further processing.
   runnableExamples:
     import sequtils
-    let df = seqsToDf({"x" : toSeq(1 .. 5)})
+    let df = toDf({"x" : toSeq(1 .. 5)})
     let t: Tensor[int] = df["x", int]
     doAssert t.sum == 15
   result = df.data[key].toTensor(dtype)
@@ -237,7 +237,7 @@ proc `[]=`*(df: var DataFrame, k: string, col: Column) {.inline.} =
 proc `[]=`*[T: SomeNumber | string | bool](df: var DataFrame, k: string, t: T) {.inline.} =
   ## Assigns a scalar `t` as a constant column to the `DataFrame`.
   runnableExamples:
-    var df = seqsToDf({"x" : @[1,2,3]})
+    var df = toDf({"x" : @[1,2,3]})
     df["y"] = 5
     doAssert df["y"].isConstant
     doAssert df["y"].len == 3
@@ -263,7 +263,7 @@ proc `[]=`*[T](df: var DataFrame, k: string, idx: int, val: T) {.inline.} =
   ## use it if you know the type of `t` corresponds to the data type of the underlying
   ## column! Assign at an index on the ``column`` for a more sane behavior.
   runnableExamples:
-    var df = seqsToDf({"x" : [1,2,3]})
+    var df = toDf({"x" : [1,2,3]})
     df["x", 1] = 5
     doAssert df["x", int] == [1,5,3].toTensor
     ## df["x", 2] = 1.2 <- produces runtime error that specif `kind` field in Column
@@ -289,7 +289,7 @@ proc `[]=`*[T](df: var Dataframe, fn: FormulaNode, key: string, val: T) =
   ##
   ## This is a somewhat esoteric procedure, but can be used to mask rows matching some condition.
   runnableExamples:
-    var df = seqsToDf({"x" : [1,2,3], "y" : [5,6,7]})
+    var df = toDf({"x" : [1,2,3], "y" : [5,6,7]})
     df[f{`x` > 1}, "x"] = 5 ## assign 5 to all rows > 1
     doAssert df["x", int] == [1,5,5].toTensor
     doAssert df["y", int] == [5,6,7].toTensor ## remains unchanged
@@ -322,7 +322,7 @@ proc asgn*(df: var DataFrame, k: string, col: Column) {.inline.} =
 # ---------- Data frame construction from data ----------
 
 proc extendShortColumns*(df: var DataFrame) =
-  ## initial calls to `seqsToDf` and other procs may result in a ragged DF, which
+  ## initial calls to `toDf` and other procs may result in a ragged DF, which
   ## has less entries in certain columns than the data frame length.
   ## This proc fills up the mutable dataframe in those columns
   for k in keys(df):
@@ -333,66 +333,7 @@ proc extendShortColumns*(df: var DataFrame) =
       let nFill = df.len - df[k].len
       df[k] = df[k].add nullColumn(nFill)
 
-macro toTab*(args: varargs[untyped]): untyped =
-  expectKind(args, nnkArglist)
-  var s = args
-  if args.len == 1 and args[0].kind == nnkTableConstr:
-    # has to be tableConstr or simple ident
-    s = args[0]
-  elif args.len == 1 and args[0].kind notin {nnkIdent, nnkSym}:
-    error("If only single argument it has to be an ident or symbol, " &
-      "but " & $args[0].repr & " is of kind: " & $args[0].kind)
-  let data = ident"columns"
-  result = newStmtList()
-  result.add quote do:
-    var `data` = newDataFrame()
-  for a in s:
-    # let's just try to deal the compiler with it. It should fail on `toColumn` if we
-    # cannot support it after all
-    case a.kind
-    of nnkExprColonExpr:
-      let nameCh = a[0]
-      let valCh = a[1]
-      let colN = genSym(nskLet, "column")
-      result.add quote do:
-        let `colN` = `valCh`.toColumn
-        asgn(`data`, `nameCh`, `colN`)
-        `data`.len = max(`data`.len, `colN`.len)
-    else:
-      let colN = genSym(nskLet, "column")
-      let aName = a.toStrLit
-      result.add quote do:
-        let `colN` = `a`.toColumn
-        asgn(`data`, `aName`, `colN`)
-        `data`.len = max(`data`.len, `colN`.len)
-  result = quote do:
-    block:
-      `result`
-      # finally fill up possible columns shorter than df.len
-      `data`.extendShortColumns()
-      `data`
-  #echo result.treerepr
-  #echo result.repr
-
-template seqsToDf*(s: varargs[untyped]): untyped =
-  ## converts an arbitrary number of sequences to a `DataFrame` or any
-  ## number of key / value pairs where we have string / seq[T] pairs.
-  toTab(s)
-
-template colsToDf*(s: varargs[untyped]): untyped =
-  ## converts an arbitrary number of columns to a `DataFrame` or any
-  ## number of key / value pairs where we have string / seq[T] pairs.
-  toTab(s)
-
-template dataFrame*(s: varargs[untyped]): untyped =
-  ## alias for `seqsToDf`
-  toTab(s)
-
-template toDf*(s: varargs[untyped]): untyped =
-  ## alias for `seqsToDf`
-  toTab(s)
-
-proc toDf*(t: OrderedTable[string, seq[string]]): DataFrame =
+proc strTabToDf*(t: OrderedTable[string, seq[string]]): DataFrame =
   ## Creates a data frame from a table of seq[string].
   ##
   ## Note 1: This is mostly used for the old `readCsv` procedure, which is now called
@@ -456,7 +397,7 @@ proc toDf*(t: OrderedTable[string, seq[string]]): DataFrame =
     result.len = max(result.data[k].len, result.len)
   result.extendShortColumns()
 
-proc toDf*(t: OrderedTable[string, seq[Value]]): DataFrame =
+proc valTabToDf*(t: OrderedTable[string, seq[Value]]): DataFrame =
   ## Creates a data frame from a table of `seq[Value]`.
   ##
   ## Note: This is also mainly a fallback option for old code.
@@ -466,12 +407,116 @@ proc toDf*(t: OrderedTable[string, seq[Value]]): DataFrame =
     result.len = max(v.len, result.len)
   result.extendShortColumns()
 
+proc assignAdjust[T](df: var DataFrame, name: string, s: T) =
+  ## If applicable, assigns `s` as a column to `df` and adjusts the length
+  ## Might error at CT if type is not storable
+  let col = toColumn s
+  asgn(df, name, col)
+  df.len = max(df.len, col.len)
+
+proc maybeToDf[T](s: T, name = ""): DataFrame =
+  ## Attempts to convert the given typed argument to a valid `DataFrame`.
+  ## If one of a few known types are found, dispatches to the correct procedure.
+  ## Else attempts to generate a new `DataFrame` using `assignAdjust`, which may
+  ## fail on a call to `toColumn` if the given type cannot be converted to a `Column`.
+  when T is DataFrame:
+    static: hint "`toDf` for input `DataFrames` is a no-op. If the argument " &
+      "is a call to `readCsv`, note that it nowadays returns a `DataFrame` already!"
+    result = s
+  elif T is OrderedTable[string, seq[string]]:
+    result = strTabToDf(s)
+  elif T is OrderedTable[string, seq[Value]]:
+    result = valTabToDf(s)
+  else:
+    result = newDataFrame()
+    assignAdjust(result, name, s)
+
+macro toTab*(args: varargs[untyped]): untyped =
+  ## Performs conversion of the untyped arguments to a `DataFrame`.
+  ##
+  ## Arguments may be either a list of identifiers, symbols or calls which
+  ## are convertible to a `Column`:
+  ##
+  ## - `toTab(x, y, z)`
+  ## - `toTab(foo(), bar())`
+  ##
+  ## or an `OrderedTable[string, seq[string/Value]]`
+  ## - `toTab(someOrderedTable)`
+  ##
+  ## or a table constructor:
+  ## - `toTab({ "foo" : x, "y" : bar() })`
+  expectKind(args, nnkArglist)
+  var s = args
+  if args.len == 1:
+    let arg = args[0]
+    case arg.kind
+    of nnkTableConstr:
+      # unpack table constr node
+      s = arg
+    of nnkIdent, nnkSym, nnkCall, nnkCommand:
+      # Either a single ident or symbol or a call that returns something DF convertible
+      # Dispatch to `maybeToDf`
+      return nnkBlockStmt.newTree(
+        newEmptyNode(),
+        nnkCall.newTree(bindSym("maybeToDf"), arg, arg.toStrLit)
+      )
+    else:
+      error("If only single argument it has to be an ident, symbol, call or command, " &
+        "but " & $args[0].repr & " is of kind: " & $args[0].kind)
+  let data = genSym(nskVar, "columns")
+  result = newStmtList()
+  result.add quote do:
+    var `data` = newDataFrame()
+  for a in s:
+    # let's just let the compiler deal with it. It should fail on `toColumn` if we
+    # cannot support it after all
+    let asgnSym = bindSym("assignAdjust")
+    case a.kind
+    of nnkExprColonExpr:
+      let nameCh = a[0]
+      let valCh = a[1]
+      let colN = genSym(nskLet, "column")
+      result.add quote do:
+        `asgnSym`(`data`, `nameCh`, `valCh`)
+    else:
+      let colN = genSym(nskLet, "column")
+      let aName = a.toStrLit
+      result.add quote do:
+        `asgnSym`(`data`, `aName`, `a`)
+
+  result = quote do:
+    block:
+      `result`
+      # finally fill up possible columns shorter than df.len
+      `data`.extendShortColumns()
+      `data`
+
+template seqsToDf*(s: varargs[untyped]): untyped =
+  ## convertsb an arbitrary number of sequences to a `DataFrame` or any
+  ## number of key / value pairs where we have string / seq[T] pairs.
+  static: hint "Consider simply using `toDf` instead of `seqsToDf`."
+  toTab(s)
+
+template colsToDf*(s: varargs[untyped]): untyped =
+  ## converts an arbitrary number of columns to a `DataFrame` or any
+  ## number of key / value pairs where we have string / seq[T] pairs.
+  toTab(s)
+
+template dataFrame*(s: varargs[untyped]): untyped =
+  ## alias for `toTab`
+  toTab(s)
+
+template toDf*(s: varargs[untyped]): untyped =
+  ## An alias for `toTab` and the default way to construct a `DataFrame` from
+  ## one or more collections (seqs, Tensors, Columns, ...).
+  toTab(s)
+
 proc row*(df: DataFrame, idx: int, cols: varargs[string]): Value {.inline.} =
   ## Returns the row `idx` of the DataFrame `df` as a `Value` of kind `VObject`.
   ##
   ## If any `cols` are given, only those columns will appear in the resulting `Value`.
   runnableExamples:
-    let df = seqsToDf({"x" : [1,2,3], "y" : [1.1, 2.2, 3.3], "z" : ["a", "b", "c"]})
+    let df = toDf({"x" : [1,2,3], "y" : [1.1, 2.2, 3.3], "z" : ["a", "b", "c"]})
     let row = df.row(0)
     doAssert row["x"] == %~ 1
     doAssert row["x"].kind == VInt
@@ -527,7 +572,7 @@ func isColumn*(fn: FormulaNode, df: DataFrame): bool =
   ## column in the `DataFrame`.
   runnableExamples:
     let fn = f{`x` * `x`}
-    let df = seqsToDf({"x" : @[1, 2, 3]})
+    let df = toDf({"x" : @[1, 2, 3]})
       .mutate(fn) # creates a new column of squared `x`
     doAssert fn.isColumn(df)
 
@@ -542,7 +587,7 @@ func isConstant*(fn: FormulaNode, df: DataFrame): bool =
   ## between constant / non constant columns.
   runnableExamples:
     let fn = f{"y"} # is a reference to a constant column.
-    let df = seqsToDf({"x" : @[1, 2, 3], "y" : 5})
+    let df = toDf({"x" : @[1, 2, 3], "y" : 5})
     doAssert fn.isConstant(df)
 
   result = $fn in df and df[$fn].isConstant
@@ -555,7 +600,7 @@ template withCombinedType*(df: DataFrame,
   ##
   ## It injects a variable `dtype` into the calling scope.
   runnableExamples:
-    let df = seqsToDf({"x" : @[1, 2, 3], "y" : @[2, 3, 4], "z" : @[1.1, 2.2, 3.3]})
+    let df = toDf({"x" : @[1, 2, 3], "y" : @[2, 3, 4], "z" : @[1.1, 2.2, 3.3]})
     withCombinedType(df, @["x", "y"]):
       doAssert dtype is int
     withCombinedType(df, @["x", "z"]):
@@ -751,8 +796,8 @@ proc bind_rows*(dfs: varargs[(string, DataFrame)], id: string = ""): DataFrame =
     let c = [4, 5, 6, 7]
     let d = [8, 9, 10, 11]
 
-    let df = seqsToDf({"a" : a, "b" : b})
-    let df2 = seqsToDf({"a" : c, "b" : d})
+    let df = toDf({"a" : a, "b" : b})
+    let df2 = toDf({"a" : c, "b" : d})
     import sequtils
 
     block:
@@ -764,7 +809,7 @@ proc bind_rows*(dfs: varargs[(string, DataFrame)], id: string = ""): DataFrame =
       doAssert res["From", string] == concat(newSeqWith(3, "A"),
                                              newSeqWith(4, "B")).toTensor
     block:
-      let df3 = seqsToDf({"a" : c, "d" : d})
+      let df3 = toDf({"a" : c, "d" : d})
       let res = bind_rows([("A", df), ("B", df3)], id = "From")
       doAssert res.ncols == 4
       doAssert res["a", int] == concat(@a, @c).toTensor
@@ -828,8 +873,8 @@ template bind_rows*(dfs: varargs[DataFrame], id: string = ""): DataFrame =
     let c = [4, 5, 6, 7]
     let d = [8, 9, 10, 11]
 
-    let df = seqsToDf({"a" : a, "b" : b})
-    let df2 = seqsToDf({"a" : c, "b" : d})
+    let df = toDf({"a" : a, "b" : b})
+    let df2 = toDf({"a" : c, "b" : d})
     import sequtils
 
     block:
@@ -867,8 +912,8 @@ proc add*(df: var DataFrame, dfToAdd: DataFrame) =
     let c = [4, 5, 6, 7]
     let d = [8, 9, 10, 11]
 
-    let df = seqsToDf({"a" : a, "b" : b})
-    let df2 = seqsToDf({"a" : c, "b" : d})
+    let df = toDf({"a" : a, "b" : b})
+    let df2 = toDf({"a" : c, "b" : d})
     import sequtils
     block:
       var dfRes = newDataFrame()
@@ -877,7 +922,7 @@ proc add*(df: var DataFrame, dfToAdd: DataFrame) =
       dfRes.add df2
       doAssert dfRes.len == 7
       try:
-        dfRes.add seqsToDf({"c": [1,3]})
+        dfRes.add toDf({"c": [1,3]})
       except ValueError:
         discard
 
@@ -992,13 +1037,13 @@ iterator groups*(df: DataFrame, order = SortOrder.Ascending): (seq[(string, Valu
   ##
   ## Note: only non empty data frames will be yielded!
   runnableExamples:
-    let df = seqsToDf({ "Class" : @["A", "C", "B", "B", "A", "C", "C"],
+    let df = toDf({ "Class" : @["A", "C", "B", "B", "A", "C", "C"],
                         "Num" : @[1, 5, 3, 4, 8, 7, 2] })
       .group_by("Class")
     let expClass = ["A", "B", "C"]
-    let dfA = seqsToDf({ "Class" : ["A", "A"], "Num" : [1, 8] })
-    let dfB = seqsToDf({ "Class" : ["B", "B"], "Num" : [3, 4] })
-    let dfC = seqsToDf({ "Class" : ["C", "C", "C"], "Num" : [5, 7, 2] })
+    let dfA = toDf({ "Class" : ["A", "A"], "Num" : [1, 8] })
+    let dfB = toDf({ "Class" : ["B", "B"], "Num" : [3, 4] })
+    let dfC = toDf({ "Class" : ["C", "C", "C"], "Num" : [5, 7, 2] })
     let expDf = [dfA, dfB, dfC]
     var idx = 0
     for t, subDf in groups(df):
@@ -1167,7 +1212,7 @@ proc filter*(df: DataFrame, conds: varargs[FormulaNode]): DataFrame =
   ## Both mapping and reducing formulas are supported, but each formula kind must return
   ## a boolean value. In a case of a mismatch `FormulaMismatchError` is thrown.
   runnableExamples:
-    let df = seqsToDf({ "x" : @[1, 2, 3, 4, 5], "y" : @["a", "b", "c", "d", "e"] })
+    let df = toDf({ "x" : @[1, 2, 3, 4, 5], "y" : @["a", "b", "c", "d", "e"] })
     let dfRes = df.filter(f{ `x` < 3 or `y` == "e" }) ## arbitrary boolean expressions supported
     doAssert dfRes["x", int] == [1, 2, 5].toTensor
     doAssert dfRes["y", string] == ["a", "b", "e"].toTensor
@@ -1235,7 +1280,7 @@ proc select*[T: string | FormulaNode](df: DataFrame, cols: varargs[T]): DataFram
   ## Note: string and formula node arguments ``cannot`` be mixed. If a rename is
   ## desired, all other arguments need to be given as `fkVariable` formulas.
   runnableExamples:
-    let df = seqsToDf({"Foo" : [1,2,3], "Bar" : [5,6,7], "Baz" : [1.2, 2.3, 3.4]})
+    let df = toDf({"Foo" : [1,2,3], "Bar" : [5,6,7], "Baz" : [1.2, 2.3, 3.4]})
     block:
       let dfRes = df.select(["Foo", "Bar"])
       doAssert dfRes.ncols == 2
@@ -1316,7 +1361,7 @@ proc mutate*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
   ## name of the column if present. If not, the name will be computed from
   ## a lisp representation of the formula code.
   runnableExamples:
-    let df = seqsToDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
     block:
       let dfRes = df.mutate(f{"x+y" ~ `x` + `y`})
       doAssert dfRes.ncols == 4
@@ -1374,7 +1419,7 @@ proc transmute*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
   ## name of the column if present. If not, the name will be computed from
   ## a lisp representation of the formula code.
   runnableExamples:
-    let df = seqsToDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
     let dfRes = df.transmute(f{"x+y" ~ `x` + `y`})
     doAssert "x+y" in dfRes
     doAssert dfRes.ncols == 1
@@ -1395,7 +1440,7 @@ proc rename*(df: DataFrame, cols: varargs[FormulaNode]): DataFrame =
   ## Note: the renamed columns will be moved to the right side of the data frame,
   ## so the column order will be changed.
   runnableExamples:
-    let df = seqsToDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12] })
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12] })
     let dfRes = df.rename(f{"foo" <- "x"})
     doAssert dfRes.ncols == 2
     doAssert "x" notin dfRes
@@ -1527,7 +1572,7 @@ proc arrange*(df: DataFrame, by: varargs[string], order = SortOrder.Ascending): 
   ##
   ## Do ``not`` depend on the order within a tie, if no further ordering is given!
   runnableExamples:
-    let df = seqsToDf({ "x" : @[5, 2, 3, 2], "y" : @[4, 3, 2, 1]})
+    let df = toDf({ "x" : @[5, 2, 3, 2], "y" : @[4, 3, 2, 1]})
     block:
       let dfRes = df.arrange("x")
       doAssert dfRes["x", int] == [2, 2, 3, 5].toTensor
@@ -1575,9 +1620,9 @@ proc innerJoin*(df1, df2: DataFrame, by: string): DataFrame =
   ## This is useful to combine two data frames that share a single column. It "zips"
   ## them together according to the column `by`.
   runnableExamples:
-    let df1 = seqsToDf({ "Class" : @["A", "B", "C", "D", "E"],
+    let df1 = toDf({ "Class" : @["A", "B", "C", "D", "E"],
                          "Num" : @[1, 5, 3, 4, 6] })
-    let df2 = seqsToDf({ "Class" : ["E", "B", "A", "D", "C"],
+    let df2 = toDf({ "Class" : ["E", "B", "A", "D", "C"],
                          "Ids" : @[123, 124, 125, 126, 127] })
     let dfRes = innerJoin(df1, df2, by = "Class")
     doAssert dfRes.ncols == 3
@@ -1702,7 +1747,7 @@ proc summarize*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
   ## as arguments and produce scalars, using the `<<` operator. If no left hand side
   ## and operator is given, the new column will be computed automatically.
   runnableExamples:
-    let df = seqsToDf({ "x" : @[1, 2, 3, 4, 5], "y" : @[5, 10, 15, 20, 25] })
+    let df = toDf({ "x" : @[1, 2, 3, 4, 5], "y" : @[5, 10, 15, 20, 25] })
     block:
       let dfRes = df.summarize(f{float:  mean(`x`) }) ## compute mean, auto creates a column name
       doAssert dfRes.len == 1 # reduced to 1 row
@@ -1766,7 +1811,7 @@ proc count*(df: DataFrame, col: string, name = "n"): DataFrame =
   ## by column `col` and then applying a reducing `summarize` call that
   ## returns the length of each sub group.
   runnableExamples:
-    let df = seqsToDf({"Class" : @["A", "C", "B", "B", "A", "C", "C"]})
+    let df = toDf({"Class" : @["A", "C", "B", "B", "A", "C", "C"]})
     let dfRes = df.count("Class")
     doAssert dfRes.len == 3 # one row per class
     doAssert dfRes["n", int] == [2, 2, 3].toTensor
@@ -1867,7 +1912,7 @@ proc gather*(df: DataFrame, cols: varargs[string],
   ##
   ## The inverse operation is `spread`.
   runnableExamples:
-    let df = seqsToDf({"A" : [1, 8, 0], "B" : [3, 4, 0], "C" : [5, 7, 2]})
+    let df = toDf({"A" : [1, 8, 0], "B" : [3, 4, 0], "C" : [5, 7, 2]})
     let dfRes = df.gather(df.getKeys(), ## get all keys to gather
                           key = "Class", ## the name of the `key` column
                           value = "Num")
@@ -1922,7 +1967,7 @@ proc spread*[T](df: DataFrame, namesFrom, valuesFrom: string,
   ## in the column.
   runnableExamples:
     block:
-      let df = seqsToDf({ "Class" : ["A", "A", "A", "B", "B", "B", "C", "C", "C"],
+      let df = toDf({ "Class" : ["A", "A", "A", "B", "B", "B", "C", "C", "C"],
                           "Num" : [1, 8, 0, 3, 4, 0, 5, 7, 2] })
       let dfRes = df.spread(namesFrom = "Class",
                             valuesFrom = "Num")
@@ -1931,7 +1976,7 @@ proc spread*[T](df: DataFrame, namesFrom, valuesFrom: string,
       doAssert dfRes["B", int] == [3, 4, 0].toTensor
       doAssert dfRes["C", int] == [5, 7, 2].toTensor
     block:
-      let df = seqsToDf({ "Class" : ["A", "A", "A", "B", "B", "C", "C", "C", "C"],
+      let df = toDf({ "Class" : ["A", "A", "A", "B", "B", "C", "C", "C", "C"],
                           "Num" : [1, 8, 0, 3, 4, 0, 5, 7, 2] })
       let dfRes = df.spread(namesFrom = "Class",
                             valuesFrom = "Num")
@@ -2012,7 +2057,7 @@ proc unique*(df: DataFrame, cols: varargs[string],
   ## Note: The corresponding `dplyr` function is `distinct`. The choice for
   ## `unique` was made, since `distinct` is a keyword in Nim!
   runnableExamples:
-    let df = seqsToDf({ "x" : @[1, 2, 2, 2, 4], "y" : @[5.0, 6.0, 7.0, 8.0, 9.0],
+    let df = toDf({ "x" : @[1, 2, 2, 2, 4], "y" : @[5.0, 6.0, 7.0, 8.0, 9.0],
                         "z" : @["a", "b", "b", "d", "e"]})
     block:
       let dfRes = df.unique() ## consider uniqueness of all columns, nothing removed
