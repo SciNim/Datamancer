@@ -1,4 +1,4 @@
-import datamancer, unittest, sequtils, math, strutils, streams, sugar, sets
+import datamancer, unittest, sequtils, math, strutils, streams, sugar, sets, tables
 import algorithm
 import seqmath
 from os import removeFile
@@ -216,6 +216,93 @@ b,,foo
         removeFile(path)
 
 suite "DataFrame tests":
+
+  test "`toDf` is no-op for DF":
+    let df = toDf(toDf(readCsv("data/mpg.csv")))
+    check df["class", string] == readCsv("data/mpg.csv")["class", string]
+
+  test "`toDf` is works on an OrderedTable[string, seq[string]]":
+    var tab = initOrderedTable[string, seq[string]]()
+    tab["x"] = @["1", "2"]
+    tab["y"] = @["4", "5"]
+    let df = toDf(tab)
+    check df["x", int] == [1, 2].toTensor
+    check df["y", int] == [4, 5].toTensor
+
+  test "`toDf` is works on an OrderedTable[string, seq[Value]]":
+    var tab = initOrderedTable[string, seq[Value]]()
+    tab["x"] = @[%~ 1, %~ 2]
+    tab["y"] = @[%~ 4, %~ 5]
+    let df = toDf(tab)
+    check df["x", int] == [1, 2].toTensor
+    check df["y", int] == [4, 5].toTensor
+
+  test "`toDf` is works for a single identifier":
+    let x = @[1, 2, 3]
+    let df = toDf(x)
+    check "x" in df
+    check df["x", int] == [1, 2, 3].toTensor
+
+  test "`toDf` is works for multiple identifiers":
+    let x = @[1, 2, 3]
+    let y = @[4, 5, 6]
+    let df = toDf(x, y)
+    check "x" in df
+    check df["x", int] == [1, 2, 3].toTensor
+    check "y" in df
+    check df["y", int] == [4, 5, 6].toTensor
+
+  test "`toDf` is works for a single call":
+    proc foo(): seq[int] =
+      result = @[1, 2, 3]
+    let df = toDf(foo())
+    check "foo()" in df
+    check df["foo()", int] == [1, 2, 3].toTensor
+
+  test "`toDf` is works for multiple calls":
+    proc foo(): seq[int] =
+      result = @[1, 2, 3]
+    proc bar(): seq[string] =
+      result = @["a", "b", "c"]
+    let df = toDf(foo(), bar())
+    check "foo()" in df
+    check df["foo()", int] == [1, 2, 3].toTensor
+    check "bar()" in df
+    check df["bar()", string] == ["a", "b", "c"].toTensor
+
+  test "`toDf` is works for a single TableConstr element":
+    let x = @[1, 2, 3]
+    let df = toDf({"x" : x})
+    check "x" in df
+    check df["x", int] == [1, 2, 3].toTensor
+
+  test "`toDf` is works for multiple TableConstr elements":
+    let x = @[1, 2, 3]
+    let y = @[4, 5, 6]
+    let df = toDf({"x" : x, "y" : y})
+    check "x" in df
+    check df["x", int] == [1, 2, 3].toTensor
+    check "y" in df
+    check df["y", int] == [4, 5, 6].toTensor
+
+  test "`toDf` is works for a single call in a TableConstr":
+    proc foo(): seq[int] =
+      result = @[1, 2, 3]
+    let df = toDf({"x" : foo()})
+    check "x" in df
+    check df["x", int] == [1, 2, 3].toTensor
+
+  test "`toDf` is works for multiple calls in a TableConstr":
+    proc foo(): seq[int] =
+      result = @[1, 2, 3]
+    proc bar(): seq[string] =
+      result = @["a", "b", "c"]
+    let df = toDf({"x" : foo(), "y" : bar()})
+    check "x" in df
+    check df["x", int] == [1, 2, 3].toTensor
+    check "y" in df
+    check df["y", string] == ["a", "b", "c"].toTensor
+
   test "Creation of DFs from seqs":
     let a = [1, 2, 3]
     let b = [3, 4, 5]
@@ -223,17 +310,17 @@ suite "DataFrame tests":
     let d = [8, 9, 10]
     # creation directly from a,b,c,d
     block:
-      let df = seqsToDf(a, b, c, d)
+      let df = toDf(a, b, c, d)
       check "a" in df
       check "b" in df
       check "c" in df
       check "d" in df
     # creation via key / value pairs
     block:
-      let df = seqsToDf({ "one" : a,
-                          "two" : b,
-                          "three" : c,
-                          "four" : d})
+      let df = toDf({ "one" : a,
+                      "two" : b,
+                      "three" : c,
+                      "four" : d})
       check "one" in df
       check "two" in df
       check "three" in df
@@ -243,8 +330,8 @@ suite "DataFrame tests":
     let a = @[123'u8, 12, 55]
     let b = @[1.123'f32, 4.234, 1e12]
     let c = @[1001'i32, 1002, 1003]
-    var df = seqsToDf({ "a" : a,
-                        "b" : b })
+    var df = toDf({ "a" : a,
+                    "b" : b })
     check df["a"].kind == colInt
     check df["b"].kind == colFloat
     check df["a"].toTensor(int) == a.toTensor.asType(int)
@@ -258,7 +345,7 @@ suite "DataFrame tests":
     let a = @[123'u8, 12, 55]
     let aRepl = @[123'u8, 12, 33]
     let b = @[1.123'f32, 4.234, 1e12]
-    var df = seqsToDf({ "a" : a })
+    var df = toDf({ "a" : a })
     check df["a"].kind == colInt
     check df["a"].toTensor(int) == a.toTensor.asType(int)
     df["a"][df.high] = 33
@@ -292,9 +379,9 @@ suite "DataFrame tests":
       ## size of the given sequence is ``not`` checked at the moment. So take
       ## care that you actually hand a sequence of the same length as the DF!
       # create DF of the first 3 seqs
-      var df = seqsToDf({ "one" : a,
-                          "two" : b,
-                          "three" : c })
+      var df = toDf({ "one" : a,
+                      "two" : b,
+                      "three" : c })
       check "one" in df
       check "two" in df
       check "three" in df
@@ -309,9 +396,9 @@ suite "DataFrame tests":
     block:
       ## This version checks the length and fails if they don't match
       # create DF of the first 3 seqs
-      var df = seqsToDf({ "one" : a,
-                          "two" : b,
-                          "three" : c })
+      var df = toDf({ "one" : a,
+                      "two" : b,
+                      "three" : c })
       check "one" in df
       check "two" in df
       check "three" in df
@@ -323,9 +410,9 @@ suite "DataFrame tests":
       # check fails if length is longer
       let e = [1, 2, 3, 4, 5]
       # create DF of the first 3 seqs
-      var df = seqsToDf({ "one" : a,
-                          "two" : b,
-                          "three" : c })
+      var df = toDf({ "one" : a,
+                      "two" : b,
+                      "three" : c })
       check "one" in df
       check "two" in df
       check "three" in df
@@ -337,9 +424,9 @@ suite "DataFrame tests":
       # check fails if length is shorter
       let e = [1, 2]
       # create DF of the first 3 seqs
-      var df = seqsToDf({ "one" : a,
-                          "two" : b,
-                          "three" : c })
+      var df = toDf({ "one" : a,
+                      "two" : b,
+                      "three" : c })
       check "one" in df
       check "two" in df
       check "three" in df
@@ -352,10 +439,10 @@ suite "DataFrame tests":
       # check if we can override existing column
       let e = [11, 22, 33]
       # create DF of the first 3 seqs
-      var df = seqsToDf({ "one" : a,
-                          "two" : b,
-                          "three" : c,
-                          "four" : c}) # assign four as `c`
+      var df = toDf({ "one" : a,
+                      "two" : b,
+                      "three" : c,
+                      "four" : c}) # assign four as `c`
       check "one" in df
       check "two" in df
       check "three" in df
@@ -383,8 +470,8 @@ suite "DataFrame tests":
 
     block:
       # bind_rows with automatic `ids`, both having same columns
-      let df = seqsToDf({"a" : a, "b" : b})
-      let df2 = seqsToDf({"a" : c, "b" : d})
+      let df = toDf({"a" : a, "b" : b})
+      let df2 = toDf({"a" : c, "b" : d})
       let res = bind_rows([df, df2])
       when defined(defaultBackend):
         check toSeq(res["a"]) == %~ concat(@a, @c)
@@ -398,8 +485,8 @@ suite "DataFrame tests":
 
     block:
       # bind_rows with automatic `ids`, having different columns
-      let df = seqsToDf({"a" : a, "b" : b})
-      let df2 = seqsToDf({"a" : c, "d" : d})
+      let df = toDf({"a" : a, "b" : b})
+      let df2 = toDf({"a" : c, "d" : d})
       let res = bind_rows([df, df2])
       when defined(defaultBackend):
         check toSeq(res["a"]) == %~ concat(@a, @c)
@@ -419,8 +506,8 @@ suite "DataFrame tests":
 
     block:
       # bind_rows with custom `id` name, both having same columns
-      let df = seqsToDf({"a" : a, "b" : b})
-      let df2 = seqsToDf({"a" : c, "b" : d})
+      let df = toDf({"a" : a, "b" : b})
+      let df2 = toDf({"a" : c, "b" : d})
       let res = bind_rows([df, df2], id = "combine")
       when defined(defaultBackend):
         check toSeq(res["a"]) == %~ concat(@a, @c)
@@ -437,8 +524,8 @@ suite "DataFrame tests":
 
     block:
       # bind_rows with custom `id` name, custom `id` values, both having same columns
-      let df = seqsToDf({"a" : a, "b" : b})
-      let df2 = seqsToDf({"a" : c, "b" : d})
+      let df = toDf({"a" : a, "b" : b})
+      let df2 = toDf({"a" : c, "b" : d})
       let res = bind_rows([("one", df), ("two", df2)], id = "combine")
       when defined(defaultBackend):
         check toSeq(res["a"]) == %~ concat(@a, @c)
@@ -456,7 +543,7 @@ suite "DataFrame tests":
     proc almostEqual(x, y: float, eps = 1e-6): bool =
       result = (x - y) < eps
 
-    var mpg = toDf(readCsv("data/mpg.csv"))
+    var mpg = readCsv("data/mpg.csv")
 
     let mpggroup = mpg.group_by("cyl")
 
@@ -526,14 +613,14 @@ suite "DataFrame tests":
     check cylDrvFiltered.len == 23
 
   test "Unequal":
-    let mpg = toDf(readCsv("data/mpg.csv"))
+    let mpg = readCsv("data/mpg.csv")
 
     let mpgNoSuv = mpg.filter(f{`class` != "suv"})
     check "suv" notin mpgNoSuv["class"].unique
 
   test "Filter - two comparisons using `and`":
     let x = toSeq(0 .. 100)
-    let df = seqsToDf(x)
+    let df = toDf(x)
     let dfFilter = df.filter(f{c"x" >= 50 and
                                c"x" <= 75})
     when defined(defaultBackend):
@@ -543,7 +630,7 @@ suite "DataFrame tests":
 
   test "Filter - comparisons using function":
     let x = toSeq(0 .. 100)
-    let df = seqsToDf(x)
+    let df = toDf(x)
     let dfFilter = df.filter(f{float: c"x" >= max(c"x") * 0.5})
     when defined(defaultBackend):
       check dfFilter["x"].vToSeq == %~ toSeq(50 .. 100)
@@ -552,7 +639,7 @@ suite "DataFrame tests":
 
   test "Filter - data types":
     let x = toSeq(0 .. 100)
-    let df = seqsToDf(x)
+    let df = toDf(x)
     let dfFiltered = df.filter(f{float: c"x" >= max(c"x") * 0.5})
     check dfFiltered["x"].kind == colInt
     let dfReduced1 = df.summarize(f{int: max(c"x")})
@@ -564,7 +651,7 @@ suite "DataFrame tests":
     let x = toSeq(0 ..< 100)
     let y = x.mapIt(sin(it.float))
     let y2 = x.mapIt(pow(sin(it.float), 2.0))
-    let df = seqsToDf(x, y)
+    let df = toDf(x, y)
     check df.len == 100
     let dfTrans = df.transmute(f{"x"}, f{"y2" ~ c"y" * c"y"})
     check "y" notin dfTrans
@@ -579,7 +666,7 @@ suite "DataFrame tests":
     let x = toSeq(0 ..< 100)
     let y = x.mapIt($sin(it.float))
     let yFloat = x.mapIt(sin(it.float))
-    let df = seqsToDf(x, y)
+    let df = toDf(x, y)
     check df.len == 100
     when defined(defaultBackend):
       liftScalarStringProc(parseFloat, toExport = false)
@@ -603,7 +690,7 @@ suite "DataFrame tests":
     let y1 = x.mapIt(sin(it.float))
     let y2 = x.mapIt(sin(it.float - PI / 2.0) - 0.5)
     let yComb = concat(y1, y2)
-    let df = seqsToDf(x, y1, y2)
+    let df = toDf(x, y1, y2)
     check df.len == 100
     let dfLong = df.gather(["y1", "y2"], key = "from", value = "y")
     check dfLong.len == 200
@@ -633,7 +720,7 @@ suite "DataFrame tests":
     let y2 = x.mapIt(sin(it.float - PI / 2.0) - 0.5)
     let y3 = x.mapIt(cos(it.float - PI / 2.0) - 0.5)
     let yComb = concat(y1, y2, y3)
-    let df = seqsToDf(x, y1, y2, y3)
+    let df = toDf(x, y1, y2, y3)
     check df.len == 100
     let dfLong = df.gather(["y1", "y2", "y3"], key = "from", value = "y")
     check dfLong.len == 300
@@ -669,7 +756,7 @@ suite "DataFrame tests":
     let y1 = x.mapIt(sin(it.float))
     let yStr = x.mapIt($it)
     let yComb = concat(%~ y1, %~ yStr)
-    let df = seqsToDf(x, y1, yStr)
+    let df = toDf(x, y1, yStr)
     check df.len == 100
     let dfLong = df.gather(["y1", "yStr"], key = "from", value = "y")
     check dfLong.len == 200
@@ -706,7 +793,7 @@ suite "DataFrame tests":
         x2s.add i
       else:
         y2.add Value(kind: VNull)
-    let df = seqsToDf(x, y1, y2)
+    let df = toDf(x, y1, y2)
     let gathered = df.gather(["y1", "y2"], dropNulls = false)
     let onlyy2 = gathered.filter(f{Value: isNull(df["value"][idx]).toBool == false and
                                   c"key" == %~ "y2"})
@@ -740,7 +827,7 @@ suite "DataFrame tests":
       let pos = 2 * 3.1415 / 100.0 * i.float
       x.add pos
       y.add sin(pos)
-    let df = seqsToDf(x, y)
+    let df = toDf(x, y)
     when defined(defaultBackend):
       let defaultExp = """
          Idx         x         y
@@ -865,8 +952,8 @@ t_in_s,  C1_in_V,  C2_in_V,  type
                   4.883E-04, -2.930E-04, -1.270E-03]
     let typeExp = @["T1", "T1", "T1", "T1", "T2",
                     "T2", "T2", "T2"]
-    let dfExp = seqsToDf({"t_in_s" : texp, "C1_in_V" : c1Exp, "C2_in_V" : c2Exp,
-                           "type" : typeExp})
+    let dfExp = toDf({ "t_in_s" : texp, "C1_in_V" : c1Exp, "C2_in_V" : c2Exp,
+                       "type" : typeExp})
     let df = toDf(csvRead)
     when defined(defaultBackend):
       check df["t_in_s"].vToSeq == dfExp["t_in_s"].vToSeq
@@ -886,7 +973,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     check df["Unnamed0", int] == arange(0, 200).toTensor
 
   test "Summarize":
-    let mpg = toDf(readCsv("data/mpg.csv"))
+    let mpg = readCsv("data/mpg.csv")
     block:
       # explicit LHS
       let res = mpg.summarize(f{int: "num" << sum(c"cyl")})
@@ -943,7 +1030,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
           l2.add lab2[j]
           inc count
       check count == 2600
-      let df = seqsToDf(l1, l2, numVec)
+      let df = toDf(l1, l2, numVec)
       let dfG = df.group_by(["l1", "l2"]).summarize(f{int: sum(c"numVec")})
       check dfG.len == 26
       check sumNum == 5050
@@ -956,7 +1043,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
 
   test "Count":
     # count elements by group. Useful combination of group_by and summarize(len)
-    let mpg = toDf(readCsv("data/mpg.csv"))
+    let mpg = readCsv("data/mpg.csv")
     # in manual case the order is not preserved, due to `summarize` impl!
     let exp = toHashSet({6 : 79, 8 : 70, 4 : 81, 5 : 4})
     block:
@@ -981,7 +1068,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     # tests removal of VNull elements in a column with VNull
     let x1 = toSeq(0 .. 100)
     let x2 = toSeq(0 .. 10)
-    let df = seqsToDf(x1, x2)
+    let df = toDf(x1, x2)
     when defined(defaultBackend):
       check df.filter(f{isNull("x2") == false})["x2"].vToSeq == %~ x2
     else:
@@ -1021,7 +1108,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
 
   test "setDiff":
     # remove duplicates of `mpg` (for some reason there are 9 duplicates..)
-    let mpg = toDf(readCsv("data/mpg.csv")).unique
+    let mpg = readCsv("data/mpg.csv").unique
     let mpgS1 = mpg[0 .. 25]
     let mpgS2 = mpg[20 .. 29]
     block:
@@ -1078,7 +1165,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
       check k[0] != k[1]
 
   test "Evaluate data frame using FormulaNode":
-    let mpg = toDf(readCsv("data/mpg.csv"))
+    let mpg = readCsv("data/mpg.csv")
     let f = f{`hwy` ~ (`displ` + `cyl` - `cty`)} # this doesn't make sense, but anyways...
     # Displacement + Cylinders - City mpg. Yeah :D
     # use RHS of formula for calculation of 0 row.
@@ -1108,7 +1195,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
       check evaluate(f{1 + 2}, mpg).toTensor(int) == toTensor toSeq(0 ..< mpg.len).mapIt(3)
 
   test "Reduce data frame using FormulaNode":
-    let mpg = toDf(readCsv("data/mpg.csv"))
+    let mpg = readCsv("data/mpg.csv")
     # check reduction via a formula and VectorFloatProc
     check almostEqual(reduce(f{float: mean(c"hwy")}, mpg).toFloat, 23.44017, 1e-3)
 
@@ -1119,7 +1206,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     # uninitialized data frame (DataFrame is ref object)
     var df: DataFrame
     check df.isNil
-    let dfToAdd = seqsToDf({ "x" : @[1, 2, 3],
+    let dfToAdd = toDf({ "x" : @[1, 2, 3],
                              "y" : @[4, 5, 6] })
     df.add dfToAdd
     check df == dfToAdd
@@ -1130,13 +1217,13 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     let idents = @["A", "B", "C", "D"]
     let ids = @[1, 2, 3, 4]
     let words = @["suggest", "result", "from", "to"]
-    let df1 = seqsToDf({ "Ident" : idents,
-                         "Ids" : ids})
-    let df2 = seqsToDf({ "Ident" : idents,
-                         "Words" : words })
-    let dfExp = seqsToDf({ "Ident" : idents,
-                           "Words" : words,
-                           "Ids" : ids })
+    let df1 = toDf({ "Ident" : idents,
+                     "Ids" : ids})
+    let df2 = toDf({ "Ident" : idents,
+                     "Words" : words })
+    let dfExp = toDf({ "Ident" : idents,
+                       "Words" : words,
+                       "Ids" : ids })
     let dfRes = df1.innerJoin(df2, by = "Ident")
     check dfRes.len == dfExp.len
     check dfRes.getKeys == dfExp.getKeys
@@ -1149,14 +1236,14 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     let ids = @[1, 2, 3, 4]
     let idsFloat = @[1'f64, 2, 3, 4]
     let words = @["suggest", "result", "from", "to"]
-    let df1 = seqsToDf({ "Ident" : idents,
-                         "Ids" : ids})
-    let df2 = seqsToDf({ "Ident" : idents,
-                         "Ids" : idsFloat,
-                         "Words" : words})
-    let dfExp = seqsToDf({ "Ident" : idents,
-                           "Words" : words,
-                           "Ids" : idsFloat })
+    let df1 = toDf({ "Ident" : idents,
+                     "Ids" : ids})
+    let df2 = toDf({ "Ident" : idents,
+                     "Ids" : idsFloat,
+                     "Words" : words})
+    let dfExp = toDf({ "Ident" : idents,
+                       "Words" : words,
+                       "Ids" : idsFloat })
     let dfRes = df1.innerJoin(df2, by = "Ident")
     check dfRes.len == dfExp.len
     check dfRes.getKeys == dfExp.getKeys
@@ -1171,14 +1258,14 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     let ids = @[1, 2, 3, 4, 5]
     let idsFloat = @[1'f64, 2, 3, 4]
     let words = @["suggest", "result", "from", "to"]
-    let df1 = seqsToDf({ "Ident" : idents,
-                         "Ids" : ids})
-    let df2 = seqsToDf({ "Ident" : idents[0 ..< ^1],
-                         "Ids" : idsFloat,
-                         "Words" : words})
-    let dfExp = seqsToDf({ "Ident" : idents[0 ..< ^1],
-                           "Words" : words,
-                           "Ids" : idsFloat })
+    let df1 = toDf({ "Ident" : idents,
+                     "Ids" : ids})
+    let df2 = toDf({ "Ident" : idents[0 ..< ^1],
+                     "Ids" : idsFloat,
+                     "Words" : words})
+    let dfExp = toDf({ "Ident" : idents[0 ..< ^1],
+                       "Words" : words,
+                       "Ids" : idsFloat })
     let dfRes = df1.innerJoin(df2, by = "Ident")
     check dfRes.len == dfExp.len
     check dfRes.getKeys == dfExp.getKeys
@@ -1236,25 +1323,25 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     let ages = @[43, 27, 32, 43]
     let cities = @[%~ "NYC", %~ "London", %~ "Sydney", Value(kind: VNull),
                    %~ "Berlin"]
-    let df = seqsToDf({ "Ident" : idents,
-                        "Id" : ids,
+    let df = toDf({ "Ident" : idents,
+                    "Id" : ids,
+                    "Age" : ages,
+                    "City" : cities})
+                    # now check for:
+                    # -> filter by each individual column
+                    # -> filter by both columns in one call
+    let dfExp1 = toDf({ "Ident" : idents[0 ..< ^1],
+                        "Id" : ids[0 ..< ^1],
                         "Age" : ages,
-                        "City" : cities})
-    # now check for:
-    # -> filter by each individual column
-    # -> filter by both columns in one call
-    let dfExp1 = seqsToDf({ "Ident" : idents[0 ..< ^1],
-                            "Id" : ids[0 ..< ^1],
-                            "Age" : ages,
-                            "City" : cities[0 ..< ^1] })
-    let dfExp2 = seqsToDf({ "Ident" : @["A", "B", "C", "E"],
-                            "Id" : @[1, 2, 3, 5],
-                            "Age" : @[%~ 43, %~ 27, %~ 32, Value(kind: VNull)],
-                            "City" : cities.filterIt(it.kind != VNull) })
-    let dfExp3 = seqsToDf({ "Ident" : @["A", "B", "C"],
-                            "Id" : @[1, 2, 3],
-                            "Age" : %~ @[43, 27, 32],
-                            "City" : %~ cities[0 ..< ^2]})
+                        "City" : cities[0 ..< ^1] })
+    let dfExp2 = toDf({ "Ident" : @["A", "B", "C", "E"],
+                        "Id" : @[1, 2, 3, 5],
+                        "Age" : @[%~ 43, %~ 27, %~ 32, Value(kind: VNull)],
+                        "City" : cities.filterIt(it.kind != VNull) })
+    let dfExp3 = toDf({ "Ident" : @["A", "B", "C"],
+                        "Id" : @[1, 2, 3],
+                        "Age" : %~ @[43, 27, 32],
+                        "City" : %~ cities[0 ..< ^2]})
     block noNativeConversion:
       let dfRes1 = df.drop_null("Age")
       check dfRes1["Age"].kind == colObject
@@ -1303,7 +1390,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
   test "Inplace filter & assign":
     let c1 = constantColumn(10, 40)
     let c2 = toColumn toSeq(0 ..< 40)
-    var df = seqsToDf(c1, c2)
+    var df = toDf(c1, c2)
     df[f{`c2` > 10 and `c2` < 20}, "c2"] = 42
     df[f{`c2` > 20 and `c2` < 30}, "c1"] = 46
     check df.filter(f{`c2` == 42}).len == 9
@@ -1316,7 +1403,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
   test "Add row to DF (WARNING: very slow!)":
     let c1 = constantColumn(10, 10)
     let c2 = toColumn toSeq(0 ..< 10).mapIt(it.float)
-    var df = seqsToDf(c1, c2)
+    var df = toDf(c1, c2)
     for i in 0 ..< 10:
       df.add(i, i.float * 2)
     check df.len == 20
@@ -1327,7 +1414,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
 
   test "Mutate/Transmute works on grouped dataframes":
     block Mutate:
-      let df = toDf(readCsv("data/mpg.csv"))
+      let df = readCsv("data/mpg.csv")
         .group_by("class")
         # for simplicity, we're gonna add the mean of each group to
         .mutate(f{float -> float: "subMeanHwy" ~ 0.0 + mean(df["hwy"])})
@@ -1338,7 +1425,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
       check df.select("subMeanHwy").unique()["subMeanHwy", float] == expDf.select("subMeanHwy")["subMeanHwy", float]
 
     block Transmute:
-      let df = toDf(readCsv("data/mpg.csv"))
+      let df = readCsv("data/mpg.csv")
       var dfTr = df
         .group_by("class")
         # for simplicity, we're gonna add the mean of each group to
@@ -1351,7 +1438,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
       check dfTr.select("subMeanHwy").unique()["subMeanHwy", float] == expDf.select("subMeanHwy")["subMeanHwy", float]
 
   test "Construction with scalar":
-    var df = seqsToDf({ "x" : @[1,2,3],
+    var df = toDf({ "x" : @[1,2,3],
                         "y" : toSeq(5..7),
                         "z" : "foo",
                         "α" : 2.5 })
@@ -1374,8 +1461,8 @@ suite "Formulas":
                              `y`}
     check $fn == "(if (elif (> poopoo 5) (pewpew)) (else (y)))"
 
-    let df = seqsToDf({ "poopoo" : @[1,2,7,8], "pewpew" : @[10, 11, 12, 13],
-                        "y" : @[100, 101, 102, 103]})
+    let df = toDf({ "poopoo" : @[1,2,7,8], "pewpew" : @[10, 11, 12, 13],
+                    "y" : @[100, 101, 102, 103]})
     check fn.evaluate(df).toTensor(int) == [100, 101, 12, 13].toTensor()
 
   test "Access using idx()":
@@ -1384,7 +1471,7 @@ suite "Formulas":
     let c = [4, 5, 6]
     let d = [8, 9, 10]
     let e = [11, 12, 13]
-    let df = seqsToDf(a, b, c, d, e)
+    let df = toDf(a, b, c, d, e)
     block:
       let dStr = "d"
       proc someCall(): string = "e"
@@ -1416,11 +1503,11 @@ suite "Formulas":
   test "dplyr / pandas comparison inspired tests":
     # some of this functionality was either broken or didn't work before working on
     # that dplyr & pandas comparison
-    let df = seqsToDf({ "A" : concat(newSeqWith(50, "a"), newSeqWith(50, "b")),
-                        "C" : concat(newSeqWith(25, 5),
-                                     newSeqWith(25, 15),
-                                     newSeqWith(50, 35)),
-                        "B" : toSeq(0 ..< 100) })
+    let df = toDf({ "A" : concat(newSeqWith(50, "a"), newSeqWith(50, "b")),
+                    "C" : concat(newSeqWith(25, 5),
+                                 newSeqWith(25, 15),
+                                 newSeqWith(50, 35)),
+                    "B" : toSeq(0 ..< 100) })
     block:
       let res = df.group_by("A").summarize(f{int: sum(`B`)}).filter(f{idx("(sum B)") < 2000})
       check res.len == 1
@@ -1473,14 +1560,14 @@ suite "Formulas":
     ## actually compiled correctly into a mapping operation, with or without
     ## user given `~`
     block:
-      let df = toDf(readCsv("data/mpg.csv"))
+      let df = readCsv("data/mpg.csv")
         .group_by("class")
         .mutate(f{float -> float: "subMeanHwy" ~ `cty` + mean(df["hwy"])})
         .arrange("class")
       check df.len == 234
       check df["subMeanHwy", float][0 ..< 5] == [40.8, 39.8, 40.8, 39.8, 39.8].toTensor
     block:
-      let df = toDf(readCsv("data/mpg.csv"))
+      let df = readCsv("data/mpg.csv")
         .group_by("class")
         .mutate(f{float -> float: `cty` + mean(df["hwy"])})
         .arrange("class")
@@ -1488,8 +1575,8 @@ suite "Formulas":
       check df["(+ cty (mean df[\"hwy\"]))", float][0 ..< 5] == [40.8, 39.8, 40.8, 39.8, 39.8].toTensor
 
   test "Slicing DF with constant column":
-    var df = seqsToDf({ "Energy" : cycle(linspace(0.0, 24.0, 25), 2),
-                        "Counts" : concat(toSeq(0 ..< 25),
+    var df = toDf({ "Energy" : cycle(linspace(0.0, 24.0, 25), 2),
+                    "Counts" : concat(toSeq(0 ..< 25),
                                           toSeq(0 ..< 25)) })
     df["Type"] = constantColumn("background", df.len)
     let dfSlice = df[24 .. 26]
@@ -1501,13 +1588,13 @@ suite "Formulas":
   test "Single function call in formula":
     proc inRegion(x, y: float, r: string): bool =
       result = x > 1
-    let df = seqsToDf({"x" : [1,2,3], "y" : [4,5,6]})
+    let df = toDf({"x" : [1,2,3], "y" : [4,5,6]})
     let rad = "foo"
     let res = df.filter(f{inRegion(`x`, `y`, rad)})
     check res["x", int] == [2,3].toTensor
 
   test "Formula referring to bool column":
-    let df = seqsToDf({"x" : [1,2,3], "y" : [true, false, true]})
+    let df = toDf({"x" : [1,2,3], "y" : [true, false, true]})
     block IsTrue:
       let res = df.filter(f{bool: `y`})
       check res["x", int] == [1,3].toTensor
@@ -1517,7 +1604,7 @@ suite "Formulas":
 
 suite "Formulas with object columns using convenience operators":
   test "int comparisons":
-    let df = seqsToDf({"x" : [%~ 1, %~ 2, %~ 3]})
+    let df = toDf({"x" : [%~ 1, %~ 2, %~ 3]})
     check df.filter(f{`x` == 1})["x", int] == [1].toTensor
     check df.filter(f{`x` != 1})["x", int] == [2,3].toTensor
     check df.filter(f{`x` > 1})["x", int] == [2,3].toTensor
@@ -1531,7 +1618,7 @@ suite "Formulas with object columns using convenience operators":
     check df.filter(f{2 > `x`})["x", int] == [1].toTensor
 
   test "float comparisons":
-    let df = seqsToDf({"x" : [%~ 1.0, %~ 2.0, %~ 3.0]})
+    let df = toDf({"x" : [%~ 1.0, %~ 2.0, %~ 3.0]})
     check df.filter(f{`x` == 1.0})["x", float] == [1.0].toTensor
     check df.filter(f{`x` != 1.0})["x", float] == [2.0,3.0].toTensor
     check df.filter(f{`x` > 1.0})["x", float] == [2.0,3.0].toTensor
@@ -1545,7 +1632,7 @@ suite "Formulas with object columns using convenience operators":
     check df.filter(f{2.0 > `x`})["x", float] == [1.0].toTensor
 
   test "float comparisons with int Value":
-    let df = seqsToDf({"x" : [%~ 1, %~ 2, %~ 3]})
+    let df = toDf({"x" : [%~ 1, %~ 2, %~ 3]})
     check df.filter(f{`x` == 1.0})["x", int] == [1].toTensor
     check df.filter(f{`x` != 1.0})["x", int] == [2,3].toTensor
     check df.filter(f{`x` > 1.0})["x", int] == [2,3].toTensor
@@ -1559,7 +1646,7 @@ suite "Formulas with object columns using convenience operators":
     check df.filter(f{2.0 > `x`})["x", int] == [1].toTensor
 
   test "bool comparisons":
-    let df = seqsToDf({"x" : [true, false, true]})
+    let df = toDf({"x" : [true, false, true]})
     check df.filter(f{`x` == true})["x", bool] == [true, true].toTensor
     check df.filter(f{`x` == false})["x", bool] == [false].toTensor
 
@@ -1567,7 +1654,7 @@ suite "Formulas with object columns using convenience operators":
     check df.filter(f{`x` != false})["x", bool] == [true, true].toTensor
 
   test "string comparisons":
-    let df = seqsToDf({"x" : ["foo", "bar", "baz"]})
+    let df = toDf({"x" : ["foo", "bar", "baz"]})
     check df.filter(f{`x` == "foo"})["x", string] == ["foo"].toTensor
     check df.filter(f{`x` != "foo"})["x", string] == ["bar", "baz"].toTensor
     check df.filter(f{`x` in ["foo", "bar"]})["x", string] == ["foo", "bar"].toTensor
