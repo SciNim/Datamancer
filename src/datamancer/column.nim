@@ -782,36 +782,38 @@ template map_inline*(c: Column, body: untyped): Column =
         "` for dtype of column: " & $(c.kind.toNimType))
     res
 
-proc lag*[T](t: Tensor[T], n = 1): Tensor[T] {.noInit.} =
+proc lag*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noInit.} =
   ## Lags the input tensor by `n`, i.e. returns a shifted tensor
   ## such that it *lags* behind `t`:
+  ##
   ## `lag([1, 2, 3], 1) ⇒ [null, 1, 2]`
-  ## NOTE: Currently `null` is just a `default(T)` value! Do not use the values
-  ## left behind for any computation unless you are fine with picking up
-  ## zero values!
+  ##
+  ## NOTE: The value of `null` is filled by `default(T)` value by default!
+  ## Use the `fill` argument to change the value to be set.
   result = newTensorUninit[T](t.size)
   #result[0 ..< n] = leave unspecified for now
   let hi = t.size.int - n
   result[n ..< t.size.int] = t[0 ..< hi]
-  result[0 ..< n] = default(T)
+  result[0 ..< n] = fill
 
 proc lag*(c: Column, n = 1): Column =
   ## Overload of the above for columns
   withNativeDtype(c):
     result = toColumn lag(c.toTensor(dtype), n)
 
-proc lead*[T](t: Tensor[T], n = 1): Tensor[T] {.noInit.} =
+proc lead*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noInit.} =
   ## Leads the input tensor by `n`, i.e. returns a shifted tensor
   ## such that it *leads* ahead of `t`:
+  ##
   ## `lead([1, 2, 3], 1) ⇒ [2, 3, null]`
-  ## NOTE: Currently `null` is just a `default(T)` value! Do not use the values
-  ## left behind for any computation unless you are fine with picking up
-  ## zero values!
+  ##
+  ## NOTE: The value of `null` is filled by `default(T)` value by default!
+  ## Use the `fill` argument to change the value to be set.
   result = newTensorUninit[T](t.size)
   #result[0 ..< n] = leave unspecified for now
   let hi = t.size.int - n
-  result[0 ..< n] = t[n ..< hi]
-  result[n ..< t.size.int] = default(T)
+  result[0 ..< hi] = t[n ..< t.size.int]
+  result[hi ..< t.size.int] = fill
 
 proc lead*(c: Column, n = 1): Column =
   ## Overload of the above for columns
