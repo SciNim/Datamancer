@@ -85,6 +85,172 @@ suite "Column":
     check c.toTensor(0 .. 10, int) == newTensorWith(11, 12)
     check c.toTensor(int) == newTensorWith(40, 12)
 
+  test "Lag - lag a tensor by 1 element, fill `default(T)`":
+    block Int:
+      let t = [1, 2, 3].toTensor
+      let exp = t.lag()
+      check exp.len == t.len
+      check exp[0] == 0 # default(int)
+      check exp == [0, 1, 2].toTensor
+    block Float:
+      let t = [1.0, 2.0, 3.0].toTensor
+      let exp = t.lag()
+      check exp.len == t.len
+      check exp[0] == 0.0 # default(float)
+      check exp == [0.0, 1.0, 2.0].toTensor
+    block String:
+      let t = ["1", "2", "3"].toTensor
+      let exp = t.lag()
+      check exp.len == t.len
+      check exp[0] == "" # default(string)
+      check exp == ["", "1", "2"].toTensor
+
+  test "Lag - lag a tensor by 2 element, fill `default(T)`":
+    block Int:
+      let t = [1, 2, 3].toTensor
+      let exp = t.lag(n = 2)
+      check exp.len == t.len
+      check exp[0] == 0 # default(int)
+      check exp[1] == 0 # default(int)
+      check exp == [0, 0, 1].toTensor
+    block Float:
+      let t = [1.0, 2.0, 3.0].toTensor
+      let exp = t.lag(n = 2)
+      check exp.len == t.len
+      check exp[0] == 0.0 # default(float)
+      check exp[1] == 0.0 # default(float)
+      check exp == [0.0, 0.0, 1.0].toTensor
+    block String:
+      let t = ["1", "2", "3"].toTensor
+      let exp = t.lag(n = 2)
+      check exp.len == t.len
+      check exp[0] == "" # default(string)
+      check exp[1] == "" # default(string)
+      check exp == ["", "", "1"].toTensor
+
+  test "Lag - lag a tensor by 1 element, custom fill":
+    block Int:
+      let t = [1, 2, 3].toTensor
+      let exp = t.lag(fill = int.high)
+      check exp.len == t.len
+      check exp[0] == int.high # default(int)
+      check exp == [int.high, 1, 2].toTensor
+    block Float:
+      let t = [1.0, 2.0, 3.0].toTensor
+      let exp = t.lag(fill = NaN)
+      check exp.len == t.len
+      check classify(exp[0]) == fcNaN # default(float)
+      check exp[1 .. 2] == [1.0, 2.0].toTensor
+    block String:
+      let t = ["1", "2", "3"].toTensor
+      let exp = t.lag(fill = "foo")
+      check exp.len == t.len
+      check exp[0] == "foo" # default(string)
+      check exp == ["foo", "1", "2"].toTensor
+
+  test "Lag - lag a column by 1 element, fill `default(T)`":
+    block Int:
+      let c = toColumn [1, 2, 3]
+      let exp = c.lag()
+      check exp.len == c.len
+      check exp[0, int] == 0 # default(int)
+      check exp.toTensor(int) == [0, 1, 2].toTensor
+    block Float:
+      let c = toColumn [1.0, 2.0, 3.0]
+      let exp = c.lag()
+      check exp.len == c.len
+      check exp[0, float] == 0.0 # default(float)
+      check exp.toTensor(float) == [0.0, 1.0, 2.0].toTensor
+    block String:
+      let c = toColumn ["1", "2", "3"]
+      let exp = c.lag()
+      check exp.len == c.len
+      check exp[0, string] == "" # default(string)
+      check exp.toTensor(string) == ["", "1", "2"].toTensor
+
+  test "Lead - lead a tensor by 1 element, fill `default(T)`":
+    block Int:
+      let t = [1, 2, 3].toTensor
+      let exp = t.lead()
+      check exp.len == t.len
+      check exp[2] == 0 # default(int)
+      check exp == [2, 3, 0].toTensor
+    block Float:
+      let t = [1.0, 2.0, 3.0].toTensor
+      let exp = t.lead()
+      check exp.len == t.len
+      check exp[2] == 0.0 # default(float)
+      check exp == [2.0, 3.0, 0.0].toTensor
+    block String:
+      let t = ["1", "2", "3"].toTensor
+      let exp = t.lead()
+      check exp.len == t.len
+      check exp[2] == "" # default(string)
+      check exp == ["2", "3", ""].toTensor
+
+  test "Lead - lead a tensor by 2 element, fill `default(T)`":
+    block Int:
+      let t = [1, 2, 3].toTensor
+      let exp = t.lead(n = 2)
+      check exp.len == t.len
+      check exp[1] == 0 # default(int)
+      check exp[2] == 0 # default(int)
+      check exp == [3, 0, 0].toTensor
+    block Float:
+      let t = [1.0, 2.0, 3.0].toTensor
+      let exp = t.lead(n = 2)
+      check exp.len == t.len
+      check exp[1] == 0.0 # default(float)
+      check exp[2] == 0.0 # default(float)
+      check exp == [3.0, 0.0, 0.0].toTensor
+    block String:
+      let t = ["1", "2", "3"].toTensor
+      let exp = t.lead(n = 2)
+      check exp.len == t.len
+      check exp[1] == "" # default(string)
+      check exp[2] == "" # default(string)
+      check exp == ["3", "", ""].toTensor
+
+  test "Lead - lead a tensor by 1 element, custom fill":
+    block Int:
+      let t = [1, 2, 3].toTensor
+      let exp = t.lead(fill = int.high)
+      check exp.len == t.len
+      check exp[2] == int.high # default(int)
+      check exp == [2, 3, int.high].toTensor
+    block Float:
+      let t = [1.0, 2.0, 3.0].toTensor
+      let exp = t.lead(fill = NaN)
+      check exp.len == t.len
+      check classify(exp[2]) == fcNaN # default(float)
+      check exp[0 .. 1] == [2.0, 3.0].toTensor
+    block String:
+      let t = ["1", "2", "3"].toTensor
+      let exp = t.lead(fill = "foo")
+      check exp.len == t.len
+      check exp[2] == "foo" # default(string)
+      check exp == ["2", "3", "foo"].toTensor
+
+  test "Lead - lead a column by 1 element, fill `default(T)`":
+    block Int:
+      let c = toColumn [1, 2, 3]
+      let exp = c.lead()
+      check exp.len == c.len
+      check exp[2, int] == 0 # default(int)
+      check exp.toTensor(int) == [2, 3, 0].toTensor
+    block Float:
+      let c = toColumn [1.0, 2.0, 3.0]
+      let exp = c.lead()
+      check exp.len == c.len
+      check exp[2, float] == 0.0 # default(float)
+      check exp.toTensor(float) == [2.0, 3.0, 0.0].toTensor
+    block String:
+      let c = toColumn ["1", "2", "3"]
+      let exp = c.lead()
+      check exp.len == c.len
+      check exp[2, string] == "" # default(string)
+      check exp.toTensor(string) == ["2", "3", ""].toTensor
+
 suite "DataFrame parsing":
   proc cmpElements[T](s1, s2: seq[T]): bool =
     # comparse the two seq, while properly handling `NaN`
