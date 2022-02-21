@@ -332,8 +332,6 @@ suite "Formulas":
     check exp.len == 1
     check exp["cycleStart", string][0] == "1970-01-01"
 
-import unchained
-
 suite "Formulas using the full `formula` macro":
   ## compute the number of cycles & integrated "time on" time
   ## This is still rather basic, but works now.

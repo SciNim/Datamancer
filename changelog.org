@@ -1,4 +1,4 @@
-* v0.2.0
+* v0.2.0 (To be finalized...)
 - *MAJOR, BREAKING*: Add experimental support for "non-generic generic
   =Columns=". Essentially, from many procedures it is now possible to
   assign data types that are normally not supported to be stored
@@ -15,6 +15,7 @@
   - ... whatever else you can think of. As long as it fits into a
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
+* v0.1.12
 - constant =DataFrame= columns have seen improvements. Before most
   operations on them would convert them to a non-constant column,
   often forced to convert to an object column. Now, most operations
@@ -43,13 +44,6 @@
 - certain expressions in =f{}= formulas (for example
   =isNaN(idx("foo"))=) could produce unintended CT errors and work now
   (sorry, had to add a =when compiles= check :( ).
-- *SEMI-BREAKING*: add preliminary support for reducing formulas that require a =for=
-  loop. This (currently) allows for ~res += <formula>~ like statements
-  inside of a loop instead of just ~res = <formula>~ where in the
-  latter the formula must produce a scalar by itself (i.e. does not
-  allow *element wise* access to columns). Now a formula that accesses
-  a single element via =idx(...)= will produce a loop with an
-  accumulation.
 - experimental support for "full formulas" as I call them that allow
   to have more control over variables in the scope of the formula:
   #+begin_src nim
@@ -67,14 +61,32 @@
   on columns (i.e. =mean(df["Bar", float])=)! It is still planned to
   lift reducing operations out of the loop body, but that is still
   pending.
-- add (experimental) =lag=, =lead= procedures that take a
-  =Tensor/Column= and return a new =Tensor/Column= that is shiftet
-  forward / backward N elements (the left overs are zeroed, the
-  shifted ones are dropped).
+- *SEMI-BREAKING*: add preliminary support for reducing formulas that require a =for=
+  loop. This (currently) allows for ~res += <formula>~ like statements
+  inside of a loop instead of just ~res = <formula>~ where in the
+  latter the formula must produce a scalar by itself (i.e. does not
+  allow *element wise* access to columns). Now a formula that accesses
+  a single element via =idx(...)= will produce a loop with an
+  accumulation.
+  Note: to make use of this feature you *must* use the full formula
+  syntax, as otherwise the default value of =res= is unclear.
+  #+begin_src nim
+  formula:
+    preface:
+      var res = 1.0
+      Bidx in df["B", float]
+    loop:
+      res *= Bidx * 1.5
+  #+end_src
+- add =lag=, =lead= procedures that take a =Tensor/Column= and return
+  a new =Tensor/Column= that is shiftet forward / backward N elements
+  (the left overs are zeroed by default, but adjustable using =fill= argument)
 - the =showBrowser= helper to view a =DataFrame= in the browser now
   adds an additional "index" column
 - improve performance of =groups= iterator (particularly in cases
-  where the DF is already sorted / the sorting is cheap)  
+  where the DF is already sorted / the sorting is cheap)
+- fix type deduction issues in formulas using dot expressions for
+  certain cases  
 * v0.1.11
 - add convenience comparison operators for =Value= elements of a
   column with regular types *within a =f{}= formula* (they are emitted
