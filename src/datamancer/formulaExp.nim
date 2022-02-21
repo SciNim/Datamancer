@@ -25,9 +25,7 @@ type
   Assign* = object
     asgnKind*: AssignKind
     node*: NimNode ## the exact node that will be replaced by this `Assign` instance
-    ## TODO: rename / change `ReplaceByKind` as it's currently a bit unclear, in particular after
-    ## `get` and `delete` was added!
-    rbKind*: ReplaceByKind ## stores how this should be inserted
+                   ## In case of `byCustom`, just the user input that will be inserted again
     element*: NimNode # e.g. `t`
     tensor*: NimNode # either `t` or `t_T` if `elmenent` used
     col*: NimNode # name of the column
@@ -272,7 +270,6 @@ proc `$`*(p: Preface): string =
     result.add &"node: {ch.node.repr}, "
     result.add &"tensor: {ch.tensor.strVal}, "
     result.add &"col: {buildName(ch.col)}, "
-    result.add &"rbKind: {ch.rbKind}, "
     result.add &"colType: {buildName(ch.colType)}, "
     result.add &"resType: {buildName(ch.resType)})"
     if i < p.args.high:
