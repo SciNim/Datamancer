@@ -11,6 +11,10 @@ template fails(body: untyped): untyped =
   else:
     check true
 
+when (NimMajor, NimMinor, NimPatch) < (1, 6, 0):
+  proc isNan(x: float): bool =
+    result = classify(x) == fcNaN
+
 suite "Formulas":
   let a = [1, 2, 3]
   let b = [3, 4, 5]
