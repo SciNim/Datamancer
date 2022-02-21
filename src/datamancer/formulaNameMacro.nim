@@ -74,6 +74,14 @@ proc build(n: NimNode): string =
     ## TODO: check if this is reasonable. It seems that this node contains
     ## the original node as [0] and then the "environment" as [1]??
     result = build(n[0])
+  of nnkBlockStmt:
+    result = "(block"
+    for ch in n:
+      result.add &" {build(ch)}"
+    result.add ")"
+  of nnkStmtListExpr:
+    # just use child node
+    result = build(n[0])
   else:
     result = n.repr
     warning("Node kind " & $n.kind & " not implemented " &
