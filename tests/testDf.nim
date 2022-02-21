@@ -80,6 +80,52 @@ suite "Column":
       else:
         check res[i, Value] == %~ "foo"
 
+  test "Adding non constant to (equal type) constant column results in native type":
+    let c1 = constantColumn(5, 5)
+    let c2 = toColumn [1, 2, 3, 4, 5]
+    check c1.len == 5
+    check c1.cCol == %~ 5
+    check c2.len == 5
+    check c2.kind == colInt
+
+    let res = add(c1, c2)
+    check res.kind == colInt
+    check res.len == 10
+    check res[0 ..< 5].toTensor(int) == [5, 5, 5, 5, 5].toTensor
+    check res[5 ..< 10].toTensor(int) == [1, 2, 3, 4, 5].toTensor
+
+  test "Adding non constant to (compatible type) constant column results in native type":
+    let c1 = constantColumn(5.0, 5)
+    let c2 = toColumn [1, 2, 3, 4, 5]
+    check c1.len == 5
+    check c1.cCol == %~ 5.0
+    check c2.len == 5
+    check c2.kind == colInt
+
+    let res = add(c1, c2)
+    check res.kind == colFloat
+    check res.len == 10
+    check res[0 ..< 5].toTensor(float) == [5.0, 5.0, 5.0, 5.0, 5.0].toTensor
+    check res[5 ..< 10].toTensor(float) == [1.0, 2.0, 3.0, 4.0, 5.0].toTensor
+
+  test "Slice assignment to constant column of compatible type leads to native column":
+    block Single:
+      var c1 = constantColumn(5, 5)
+      check c1.len == 5
+      check c1.cCol == %~ 5.0
+
+      c1[3] = 4
+      check c1.kind == colInt
+      check c1.toTensor(int) == [5, 5, 5, 4, 5].toTensor
+    block Slice:
+      var c1 = constantColumn(5, 5)
+      check c1.len == 5
+      check c1.cCol == %~ 5.0
+
+      c1[3 .. 4] = [1, 2].toTensor
+      check c1.kind == colInt
+      check c1.toTensor(int) == [5, 5, 5, 1, 2].toTensor
+
   test "Conversion of constant column results to tensor":
     let c = constantColumn(12, 40)
     check c.toTensor(0 .. 10, int) == newTensorWith(11, 12)
