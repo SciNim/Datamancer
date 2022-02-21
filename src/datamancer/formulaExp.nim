@@ -5,7 +5,9 @@ import column, value, df_types
 
 type
   AssignKind* = enum
-    byIndex, byTensor
+    byIndex, ## assign by index
+    byTensor, ## by tensor
+    byCustom ## custom variable declaration in preface
   ## replace occurence of nnkAccQuote, nnkCallStrLit, nnkBracketExpr(df) by:
   ReplaceByKind = enum
     rbIndex ## by call to tensor index, `tT[idx]`, in a `for` loop
@@ -193,7 +195,6 @@ proc parsePreface*(n: NimNode): Preface =
   proc addAsgnAssign(ch: NimNode): Assign =
     doAssert ch[0].kind == nnkIdent, "First element before `=` needs to be an ident!"
     doAssert ch[1].kind == nnkBracketExpr, "`=` must assign from a `df[<col>, <type>]`!"
-    doAssert ch[1][0].strVal == "df", "`=` must assign from a `df[<col>, <type>]`!"
     let tId = ch[0].strVal
     let dtype = ch[1][2].strVal
     doAssert dtype in Dtypes, "Column dtype " & $dtype & " not in " & $Dtypes & "!"
@@ -204,12 +205,18 @@ proc parsePreface*(n: NimNode): Preface =
                     col: ch[1][1],
                     colType: ident(dtype))
 
+  proc addCustomAssign(ch: NimNode): Assign =
+    doAssert ch.kind in {nnkLetSection, nnkVarSection}
+    result = Assign(asgnKind: byCustom,
+                    node: ch)
+
   expectKind(n, nnkCall)
   expectKind(n[1], nnkStmtList)
   for ch in n[1]:
     case ch.kind
     of nnkInfix: result.args.add addInfixAssign(ch)
     of nnkAsgn: result.args.add addAsgnAssign(ch)
+    of nnkLetSection, nnkVarSection: result.args.add addCustomAssign(ch)
     else: error("Invalid node kind " & $ch.kind & " in `preface`: " & (ch.repr))
 
 proc parseSingle(n: NimNode): NimNode =
@@ -244,10 +251,18 @@ proc convertPreface(p: Preface): NimNode =
     )
   result = nnkLetSection.newTree()
   var seenTensors = initHashSet[string]()
+  var customs = newStmtList()
   for arg in p.args:
-    if arg.tensor.strVal notin seenTensors:
-      result.add toLet(arg)
-    seenTensors.incl arg.tensor.strVal
+    case arg.asgnKind
+    of byIndex, byTensor:
+      if arg.tensor.strVal notin seenTensors:
+        result.add toLet(arg)
+      seenTensors.incl arg.tensor.strVal
+    of byCustom:
+      customs.add arg.node
+  result = quote do:
+    `result`
+    `customs`
 
 proc convertDtype(d: NimNode): NimNode =
   result = nnkVarSection.newTree(
@@ -448,9 +463,8 @@ proc fixupTensorIndices(loopStmts: NimNode, preface: var Preface,
           nnkBracketExpr.newTree(ident(ResIdent), ident(IdxIdent)),
           loop)
     of fkScalar:
-      # generate a `res += <body>` infix call
-      let loop = loopStmts[0].replaceByIdx(preface)
-      result = nnkInfix.newTree(ident(AccumIdent), ident(ResIdent), loop)
+      # replace by indices for scalar w/ explicit for loop.
+      result = loopStmts[0].replaceByIdx(preface)
     else: doAssert false, "Impossible branch"
   of rbElement:
     case fkKind
@@ -462,9 +476,8 @@ proc fixupTensorIndices(loopStmts: NimNode, preface: var Preface,
         # turn this into an nnkAsgn node with `res` as LHS and `nnkAsgn` on RHS
         result = nnkAsgn.newTree(ident(RIdent), loop)
     of fkScalar:
-      # generate a `res += <body>` infix call
-      let loop = loopStmts[0].replaceByElement(preface)
-      result = nnkInfix.newTree(ident(AccumIdent), ident(ResIdent), loop)
+      # replace by indices for scalar w/ explicit for loop.
+      result = loopStmts[0].replaceByElement(preface)
     else: doAssert false, "Impossible branch"
   of rbColumn:
     # always fkScalar
@@ -479,6 +492,13 @@ proc fixupTensorIndices(loopStmts: NimNode, preface: var Preface,
           newEmptyNode(),
           loop)
       )
+
+proc hasResIdent(p: Preface): bool =
+  ## Checks if the `Preface` has a `byCustom` `Assign` that refers to the
+  ## `ResIdent` (== `res`) node
+  for arg in p.args:
+    if arg.asgnKind == byCustom and arg.node[0][0].strVal == ResIdent:
+      return true
 
 proc convertLoop(p: Preface, dtype, loop: NimNode,
                  fnKind: FormulaKind,
@@ -508,7 +528,8 @@ proc convertLoop(p: Preface, dtype, loop: NimNode,
     if fkKind == fkVector: ## add the `r in res` argument as first in case of vector (mutable assign)
       forEach.add nnkInfix.newTree(ident(InIdent), ident(RIdent), ident(ResIdent))
     for arg in p.args:
-      forEach.add nnkInfix.newTree(ident(InIdent), arg.element, arg.tensor)
+      if arg.asgnKind in {byIndex, byTensor}: # `byCustom` does not generate something to loop over!
+        forEach.add nnkInfix.newTree(ident(InIdent), arg.element, arg.tensor)
     forEach.add nnkStmtList.newTree(loopElements)
     result = newStmtList(forEach)
 
@@ -536,13 +557,19 @@ proc convertLoop(p: Preface, dtype, loop: NimNode,
         loopImpl = genForEach(p, loop, fkScalar)
     else:
       loopImpl = fixupTensorIndices(loop, mpreface,
-                                fkKind = fkScalar,
-                                rbKind = rbColumn)
+                                    fkKind = fkScalar,
+                                    rbKind = rbColumn)
     let resultId = ident(ResultIdent)
     let resId = ident(ResIdent)
     if generateLoop:
+      ## raise error if no `Assign` known as  `ResIdent`
+      if not p.hasResIdent:
+        error("Generating an explicit reducing (`<<`) formula failed, as the " &
+          "`res` variable was not declared in the preface. Add a\n" &
+          "preface:\n" &
+          "  var res = <init value>\n" &
+          "part to your formula.")
       result = quote do:
-        var `resId`: float
         `loopImpl`
         `resultId` = %~ `resId`
     else:
