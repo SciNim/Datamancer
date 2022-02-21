@@ -1,9 +1,15 @@
-import datamancer, unittest, sequtils, math, strutils, streams, sugar
+import datamancer, unittest, sequtils, math, strutils, streams, sugar, times
 import seqmath
 
 type
   Foo = object
     fd: float
+
+template fails(body: untyped): untyped =
+  when compiles(body):
+    check false, "Condition " & $astToStr(body) & " succeeded unexpectantly"
+  else:
+    check true
 
 suite "Formulas":
   let a = [1, 2, 3]
@@ -264,3 +270,216 @@ suite "Formulas":
     let df = seqsToDf({"0" : [1,1,1], "1" : [2,2,2], "2" : [3,3,3]})
     let fn = f{idx("0") + idx("1") + idx("2")}
     check fn.evaluate(df).toTensor(int) == toTensor [6,6,6]
+
+  test "Formula deducing result type from impure dot expression":
+    # this formula cannot determine type of input! Should be easy via explicit float. Related to
+    # the one above (same error if parens different )
+    ## if we run the following without type hints, we fail to determine the input type
+    type
+      Second = distinct float
+      Hour = distinct float
+    proc to[T; U](x: T, dtype: typedesc[U]): U = x.U
+    fails:
+      # Error: Could not determine data types of tensors in formula:
+      #   name: cumulativeTime / h
+      #   formula:
+      # idx("cumulativeTime / s").Second.to(Hour).float
+      #   data type:
+      #   output data type: float
+      # Consider giving type hints via: `f{T -> U: <theFormula>}`
+      discard f{"cumulativeTime / h" ~ idx("cumulativeTime / s").Second.to(Hour).float}
+    fails:
+      discard f{"cumulativeTime / h" ~ to(idx("cumulativeTime / s").Second, Hour).float}
+
+    # this succeeds successfully
+    discard f{float: "cumulativeTime / h" ~ to(Second(idx("cumulativeTime / s")), Hour).float}
+    discard f{float: "cumulativeTime / h" ~ idx("cumulativeTime / s").Second.to(Hour).float}
+
+  test "Formula type from dotExpr":
+    fails:
+      # fails if no input type possible
+      discard f{"foo" ~ idx("bar").float}
+    fails:
+      # type hint & type from body mismatch
+      discard f{int -> int: "foo" ~ idx("bar").float}
+    # with type hint for input works
+    let fn = f{int: "foo" ~ idx("bar").float}
+    let df = toDf({"bar" : @[1, 2]})
+    let exp = df.mutate(fn)
+    check "foo" in exp
+    check exp["foo"].kind == colFloat
+    check exp["bar"].kind == colInt
+
+  test "Block expression in formula":
+    # remove everything that has invalid NaN
+    let fn = f{float: (block:
+                         let x = idx("B")
+                         echo x, " and ", isNaN(x), " and class ", classify(x)
+                         not isNaN(idx("B"))) }
+    let df = toDf({"B" : @[NaN, 2.0, NaN, 4.0]})
+    let exp = df.filter(fn)
+    check "B" in exp
+    check exp.len == 2
+    check exp["B", float] == [2.0, 4.0].toTensor
+
+  test "Formula with complex dot expression chain":
+    # this formula was broken! failed in line ~900 in determineTypesImpl due to `pureTree` assertion
+    # reason was the `()` at the format
+    # works fine now
+    let df = seqsToDf({"cycleStart (unix)" : @[1]})
+    let exp = df.mutate(f{int -> string: "cycleStart" ~ idx("cycleStart (unix)").fromUnix().inZone(utc()).format("yyyy-MM-dd") })
+    check "cycleStart" in exp
+    check exp.len == 1
+    check exp["cycleStart", string][0] == "1970-01-01"
+
+import unchained
+
+suite "Formulas using the full `formula` macro":
+  ## compute the number of cycles & integrated "time on" time
+  ## This is still rather basic, but works now.
+  ## Things still missing:
+  ## - in summarizing formulas, allow to change the `res +=` part
+  ##   in case we generate a for loop (e.g. user might want `res -=` or whatever)
+  ##   (maybe allow explicit LHS?
+  test "Simple full fkVector formula":
+    let fn = formula:
+      loop:
+        "B5" ~ idx("B") * 5
+    let df = toDf({"B" : [1, 2]})
+    let exp = df.mutate(fn)
+    check exp.len == 2
+    check "B5" in exp
+    check exp["B5", int] == [5, 10].toTensor
+
+  test "Simple full fkScalar formula":
+    let fn = formula:
+      typeHint: float # read as a float
+      loop:
+        "Bmean" << mean(`B`)
+    let df = toDf({"B" : [1, 2]})
+    let exp = df.summarize(fn)
+    check exp.len == 1
+    check "Bmean" in exp
+    check exp["Bmean", float] == [1.5].toTensor
+
+  test "Full fkVector formula with preface":
+    ## XXX: should such a formula result in `int`? We know from `Bidx` input that
+    ## this is read as `int.` But that knowledge currently isn't used and we fall
+    ## back to our `*` heuristics (which we use over the fact that `5` is an integer,
+    ## as it's likely the user is lazy about writing `5.0` and forcing the `B` to be
+    ## read as `int` by default is bad.
+    ## This case is bad though, because just writing it as below results in us generating
+    ## a bad closure that will cause a CT error from the generated code.
+    ## We should introduce something like a notion of "narrowest type" for the full
+    ## body. We only have this in a very restricted sense.
+    fails: ## XXX: this *should not* fail / it should fail with a custom error message!
+      let fn = formula:
+        preface:
+          Bidx in df["B", int]
+        loop:
+          "B5" ~ Bidx * 5 # result will be float due to `*` heuristics
+    let fn = formula:
+      preface:
+        Bidx in df["B", int]
+      typeHint: int -> int
+      loop:
+        "B5" ~ Bidx * 5 # result will be float due to `*` heuristics
+    let df = toDf({"B" : [1, 2]})
+    let exp = df.mutate(fn)
+    check exp.len == 2
+    check "B5" in exp
+    check exp["B5", int] == [5, 10].toTensor
+
+  test "Full fkVector formula with preface & applied proc in preface":
+    proc foo(t: Tensor[int]): Tensor[float] =
+      result = t.map_inline(x.float * 2.0)
+    let fn = formula:
+      preface:
+        Bidx in foo(df["B", int])
+      loop:
+        "B5" ~ Bidx * 5 # result will be float due to `*` heuristics
+    let df = toDf({"B" : [1, 2]})
+    let exp = df.mutate(fn)
+    check exp.len == 2
+    check "B5" in exp
+    check exp["B5", float] == [10.0, 20.0].toTensor
+
+  test "Full fkScalar formula with custom reduction fails w/o `res` in preface":
+    fails: ## this fails, because it does not define the `res` in preface!
+      let fn = formula:
+        typeHint: int -> int
+        loop:
+          "Bprod" << (res *= `B`) ## Needs to be inside parens or in `block`! Parser...
+
+  test "Full fkScalar formula with custom reduction, `+=`":
+    let fn = formula:
+      typeHint: int -> int
+      preface:
+        var res = 0
+      loop:
+        "Bsum" << (res += `B`) ## Needs to be inside parens or in `block`! Parser...
+    let df = toDf({"B" : [1, 2]})
+    let exp = df.summarize(fn)
+    check exp.len == 1
+    check "Bsum" in exp
+    check exp["Bsum", int][0] == 3
+
+  test "Full fkScalar formula with custom reduction, `*=`":
+    let fn = formula:
+      preface:
+        var res = 1
+      typeHint: int -> int
+      loop:
+        "Bprod" << (res *= `B`) ## Needs to be inside parens or in `block`! Parser...
+    let df = toDf({"B" : [1, 2]})
+    let exp = df.summarize(fn)
+    check exp.len == 1
+    check "Bprod" in exp
+    check exp["Bprod", int][0] == 2
+
+  test "Full fkVector formula with custom variable declaration":
+    let fn = formula:
+      preface:
+        var count = 0
+      typeHint: int -> int
+      loop:
+        "B10" ~ (block:
+          if count > 0:
+            `B` * 10
+          else:
+            inc count
+            0
+        )
+    let df = toDf({"B" : [1, 2]})
+    let exp = df.mutate(fn)
+    check exp.len == 2
+    check "B10" in exp
+    check exp["B10", int] == [0, 20].toTensor
+
+  test "Complex `fkScalar` reduction with preface, if/else and transformation":
+    let fn = formula:
+      preface:
+        lagIdx in lag(df["Time", float], fill = Inf)
+        var res = 0.0
+      loop:
+        "sumTime" << (
+          res += (block:
+                    if idx("B") > 1.0:
+                      idx("Time") - lagIdx
+                    else:
+                      0.0))
+    let df = toDf({"B" : [0.0, 0.5, 1.5, 2.5], "Time" : @[10, 20, 30, 40]})
+    let exp = df.summarize(fn)
+    check exp.len == 1
+    check "sumTime" in exp
+    check exp["sumTime", float][0] == 20.0
+
+  ## make sure this  works (i.e. `in` usage with non `forEach` generated, i.e. string column
+  when false:
+    let fn = formula:
+      preface:
+        lag in lag(df["Foo", string])
+      loop:
+        # some loop that uses `lag`. Will generate `for` instead of `forEach` due to `string`
+        # could needs to replace `lag` by `lag[idx]`!
+        discard
