@@ -822,8 +822,8 @@ proc assignType(heuristicType: FormulaTypes, typ: PossibleTypes, arg = 0): Formu
       # take the type with the highest priority as the input type
       let typs = typ.types.sortTypes()
       if typs.len > 0:
-        result = FormulaTypes(inputType: ident(typs[^1]),
-                              resType: heuristicType.resType)
+        result = FormulaTypes(inputType: heuristicType.inputType,
+                              resType: ident(typs[^1]))
       else:
         result = heuristicType
     else:
