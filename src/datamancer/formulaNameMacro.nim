@@ -54,9 +54,9 @@ proc build(n: NimNode): string =
     for arg in n:
       result.add &" {build(arg)}"
     result.add ")"
-  of nnkElifExpr:
+  of nnkElifExpr, nnkElifBranch:
     result = buildArgs(n, head = "(elif")
-  of nnkElseExpr:
+  of nnkElseExpr, nnkElse:
     result = buildArgs(n, head = "(else")
   of nnkStmtList:
     for ch in n:
@@ -82,6 +82,8 @@ proc build(n: NimNode): string =
   of nnkStmtListExpr:
     # just use child node
     result = build(n[0])
+  of nnkEmpty:
+    result = ""
   else:
     result = n.repr
     warning("Node kind " & $n.kind & " not implemented " &
