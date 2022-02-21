@@ -166,7 +166,7 @@ proc reorderRawTilde(n: NimNode, tilde: NimNode): NimNode =
   for i, ch in n:
     case ch.kind
     of nnkIdent, nnkStrLit, nnkIntLit .. nnkFloat64Lit, nnkPar, nnkCall, nnkCommand,
-       nnkAccQuoted, nnkCallStrLit, nnkBracketExpr:
+       nnkAccQuoted, nnkCallStrLit, nnkBracketExpr, nnkStmtList:
       discard
     of nnkInfix:
       if ch == tilde:
@@ -805,6 +805,7 @@ proc matchingTypes(t, u: PossibleTypes): seq[NimNode] =
 
 proc assignType(heuristicType: FormulaTypes, types: seq[NimNode], resType = newEmptyNode()): FormulaTypes =
   if types.len == 1 and types[0].isValidType:
+
     result = FormulaTypes(inputType: types[0],
                           resType: heuristicType.resType)
     if result.resType.kind == nnkEmpty:
@@ -1181,23 +1182,36 @@ macro compileFormulaImpl*(rawName: static string,
   of fkScalar: result = compileScalarFormula(fct)
   else: error("Unreachable branch. `fkAssign` and `fkVariable` are already handled!")
 
+proc flattenStmtList(n: NimNode): NimNode =
+  ## remove stmt lists from n at top level
+  case n.kind
+  of nnkStmtList:
+    doAssert n.len == 1
+    result = flattenStmtList(n[0])
+  else:
+    result = copyNimTree(n)
+
 proc parseTypeHint(n: var NimNode): TypeHint =
   ## extracts possible type hints from the node `T -> U: ...`
-  case n.kind
-  of nnkExprColonExpr:
-    case n[0].kind
+  proc parseTypeHintStmt(n: NimNode): TypeHint =
+    case n.kind
     of nnkIdent:
       # simple type hint for tensor input type
-      result = TypeHint(inputType: some(n[0]))
+      result = TypeHint(inputType: some(n))
       # resType is `None`
     of nnkInfix:
-      doAssert n[0].len == 3
-      doAssert eqIdent(n[0][0], ident"->")
+      doAssert n.len == 3
+      doAssert eqIdent(n[0], ident"->")
       # type hint of tensor + result
-      result = TypeHint(inputType: some(n[0][1]),
-                        resType: some(n[0][2]))
-    else: error("Unsupported type hint: " & $n[0].repr)
-    n = copyNimTree(n[1])
+      result = TypeHint(inputType: some(n[1]),
+                        resType: some(n[2]))
+    else: error("Unsupported type hint: " & $n.repr)
+  case n.kind
+  of nnkExprColonExpr:
+    result = parseTypeHintStmt(n[0])
+    n = flattenStmtList(n[1])
+  of nnkStmtList:
+    result = parseTypeHintStmt(n[0])
   else: discard # no type hint
 
 proc isPureFormula(n: NimNode): bool =
@@ -1235,21 +1249,26 @@ proc compileFormula(n: NimNode, fullNode = false): NimNode =
   var fct = FormulaCT()
   # starting with a possible preface
   var node = n
+  var isAssignment = false
+  var isReduce = false
+  var isVector = false
+  var typeHint: TypeHint
   if fullNode:
     doAssert n.kind == nnkStmtList
     let prefaceNode = extractCall(n, "preface")
     if prefaceNode.kind != nnkNilLit:
       fct.preface = parsePreface(extractCall(n, "preface"))
+    # get the `typeHint:` part including the `nnkStmtList`
+    var typeHintNode = extractCall(node, "typeHint")
+    if typeHintNode.kind != nnkNilLit:
+      typeHintNode = typeHintNode[1]
+      typeHint = typeHintNode.parseTypeHint
     node = extractCall(node, "loop")[1][0]
-
-  var isAssignment = false
-  var isReduce = false
-  var isVector = false
-  # extract possible type hint
-
-  let typeHint = parseTypeHint(node)
+  else:
+    typeHint = parseTypeHint(node)
   let tilde = recurseFind(node,
                           cond = ident"~")
+
   var formulaName = newNilLit()
   var formulaRhs = newNilLit()
   if tilde.kind != nnkNilLit and node[0].ident != toNimIdent"~":
