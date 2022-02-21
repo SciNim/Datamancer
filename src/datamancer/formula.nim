@@ -959,29 +959,33 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
       ## in this case is a regular call
       ## determine type information from the procedure / w/e. May be `tkNone` if symbol is e.g. generic
       var cmdTyp = tab.getTypeIfPureTree(n[0], detNumArgs(n))
-      doAssert n[0].isPureTree, "If this wasn't a pure tree, it would be a col reference!"
-      ## for each argument to the call / cmd get the type of the argument.
-      ## find then find the procedure / cmd /... that satisfies all requirements
-      ## e.g.
-      ## ```
-      ## proc max(x: int, y: string, z: float, b: int)
-      ## f{ max(idx("a"), "hello", 5.5, someInt()) }
-      ## ```
-      ## needs to restrict to this specific `max` thanks to the arguments `y, z, b`
-      ## Arguments are only looked at for their *output* type, because that is the input to
-      ## the command / call / ...
-      # first extract all possible types for the call/cmd/... arguments
-      let (impureIdxs, chTyps) = determineChildTypesAndImpure(n, tab)
-      # remove all mismatching proc types
-      cmdTyp.filterValidProcs(n, chTyps)
-      # can use the type for the impure argument
-      for idx in impureIdxs:
-        result.add determineTypesImpl(
-          # idx + 1 because we shift it down by 1 when adding to `impureIdxs`
-          n[idx + 1], tab,
-          assignType(heuristicType,
-                     cmdTyp,
-                     arg = idx))
+      if not n[0].isPureTree:
+        let res = determineTypesImpl(n[0], tab, heuristicType)
+        result.add res
+      else:
+        doAssert n[0].isPureTree, "If this wasn't a pure tree, it would be a col reference!"
+        ## for each argument to the call / cmd get the type of the argument.
+        ## find then find the procedure / cmd /... that satisfies all requirements
+        ## e.g.
+        ## ```
+        ## proc max(x: int, y: string, z: float, b: int)
+        ## f{ max(idx("a"), "hello", 5.5, someInt()) }
+        ## ```
+        ## needs to restrict to this specific `max` thanks to the arguments `y, z, b`
+        ## Arguments are only looked at for their *output* type, because that is the input to
+        ## the command / call / ...
+        # first extract all possible types for the call/cmd/... arguments
+        let (impureIdxs, chTyps) = determineChildTypesAndImpure(n, tab)
+        # remove all mismatching proc types
+        cmdTyp.filterValidProcs(n, chTyps)
+        # can use the type for the impure argument
+        for idx in impureIdxs:
+          result.add determineTypesImpl(
+            # idx + 1 because we shift it down by 1 when adding to `impureIdxs`
+            n[idx + 1], tab,
+            assignType(heuristicType,
+                       cmdTyp,
+                       arg = idx))
   of nnkAccQuoted, nnkCallStrLit, nnkBracketExpr:
     if n.nodeIsDf or n.nodeIsDfIdx:
       if n.nodeIsDf and not n.nodeIsDfIdx:
