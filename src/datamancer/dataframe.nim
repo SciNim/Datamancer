@@ -1593,17 +1593,20 @@ proc arrange*(df: DataFrame, by: varargs[string], order = SortOrder.Ascending): 
   result = newDataFrame(df.ncols)
   # remove all constant columns from `by` (nothing to sort there)
   let by = @by.filterIt(df[it].kind != colConstant)
-  let idxCol = sortBys(df, by, order = order)
-  result.len = df.len
-  var data = newColumn()
-  for k in keys(df):
-    withNativeDtype(df[k]):
-      let col = df[k].toTensor(dtype)
-      var res = newTensor[dtype](df.len)
-      for i in 0 ..< df.len:
-        res[i] = col[idxCol[i]]
-      data = toColumn res
-    result.asgn(k, data)
+  if by.len == 0:
+    result = df
+  else:
+    let idxCol = sortBys(df, by, order = order)
+    result.len = df.len
+    var data = newColumn()
+    for k in keys(df):
+      withNativeDtype(df[k]):
+        let col = df[k].toTensor(dtype)
+        var res = newTensor[dtype](df.len)
+        for i in 0 ..< df.len:
+          res[i] = col[idxCol[i]]
+        data = toColumn res
+      result.asgn(k, data)
 
 proc assign(df: var DataFrame, key: string, idx1: int, c2: Column, idx2: int) =
   ## Assigns the value in `df` in col `key` at index `idx1` to the value of
