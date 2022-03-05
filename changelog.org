@@ -15,6 +15,9 @@
   - ... whatever else you can think of. As long as it fits into a
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
+* v0.2.1
+- fix regression when calling =arrange= with purely column references
+  to constant columns
 * v0.2.0
 - constant =DataFrame= columns have seen improvements. Before most
   operations on them would convert them to a non-constant column,
