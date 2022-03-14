@@ -479,6 +479,17 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   idx = lastIdx
   colStart = lastColStart
   row = lastRow
+
+  # 2b. if one column was *completely* empty, turn it into colObject
+  # TODO: The `while` above should break after N lines. Otherwise we risk running over the whole
+  # file if it contains only empty values in one column. After N > 20? 50? whatever rows we can
+  # reasonably argue it will likely be an object column. Otherwise the user can reconvert back to native
+  # should be the saner default
+  if not allColTypesSet(colTypes):
+    for c in mitems(colTypes):
+      if c == colNone:
+        c = colObject
+
   # 3. create the starting columns
   var cols = newSeq[Column](numCols)
   let dataLines = lineCnt - skippedLines
