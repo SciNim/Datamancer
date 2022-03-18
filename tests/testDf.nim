@@ -427,6 +427,25 @@ b,,foo
         checkBlock()
         removeFile(path)
 
+  test "Parsing with fully column":
+    ## Reported by @KosKosynsky on the Nim #science channel
+    let data = """,ID of record,Record number,date_from,date_to,(Name) Additional name if exists,Canal
+0,29528,173/MZS/2020,2020/08-04,2021-08-03,,DE
+1,29529,113/KEK/1443,2020-08-11,2021-08-10,,DE
+2,29530,148/BBK/1527,2020-08-12,2021-08-11,,DE
+3,29531,159/ROT/2769,2020-08-13,2021-08-12,,DE
+4,29532,745/REZ/3265,2020-08-20,2021-08-19,,DE
+5,29533,158/GTK/2144,2020/08-25,2021-0824,,DE
+6,29534,151/ZEB/1654,2020-08-28,2021-08-27,,DE
+7,29535,158/MTG/6526,2020-08-23,2021-08-22,,DE
+"""
+    let df = parseCsvString(data)
+    check df.getKeys.len == 7
+    check "(Name) Additional name if exists" in df
+    check "Unnamed0" in df
+    check df["(Name) Additional name if exists"].kind == colObject
+    check df["(Name) Additional name if exists", Value][0] == null()
+
 suite "DataFrame tests":
 
   test "`toDf` is no-op for DF":
