@@ -485,6 +485,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   # file if it contains only empty values in one column. After N > 20? 50? whatever rows we can
   # reasonably argue it will likely be an object column. Otherwise the user can reconvert back to native
   # should be the saner default
+  # Note: for a *fully* empty column, we *could* also assign a constant value of VNull
   if not allColTypesSet(colTypes):
     for c in mitems(colTypes):
       if c == colNone:
