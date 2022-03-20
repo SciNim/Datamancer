@@ -728,9 +728,11 @@ liftScalarToColumn(max)
 
 proc pretty*(c: Column): string =
   ## pretty prints a Column
-  result = &"Column of type: {toNimType(c.kind)} with length: {c.len}\n"
-  withNativeTensor(c, t):
-    result.add &"  contained Tensor: {t}"
+  result = &"Column of type: {toNimType(c.kind)} with length: {c.len}"
+  if c.kind != colNone:
+    result.add "\n"
+    withNativeTensor(c, t):
+      result.add &"  contained Tensor: {t}"
 template `$`*(c: Column): string = pretty(c)
 
 proc clone*(c: Column): Column =
