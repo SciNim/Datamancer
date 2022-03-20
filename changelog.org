@@ -15,6 +15,10 @@
   - ... whatever else you can think of. As long as it fits into a
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
+* v0.2.2
+- fix CSV parsing for files with fully empty columns
+- allow printing of columns of kind =colNone=
+- add filename as title to =showBrowser= calls  
 * v0.2.1
 - fix regression when calling =arrange= with purely column references
   to constant columns
