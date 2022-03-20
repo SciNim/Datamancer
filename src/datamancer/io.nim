@@ -668,6 +668,8 @@ tr:nth-child(even) {
 </head>
 <body>
 
+<h2> $# </h2>
+
 <table>
   $#
 </table>
@@ -695,7 +697,7 @@ tr:nth-child(even) {
     inc idx
   body.add "</tbody>"
   let fname = path / fname
-  writeFile(fname, tmpl % [header & body])
+  writeFile(fname, tmpl % [fname, header & body])
   openDefaultBrowser(fname)
   if toRemove:
     # opening browsers may be slow, so wait a long time before we delete (file still needs to
