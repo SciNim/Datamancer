@@ -1307,7 +1307,7 @@ proc select*[T: string | FormulaNode](df: DataFrame, cols: varargs[T]): DataFram
     assignFormulaCol(result, df, k)
   if df.kind == dfGrouped:
     # check that groups are still in the DF, else raise
-    let grps = df.groupMap.keys.toSeq
+    let grps = toSeq(keys(df.groupMap))
     if not grps.allIt(it in result):
       raise newException(ValueError, "Cannot select off (drop) a column the input data frame is grouped by!")
 
