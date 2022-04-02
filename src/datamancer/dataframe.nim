@@ -1246,25 +1246,21 @@ proc calcNewConstColumnFromScalar*(df: DataFrame, fn: FormulaNode): (string, Col
   assert fn.kind == fkScalar
   result = (fn.valName, constantColumn(fn.fnS(df), df.len))
 
-proc selectInplace*[T: string | FormulaNode](df: var DataFrame, cols: varargs[T]) =
-  ## Inplace variant of `select` below.
-  var toDrop = toHashSet(df.getKeys)
-  for fn in cols:
-    when type(T) is string:
-      toDrop.excl fn
+proc assignFormulaCol[T: string | FormulaNode](df: var DataFrame, frm: DataFrame, key: T) =
+  ## Helper that assigns the given string or Formula column from `frm` to `df` taking care of
+  ## possibly renaming.
+  when type(T) is string:
+    df[key] = frm[key]
+  else:
+    case key.kind
+    of fkVariable:
+      let col = key.val.toStr
+      df[col] = frm[col]
+    of fkAssign:
+      df[key.lhs] = frm[key.rhs]
     else:
-      case fn.kind
-      of fkVariable: toDrop.excl fn.val.toStr
-      of fkAssign:
-        df.asgn(fn.lhs, df[fn.rhs])
-        toDrop.excl fn.lhs
-      else:
-        raise newException(FormulaMismatchError, "Formula `" & $fn & "` of kind `" & $fn.kind & "` not allowed " &
-          "for selection.")
-  # bind `items` for `HashSet` here to make it work in a module that does not import `sets`
-  bind items
-  # now drop all required keys
-  for key in items(toDrop): df.drop(key)
+      raise newException(FormulaMismatchError, "Formula `" & $fn & "` of kind `" & $fn.kind & "` not allowed " &
+        "for selection.")
 
 proc select*[T: string | FormulaNode](df: DataFrame, cols: varargs[T]): DataFrame =
   ## Returns the data frame cut to the names given as `cols`. The argument
@@ -1276,6 +1272,8 @@ proc select*[T: string | FormulaNode](df: DataFrame, cols: varargs[T]): DataFram
   ##
   ## The `FormulaNode` approach is mainly useful to select and rename a column at
   ## the same time using an assignment formula `<-`.
+  ##
+  ## The column order of the resulting DF is the order of the input columns to `select`.
   ##
   ## Note: string and formula node arguments ``cannot`` be mixed. If a rename is
   ## desired, all other arguments need to be given as `fkVariable` formulas.
@@ -1295,8 +1293,25 @@ proc select*[T: string | FormulaNode](df: DataFrame, cols: varargs[T]): DataFram
       doAssert "Bar" notin dfRes
       doAssert "Baz" notin dfRes
 
-  result = df.shallowCopy()
-  result.selectInplace(cols)
+  result = newDataFrame(df.ncols, kind = df.kind)
+  for k in cols:
+    assignFormulaCol(result, df, k)
+  if df.kind == dfGrouped:
+    # check that groups are still in the DF, else raise
+    let grps = df.groupMap.keys.toSeq
+    if not grps.allIt(it in result):
+      raise newException(ValueError, "Cannot select off (drop) a column the input data frame is grouped by!")
+
+  result.len = df.len
+
+proc selectInplace*[T: string | FormulaNode](df: var DataFrame, cols: varargs[T]) =
+  ## Inplace variant of `select` above.
+  ##
+  ## Note: the implementation changed. Instead of implementing `select` based on
+  ## `selectInplace` by dropping columns, we now implement `selectInplace` based
+  ## on `select`. This is technically still shallow copy internally
+  ## of input `df`. This way the order is the order of the input keys.
+  df = df.select(cols)
 
 proc mutateImpl(df: var DataFrame, fns: varargs[FormulaNode],
                 dropCols: static bool) =
