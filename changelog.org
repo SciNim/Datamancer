@@ -15,6 +15,11 @@
   - ... whatever else you can think of. As long as it fits into a
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
+* v0.2.3
+- =select= now respects the order of the given columns, i.e. the order
+  of the columns in the resulting DF are in the order of the given
+  columns
+- add =relocate= to change the column order of one or more keys
 * v0.2.2
 - fix CSV parsing for files with fully empty columns
 - allow printing of columns of kind =colNone=
