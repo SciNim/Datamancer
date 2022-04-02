@@ -20,6 +20,8 @@
   of the columns in the resulting DF are in the order of the given
   columns
 - add =relocate= to change the column order of one or more keys
+- add experimental operation to access column at index =i= using
+  =df[[i]]= syntax
 * v0.2.2
 - fix CSV parsing for files with fully empty columns
 - allow printing of columns of kind =colNone=

@@ -204,6 +204,15 @@ proc `[]`*[T](df: DataFrame, key: string, dtype: typedesc[T]): Tensor[T] =
     doAssert t.sum == 15
   result = df.data[key].toTensor(dtype)
 
+proc `[]`*(df: DataFrame, idx: array[1, int]): Column =
+  ## Returns the column at index `idx`.
+  ##
+  ## NOTE: experimental!
+  let j = idx[0]
+  doAssert j >= 0 and j < df.ncols
+  for i, k in df.getKeys:
+    if i == j: return df[k]
+
 proc get*(df: DataFrame, key: string): Column {.inline.} =
   ## Returns the column of `key`.
   ##
