@@ -1313,6 +1313,63 @@ proc selectInplace*[T: string | FormulaNode](df: var DataFrame, cols: varargs[T]
   ## of input `df`. This way the order is the order of the input keys.
   df = df.select(cols)
 
+proc removeColumns[T: string | FormulaNode](keys: var seq[string], cols: seq[T]) =
+  template removeStr(keys, c: untyped): untyped =
+    let idx = find(keys, c)
+    if idx == -1:
+      raise newException(KeyError, "Column `" & c & "` does not exist in input DataFrame.")
+    keys.delete(idx)
+
+  when type(T) is string:
+    for c in cols:
+      removeStr(keys, c)
+  else:
+    for key in cols:
+      case key.kind
+      of fkVariable:
+        let col = key.val.toStr
+        removeStr(keys, col)
+      of fkAssign:
+        removeStr(keys, key.rhs)
+      else:
+        raise newException(FormulaMismatchError, "Formula `" & $fn & "` of kind `" & $fn.kind & "` not allowed " &
+          "for selection.")
+
+proc relocate*[T: string | FormulaNode](df: DataFrame, cols: varargs[T], after = "", before = ""): DataFrame =
+  ## Relocates (and possibly renames if `fkAssign` formula `"A" <- "B"` is given) the column
+  ## to either `before` or `after` the given column.
+  let cols = @cols
+  var keys = df.getKeys()
+  keys.removeColumns(cols)
+  var idx = -1
+  if after.len > 0:
+    idx = keys.find(after)
+    if idx == -1:
+      raise newException(KeyError, "The `after` column " & $after & " does not exist in the input DataFrame or it is " &
+        "one of the columns to be relocated.")
+  if before.len > 0:
+    idx = keys.find(before) - 1
+    if idx == -2:
+      raise newException(KeyError, "The `before` column " & $before & " does not exist in the input DataFrame or it is " &
+        "one of the columns to be relocated.")
+  result = newDataFrame(df.ncols, kind = df.kind)
+  # first add indices up to `idx`
+  for i in 0 .. idx:
+    result[keys[i]] = df[keys[i]]
+  # now add other columns
+  for c in cols:
+    assignFormulaCol(result, df, c)
+  # now add rest
+  for i in max(idx, 0) ..< keys.len:
+    result[keys[i]] = df[keys[i]]
+  result.len = df.len
+  if df.kind == dfGrouped:
+    result.groupMap = df.groupMap
+
+proc relocate*[T: string | FormulaNode](df: DataFrame, cols: seq[T]): DataFrame =
+  ## Relocates the given columns (possibly renaming them) in the DataFrame
+  result = df.select(cols)
+
 proc mutateImpl(df: var DataFrame, fns: varargs[FormulaNode],
                 dropCols: static bool) =
   ## implementation of mutation / transmutation. Allows to statically
