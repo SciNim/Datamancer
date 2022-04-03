@@ -1270,7 +1270,7 @@ proc assignFormulaCol[T: string | FormulaNode](df: var DataFrame, frm: DataFrame
     of fkAssign:
       df[key.lhs] = frm[key.rhs]
     else:
-      raise newException(FormulaMismatchError, "Formula `" & $fn & "` of kind `" & $fn.kind & "` not allowed " &
+      raise newException(FormulaMismatchError, "Formula `" & $key & "` of kind `" & $key.kind & "` not allowed " &
         "for selection.")
 
 proc select*[T: string | FormulaNode](df: DataFrame, cols: varargs[T]): DataFrame =
@@ -1341,9 +1341,9 @@ proc removeColumns[T: string | FormulaNode](keys: var seq[string], cols: seq[T])
         let col = key.val.toStr
         removeStr(keys, col)
       of fkAssign:
-        removeStr(keys, key.rhs)
+        removeStr(keys, key.rhs.toStr)
       else:
-        raise newException(FormulaMismatchError, "Formula `" & $fn & "` of kind `" & $fn.kind & "` not allowed " &
+        raise newException(FormulaMismatchError, "Formula `" & $key & "` of kind `" & $key.kind & "` not allowed " &
           "for selection.")
 
 proc relocate*[T: string | FormulaNode](df: DataFrame, cols: varargs[T], after = "", before = ""): DataFrame =
