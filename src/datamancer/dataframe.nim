@@ -206,8 +206,12 @@ proc `[]`*[T](df: DataFrame, key: string, dtype: typedesc[T]): Tensor[T] =
 
 proc `[]`*(df: DataFrame, idx: array[1, int]): Column =
   ## Returns the column at index `idx`.
-  ##
-  ## NOTE: experimental!
+  runnableExamples:
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
+    doAssert df[[0]].toTensor(int) == toTensor [1, 2, 3] ## get the first column
+    doAssert df[[1]].toTensor(int) == toTensor [10, 11, 12] ## get the second column
+    doAssert df[[2]].toTensor(string) == toTensor ["5", "6", "7"] ## get the third column
+
   let j = idx[0]
   if j < 0 or j >= df.ncols:
     raise newException(IndexError, "Index " & $j & " is out of bounds for DF with " & $df.ncols & " columns.")
@@ -1349,6 +1353,24 @@ proc removeColumns[T: string | FormulaNode](keys: var seq[string], cols: seq[T])
 proc relocate*[T: string | FormulaNode](df: DataFrame, cols: varargs[T], after = "", before = ""): DataFrame =
   ## Relocates (and possibly renames if `fkAssign` formula `"A" <- "B"` is given) the column
   ## to either `before` or `after` the given column.
+  runnableExamples:
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
+    doAssert df[[0]].toTensor(int) == toTensor [1, 2, 3] ## first column is `x`
+    block:
+      let dfR = df.relocate("x", after = "y")
+      doAssert df[[0]].toTensor(int) == toTensor [10, 11, 12] ## first column is now `y`
+      doAssert df[[1]].toTensor(int) == toTensor [1, 2, 3] ## second column is now `x`
+    block:
+      let dfR = df.relocate(f{"X" <- "x"}, after = "y") ## can also rename a column while relocating
+      doAssert df[[0]].toTensor(int) == toTensor [10, 11, 12] ## first column is now `y`
+      doAssert df[[1]].toTensor(int) == toTensor [1, 2, 3] ## second column is now `x`
+      doAssert "X" in dfR and "x" notin dfR
+    block:
+      let dfR = df.relocate(["y", "x"], after = "z") ## can relocate multiple & order is respected
+      doAssert df[[0]].toTensor(string) == toTensor ["5", "6", "7"] ## first column is now `z`
+      doAssert df[[1]].toTensor(int) == toTensor [10, 11, 12] ## second column is now `y`
+      doAssert df[[2]].toTensor(int) == toTensor [1, 2, 3] ## last is now `x`
+
   let cols = @cols
   var keys = df.getKeys()
   keys.removeColumns(cols)
