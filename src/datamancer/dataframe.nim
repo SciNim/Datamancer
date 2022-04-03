@@ -209,6 +209,8 @@ proc `[]`*(df: DataFrame, idx: array[1, int]): Column =
   ##
   ## NOTE: experimental!
   let j = idx[0]
+  if j < 0 or j >= df.ncols:
+    raise newException(IndexError, "Index " & $j & " is out of bounds for DF with " & $df.ncols & " columns.")
   doAssert j >= 0 and j < df.ncols
   for i, k in df.getKeys:
     if i == j: return df[k]
