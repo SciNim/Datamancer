@@ -1684,6 +1684,149 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     check df["β"].kind == colConstant
     check df["β"].cCol == %~ 123
 
+  test "Index access for DataFrames using `[[i]]` operator":
+    let df = toDf({"a" : [1, 2], "b" : [3, 4], "c" : [5, 6], "d" : [7, 8]})
+    block:
+      check df[[0]].toTensor(int) == [1, 2].toTensor
+      check df[[1]].toTensor(int) == [3, 4].toTensor
+      check df[[2]].toTensor(int) == [5, 6].toTensor
+      check df[[3]].toTensor(int) == [7, 8].toTensor
+    block:
+      try:
+        discard df[[-1]]
+      except IndexError:
+        discard
+      try:
+        discard df[[5]]
+      except IndexError:
+        discard
+
+    let df2 = toDf({"b" : [3, 4], "a" : [1, 2], "d" : [7, 8], "c" : [5, 6]})
+    block:
+      check df2[[1]].toTensor(int) == [1, 2].toTensor
+      check df2[[0]].toTensor(int) == [3, 4].toTensor
+      check df2[[3]].toTensor(int) == [5, 6].toTensor
+      check df2[[2]].toTensor(int) == [7, 8].toTensor
+
+  test "Select - selecting a column":
+    let df = toDf({"a" : [1, 2], "b" : [3, 4], "c" : [5, 6], "d" : [7, 8]})
+    block:
+      let res = df.select("a")
+      check "a" in res
+      check "b" notin res and "c" notin res and "d" notin res
+    block:
+      let res = df.select("b")
+      check "b" in res
+      check "a" notin res and "c" notin res and "d" notin res
+    block:
+      let res = df.select("d")
+      check "d" in res
+      check "a" notin res and "b" notin res and "c" notin res
+
+  test "Select - selecting multiple columns":
+    let df = toDf({"a" : [1, 2], "b" : [3, 4], "c" : [5, 6], "d" : [7, 8]})
+    block:
+      let res = df.select("a", "b")
+      check "a" in res
+      check "b" in res
+      check "c" notin res and "d" notin res
+    block:
+      let res = df.select("b", "d")
+      check "b" in res
+      check "d" in res
+      check "a" notin res and "c" notin res
+    block: # using array
+      let res = df.select(["a", "d"])
+      check "a" in res
+      check "d" in res
+      check "b" notin res and "c" notin res
+    block: # using seq
+      let res = df.select(@["a", "d"])
+      check "a" in res
+      check "d" in res
+      check "b" notin res and "c" notin res
+
+  test "Select - using a Formula":
+    let df = toDf({"a" : [1, 2], "b" : [3, 4], "c" : [5, 6], "d" : [7, 8]})
+    block:
+      let res = df.select(f{"a"}, f{"B" <- "b"}) # formula & string cannot be mixed
+      check "a" in res
+      check "B" in res
+      check "c" notin res and "d" notin res and "b" notin res
+
+  test "Select - respects order of given keys":
+    let df = toDf({"a" : [1, 2], "b" : [3, 4], "c" : [5, 6], "d" : [7, 8]})
+    block:
+      let res = df.select("a", "b")
+      check res[[0]].toTensor(int) == [1, 2].toTensor
+      check res[[1]].toTensor(int) == [3, 4].toTensor
+    block:
+      let res = df.select("b", "a")
+      check res[[1]].toTensor(int) == [1, 2].toTensor
+      check res[[0]].toTensor(int) == [3, 4].toTensor
+
+  test "Relocate - relocate a single column":
+    let df = toDf({"a" : [1, 2], "b" : [3, 4], "c" : [5, 6], "d" : [7, 8]})
+    check df[[0]].toTensor(int) == [1, 2].toTensor
+    check df[[1]].toTensor(int) == [3, 4].toTensor
+    check df[[2]].toTensor(int) == [5, 6].toTensor
+    check df[[3]].toTensor(int) == [7, 8].toTensor
+    block:
+      let res = df.relocate("a", after = "c")
+      check res[[2]].toTensor(int) == [1, 2].toTensor
+      check res[[0]].toTensor(int) == [3, 4].toTensor
+      check res[[1]].toTensor(int) == [5, 6].toTensor
+      check res[[3]].toTensor(int) == [7, 8].toTensor
+    block:
+      let res = df.relocate("a", after = "d")
+      check res[[3]].toTensor(int) == [1, 2].toTensor
+      check res[[0]].toTensor(int) == [3, 4].toTensor
+      check res[[1]].toTensor(int) == [5, 6].toTensor
+      check res[[2]].toTensor(int) == [7, 8].toTensor
+    block:
+      let res = df.relocate("a", before = "b")
+      check res[[0]].toTensor(int) == [1, 2].toTensor
+      check res[[1]].toTensor(int) == [3, 4].toTensor
+      check res[[2]].toTensor(int) == [5, 6].toTensor
+      check res[[3]].toTensor(int) == [7, 8].toTensor
+    block:
+      let res = df.relocate("c", before = "a")
+      check res[[1]].toTensor(int) == [1, 2].toTensor
+      check res[[2]].toTensor(int) == [3, 4].toTensor
+      check res[[0]].toTensor(int) == [5, 6].toTensor
+      check res[[3]].toTensor(int) == [7, 8].toTensor
+    block:
+      let res = df.relocate(f{"C" <- "c"}, before = "a")
+      check "C" in res and "c" notin res
+      check res[[1]].toTensor(int) == [1, 2].toTensor
+      check res[[2]].toTensor(int) == [3, 4].toTensor
+      check res[[0]].toTensor(int) == [5, 6].toTensor
+      check res[[3]].toTensor(int) == [7, 8].toTensor
+    block: # cannot relocate to itself
+      try:
+        let res = df.relocate("a", after = "a")
+      except KeyError:
+        discard
+
+  test "Relocate - relocate multiple columns":
+    let df = toDf({"a" : [1, 2], "b" : [3, 4], "c" : [5, 6], "d" : [7, 8]})
+    check df[[0]].toTensor(int) == [1, 2].toTensor
+    check df[[1]].toTensor(int) == [3, 4].toTensor
+    check df[[2]].toTensor(int) == [5, 6].toTensor
+    check df[[3]].toTensor(int) == [7, 8].toTensor
+    block: # need to hand array for varargs
+      let res = df.relocate(["b", "c"], after = "d")
+      check res[[0]].toTensor(int) == [1, 2].toTensor
+      check res[[2]].toTensor(int) == [3, 4].toTensor
+      check res[[3]].toTensor(int) == [5, 6].toTensor
+      check res[[1]].toTensor(int) == [7, 8].toTensor
+    block: #
+      let res = df.relocate(["c", "b"], after = "d")
+      check res[[0]].toTensor(int) == [1, 2].toTensor
+      check res[[3]].toTensor(int) == [3, 4].toTensor
+      check res[[2]].toTensor(int) == [5, 6].toTensor
+      check res[[1]].toTensor(int) == [7, 8].toTensor
+
 suite "Formulas":
   test "Formula containing `if`":
     let fn = f{int -> int: if `poopoo` > 5:
