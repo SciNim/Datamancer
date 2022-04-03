@@ -452,7 +452,7 @@ suite "DataFrame tests":
     let df = toDf(toDf(readCsv("data/mpg.csv")))
     check df["class", string] == readCsv("data/mpg.csv")["class", string]
 
-  test "`toDf` is works on an OrderedTable[string, seq[string]]":
+  test "`toDf` works on an OrderedTable[string, seq[string]]":
     var tab = initOrderedTable[string, seq[string]]()
     tab["x"] = @["1", "2"]
     tab["y"] = @["4", "5"]
@@ -460,7 +460,7 @@ suite "DataFrame tests":
     check df["x", int] == [1, 2].toTensor
     check df["y", int] == [4, 5].toTensor
 
-  test "`toDf` is works on an OrderedTable[string, seq[Value]]":
+  test "`toDf` works on an OrderedTable[string, seq[Value]]":
     var tab = initOrderedTable[string, seq[Value]]()
     tab["x"] = @[%~ 1, %~ 2]
     tab["y"] = @[%~ 4, %~ 5]
@@ -468,13 +468,13 @@ suite "DataFrame tests":
     check df["x", int] == [1, 2].toTensor
     check df["y", int] == [4, 5].toTensor
 
-  test "`toDf` is works for a single identifier":
+  test "`toDf` works for a single identifier":
     let x = @[1, 2, 3]
     let df = toDf(x)
     check "x" in df
     check df["x", int] == [1, 2, 3].toTensor
 
-  test "`toDf` is works for multiple identifiers":
+  test "`toDf` works for multiple identifiers":
     let x = @[1, 2, 3]
     let y = @[4, 5, 6]
     let df = toDf(x, y)
@@ -483,14 +483,14 @@ suite "DataFrame tests":
     check "y" in df
     check df["y", int] == [4, 5, 6].toTensor
 
-  test "`toDf` is works for a single call":
+  test "`toDf` works for a single call":
     proc foo(): seq[int] =
       result = @[1, 2, 3]
     let df = toDf(foo())
     check "foo()" in df
     check df["foo()", int] == [1, 2, 3].toTensor
 
-  test "`toDf` is works for multiple calls":
+  test "`toDf` works for multiple calls":
     proc foo(): seq[int] =
       result = @[1, 2, 3]
     proc bar(): seq[string] =
@@ -501,13 +501,13 @@ suite "DataFrame tests":
     check "bar()" in df
     check df["bar()", string] == ["a", "b", "c"].toTensor
 
-  test "`toDf` is works for a single TableConstr element":
+  test "`toDf` works for a single TableConstr element":
     let x = @[1, 2, 3]
     let df = toDf({"x" : x})
     check "x" in df
     check df["x", int] == [1, 2, 3].toTensor
 
-  test "`toDf` is works for multiple TableConstr elements":
+  test "`toDf` works for multiple TableConstr elements":
     let x = @[1, 2, 3]
     let y = @[4, 5, 6]
     let df = toDf({"x" : x, "y" : y})
@@ -516,14 +516,14 @@ suite "DataFrame tests":
     check "y" in df
     check df["y", int] == [4, 5, 6].toTensor
 
-  test "`toDf` is works for a single call in a TableConstr":
+  test "`toDf` works for a single call in a TableConstr":
     proc foo(): seq[int] =
       result = @[1, 2, 3]
     let df = toDf({"x" : foo()})
     check "x" in df
     check df["x", int] == [1, 2, 3].toTensor
 
-  test "`toDf` is works for multiple calls in a TableConstr":
+  test "`toDf` works for multiple calls in a TableConstr":
     proc foo(): seq[int] =
       result = @[1, 2, 3]
     proc bar(): seq[string] =
