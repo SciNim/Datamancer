@@ -340,7 +340,7 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
 template advanceToNextRow() {.dirty.} =
   ## The steps done after a line break is found & we advance to the next row.
   ##
-  ## Stored in a dity template as we also use it while guessing types.
+  ## Stored in a dirty template as we also use it while guessing types.
   inc row
   col = 0
   if data[idx] == '\r' and data[idx + 1] == '\l':
