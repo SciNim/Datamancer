@@ -1874,7 +1874,9 @@ proc summarize*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
   case df.kind
   of dfNormal:
     for fn in fns:
-      doAssert fn.kind == fkScalar
+      if fn.kind != fkScalar:
+        raise newException(FormulaMismatchError, "The given formula `" & $fn.name & "` of kind `" & $fn.kind &
+          "` is not a scalar formula. Did you forget to apply a reducing procedure to the arguments?")
       lhsName = fn.valName
       # just apply the function
       withNativeConversion(fn.valKind, get):
@@ -1889,7 +1891,9 @@ proc summarize*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
     var idx = 0
     var keyLabelsAdded = false
     for fn in fns:
-      doAssert fn.kind == fkScalar
+      if fn.kind != fkScalar:
+        raise newException(FormulaMismatchError, "The given formula " & $fn.name & " of kind " & $fn.kind &
+          " is not a scalar formula. Did you forget to apply a reducing procedure to the arguments?")
       lhsName = fn.valName
       sumStats[lhsName] = newSeqOfCap[Value](1000) # just start with decent size
       for class, subdf in groups(df):
