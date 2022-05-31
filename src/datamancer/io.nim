@@ -421,10 +421,11 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     buf = newStringOfCap(80)
 
   # 1. first parse the header
-  var colNames: seq[string]
-  while idx < size:
-    parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
-      parseHeaderCol(data, buf, colNames, header, sep, quote, idx, colStart)
+  var colNames = colNamesIn
+  if colNames.len == 0:
+    while idx < size:
+      parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
+        parseHeaderCol(data, buf, colNames, header, sep, quote, idx, colStart)
 
   if colNamesIn.len > 0 and colNamesIn.len != colNames.len:
     raise newException(IOError, "Input data contains " & $colNames.len & " columns, but " &
