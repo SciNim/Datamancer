@@ -466,6 +466,8 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
       guessType(data, buf, colTypes, col, idx, colStart, numCols)
       # if we see the end of the line, store the current column number
       if data[idx] in {'\n', '\r', '\l'}:
+        if lastWasSep and sep in {' ', '\t'}:
+          dec col # don't count "empty space columns" at end
         dataColsIdx = col
         if not allColTypesSet(colTypes): # manually perform steps to go to next line and skip
                                          # `when toBreak` logic
