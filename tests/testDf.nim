@@ -1272,6 +1272,15 @@ t_in_s,  C1_in_V,  C2_in_V,  type
         for el in dfG[$f{int: sum(c"numVec")}].toTensor(Value):
           check el == %~ sumNum
 
+    block:
+      let df = seqsToDf({"x": @[1, 2, 3, 4, 5], "y": @[5, 10, 15, 20, 25]})
+      try:
+        # fails with `FormulaMismatchError` as there is no reducing proc call in
+        # the formula body!
+        echo df.summarize(f{float: `x`})
+      except FormulaMismatchError:
+        discard
+
   test "Count":
     # count elements by group. Useful combination of group_by and summarize(len)
     let mpg = readCsv("data/mpg.csv")
