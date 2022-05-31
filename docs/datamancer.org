@@ -117,11 +117,11 @@ optimizations applicable to the specific domain.
 *** From =seq[T]/Tensor[T]=
 
 For the case of having the data as =seq[T]=, we just use the
-=seqsToDf= template to create a DF from it. The template does not care
+=toDf= template to create a DF from it. The template does not care
 whether the input is of type =seq[T]= or =Tensor[T]=. In the future
 support for pointer + length pairs can be added as well.
 
-There are two ways to use =seqsToDf=. Assuming we have three sequences of possibly different types:
+There are two ways to use =toDf=. Assuming we have three sequences of possibly different types:
 #+BEGIN_SRC nim
 let s1: seq[int] = @[22, 54, 34]
 let s2: seq[float] = @[1.87, 1.75, 1.78]
@@ -130,7 +130,7 @@ let s3: seq[string] = @["Mike", "Laura", "Sue"]
 we can either create a DF and let the library automatically deduce the
 column names from the Nim identifiers of the given variables:
 #+BEGIN_SRC nim
-let dfAutoNamed = seqsToDf(s1, s2, s3)
+let dfAutoNamed = toDf(s1, s2, s3)
 #+END_SRC
 which will give us a DF with column names:
 #+BEGIN_SRC nim
@@ -139,9 +139,9 @@ which will give us a DF with column names:
 In many cases one might rather like a different name. In this case use the following
 syntax:
 #+BEGIN_SRC nim
-let df = seqsToDf({ "Age" : s1,
-                    "Height" : s2,
-                    "Name" : s3 })
+let df = toDf({ "Age" : s1,
+                "Height" : s2,
+                "Name" : s3 })
 #+END_SRC
 which will then use the given strings for the column names.
 
