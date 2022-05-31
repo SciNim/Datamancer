@@ -544,6 +544,13 @@ proc readCsv*(fname: string,
   ##
   ## `skipLines` is used to skip `N` number of lines at the beginning of the
   ## file.
+  ##
+  ## `colNames` can be used to overwrite (or supply if none in file!) names of the
+  ## columns in the header. This is also useful if the header is not conforming
+  ## to the separator of the file. Note: if you `do` supply custom column names,
+  ## but there `is` a header in the file, make sure to use `skipLines` to skip
+  ## that header, as we will not try to parse any header information if `colNames`
+  ## is supplied.
   result = newDataFrame()
   var ff = memfiles.open(fname)
   var lineCnt = 0
