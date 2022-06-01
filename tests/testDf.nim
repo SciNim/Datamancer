@@ -1376,33 +1376,78 @@ t_in_s,  C1_in_V,  C2_in_V,  type
 
   test "Custom column names when reading CSV like data":
     # given some data without a header and column names
-    let dataDuplStream = newStringStream("""
+    let data = """
 -3.0000E-06,  -2.441E-04,  -6.836E-04,  T1
 -2.9992E-06,  2.441E-04,  -6.836E-04 ,  T1
 -2.9984E-06,  1.025E-03,  -8.789E-04 ,  T1
-""")
+"""
+    let dataDuplStream = newStringStream(data)
     # define columns
     let cols = @["V1", "V2", "V3", "Channel"]
-    let df = toDf(readCsv(dataDuplStream, colNames = cols))
-    check df.len == 3
-    check df.getKeys.sorted == cols.sorted
+    block OldParser:
+      let df = toDf(readCsv(dataDuplStream, colNames = cols))
+      check df.len == 3
+      check df.getKeys.sorted == cols.sorted
+    block NewParser:
+      let df = parseCsvString(data, colNames = cols)
+      check df.len == 3
+      check df.getKeys.sorted == cols.sorted
 
   test "Column names containing numbers":
     # given some data without a header and column names
-    let dataDuplStream = newStringStream("""
+    let data = """
 -3.0000E-06,  -2.441E-04,  -6.836E-04,  T1
 -2.9992E-06,  2.441E-04,  -6.836E-04 ,  T1
 -2.9984E-06,  1.025E-03,  -8.789E-04 ,  T1
-""")
+"""
+    let dataDuplStream = newStringStream(data)
     # define columns
     let cols = @["0", "1", "2", "3"]
     let colsNot = @["\"0\"", "\"1\"", "\"2\"", "\"3\""]
-    let df = toDf(readCsv(dataDuplStream, colNames = cols))
-    check df.len == 3
+    block OldParser:
+      let df = toDf(readCsv(dataDuplStream, colNames = cols))
+      check df.len == 3
+      check df.getKeys.sorted == cols.sorted
+      # redundant but a showcase what happened previously
+      for k in zip(df.getKeys, colsNot):
+        check k[0] != k[1]
+    block NewParser:
+      let df = parseCsvString(data, colNames = cols)
+      check df.len == 3
+      check df.getKeys.sorted == cols.sorted
+      # redundant but a showcase what happened previously
+      for k in zip(df.getKeys, colsNot):
+        check k[0] != k[1]
+
+  test "Custom column names replacing a real header":
+    let data = """
+ ag, Z=47, (Energy (eV),f1,f2)
+   10.0000     -9999.00      1.18566
+   10.1617     -9999.00      1.22941
+   10.3261     -9999.00      1.27478
+   10.4931     -9999.00      1.32182
+   10.6628     -9999.00      1.38215
+"""
+    let cols = @["Energy", "f1", "f2"]
+    # note the `skipLines`! Have to skip the real header line!
+    let df = parseCsvString(data, colNames = cols, sep = ' ', skipLines = 1)
+    check df.len == 5
     check df.getKeys.sorted == cols.sorted
-    # redundant but a showcase what happened previously
-    for k in zip(df.getKeys, colsNot):
-      check k[0] != k[1]
+    check df["f1", float].toSeq1D == @[-9999.0, -9999.0, -9999.0, -9999.0, -9999.0]
+
+  test "Parsing space seperated data with spacing at the end of lines":
+    let data = """
+   Energy            f1           f2
+   10.0000     -9999.00      1.18566
+   10.1617     -9999.00      1.22941
+   10.3261     -9999.00      1.27478
+   10.4931     -9999.00      1.32182
+   10.6628     -9999.00      1.38215
+"""
+    let df = parseCsvString(data, sep = ' ')
+    check df.len == 5
+    check df.getKeys.sorted == @["Energy", "f1", "f2"]
+    check df["f1", float].toSeq1D == @[-9999.0, -9999.0, -9999.0, -9999.0, -9999.0]
 
   test "Evaluate data frame using FormulaNode":
     let mpg = readCsv("data/mpg.csv")
