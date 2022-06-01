@@ -1,4 +1,4 @@
-* v0.3.0 (To be finalized...)
+* +v0.3.0 (To be finalized...)+ (ON ICE)
 - *MAJOR, BREAKING*: Add experimental support for "non-generic generic
   =Columns=". Essentially, from many procedures it is now possible to
   assign data types that are normally not supported to be stored
@@ -15,6 +15,23 @@
   - ... whatever else you can think of. As long as it fits into a
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
+
+* v0.2.4
+- replace an assertion by a proper check in =summarize= if user hands
+  a non reducing formula to it
+- replace usages of =seqsToDf= in the docs
+- *BREAKING*: in =readCsv= the =colNames= argument, if any are given,
+  now implies we _skip_ the parsing of the header completely. If there
+  _is_ a header in the file that is to be ignored, =colNames= must be
+  combined with =skipLines=! See also the updated docstring.
+- possibly breaking: when parsing CSV files with space / tab separators, spacing at the
+  end of the lines does not cause issues anymore (they previously
+  caused us to count them as real columns, meaning possible crashes
+  due to number of column mismatches). This _can_ be breaking for a
+  user, but in that case they relied on unspecified behavior. Empty
+  columns at the beginning or ending in the file are a bit crazy for
+  space based seps. However, we might add a =skipInitialSpace=
+  equivalent for this in the future.
 * v0.2.3
 - =select= now respects the order of the given columns, i.e. the order
   of the columns in the resulting DF are in the order of the given
