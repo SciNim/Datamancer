@@ -1,6 +1,8 @@
 import dataframe, value, column
 
 import memfiles, streams, strutils, tables, parsecsv, sequtils
+# for reading CSV files from URLs
+import httpclient
 # for `showBrowser`
 import browsers, strformat, os
 
@@ -520,49 +522,6 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     result[col] = cols[i]
   result.len = dataLines
 
-proc readCsv*(fname: string,
-              sep: char = ',',
-              header: string = "",
-              skipLines = 0,
-              toSkip: set[char] = {},
-              colNames: seq[string] = @[],
-              skipInitialSpace = true,
-              quote = '"',
-             ): DataFrame =
-  ## Reads a DF from a CSV file using the separator character `sep`.
-  ##
-  ## `toSkip` can be used to skip optional characters that may be present
-  ## in the data. For instance if a CSV file is separated by `,`, but contains
-  ## additional whitespace (`5, 10, 8` instead of `5,10,8`) this can be
-  ## parsed correctly by setting `toSkip = {' '}`.
-  ##
-  ## `header` designates the symbol that defines the header of the CSV file.
-  ## By default it's empty meaning that the first line will be treated as
-  ## the header. If a header is given, e.g. `"#"`, this means we will determine
-  ## the column names from the first line (which has to start with `#`) and
-  ## skip every line until the first line starting without `#`.
-  ##
-  ## `skipLines` is used to skip `N` number of lines at the beginning of the
-  ## file.
-  ##
-  ## `colNames` can be used to overwrite (or supply if none in file!) names of the
-  ## columns in the header. This is also useful if the header is not conforming
-  ## to the separator of the file. Note: if you `do` supply custom column names,
-  ## but there `is` a header in the file, make sure to use `skipLines` to skip
-  ## that header, as we will not try to parse any header information if `colNames`
-  ## is supplied.
-  result = newDataFrame()
-  var ff = memfiles.open(fname)
-  var lineCnt = 0
-  for slice in memSlices(ff):
-    if slice.size > 0:
-      inc lineCnt
-
-  ## we're dealing with ASCII files, thus each byte can be interpreted as a char
-  var data = cast[ptr UncheckedArray[char]](ff.mem)
-  result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, toSkip, colNames)
-  ff.close()
-
 func countNonEmptyLines(s: string): int =
   var idx = 0
   var lineStart = idx
@@ -606,6 +565,73 @@ proc parseCsvString*(csvData: string,
   var data = cast[ptr UncheckedArray[char]](csvData[0].unsafeAddr)
   result = readCsvTypedImpl(data, csvData.len, countNonEmptyLines(csvData),
                             sep, header, skipLines, toSkip, colNames)
+
+proc readCsvFromUrl(url: string,
+              sep: char = ',',
+              header: string = "",
+              skipLines = 0,
+              toSkip: set[char] = {},
+              colNames: seq[string] = @[]
+             ): DataFrame =
+  ## Reads a DF from a web URL (which must contain a CSV file)
+  var client = newHttpClient()
+  return parseCsvString(client.getContent(url), sep, header, skipLines, toSkip, colNames)
+
+proc readCsv*(fname: string,
+              sep: char = ',',
+              header: string = "",
+              skipLines = 0,
+              toSkip: set[char] = {},
+              colNames: seq[string] = @[],
+              skipInitialSpace = true,
+              quote = '"',
+             ): DataFrame =
+  ## Reads a DF from a CSV file or a web URL using the separator character `sep`.
+  ## 
+  ## `fname` can be a local filename or a web URL. If `fname` starts with
+  ## "http://" or "https://" the file contents will be read from the selected
+  ## web server. No catching is performed so if you plan to read from the same
+  ## URL multiple times it might be best to download the file manually instead.
+  ## Please note that to download files from https URLs you must compile with
+  ## the -d:ssl option. Also note that the `skipInitialSpace` and `quote`
+  ## arguments are ignored when reading from a web URL.
+  ##
+  ## `toSkip` can be used to skip optional characters that may be present
+  ## in the data. For instance if a CSV file is separated by `,`, but contains
+  ## additional whitespace (`5, 10, 8` instead of `5,10,8`) this can be
+  ## parsed correctly by setting `toSkip = {' '}`.
+  ##
+  ## `header` designates the symbol that defines the header of the CSV file.
+  ## By default it's empty meaning that the first line will be treated as
+  ## the header. If a header is given, e.g. `"#"`, this means we will determine
+  ## the column names from the first line (which has to start with `#`) and
+  ## skip every line until the first line starting without `#`.
+  ##
+  ## `skipLines` is used to skip `N` number of lines at the beginning of the
+  ## file.
+  ##
+  ## `colNames` can be used to overwrite (or supply if none in file!) names of the
+  ## columns in the header. This is also useful if the header is not conforming
+  ## to the separator of the file. Note: if you `do` supply custom column names,
+  ## but there `is` a header in the file, make sure to use `skipLines` to skip
+  ## that header, as we will not try to parse any header information if `colNames`
+  ## is supplied.
+
+  if fname.startsWith("http://") or fname.startsWith("https://"):
+    return readCsvFromUrl(fname, sep=sep, header=header, skipLines=skipLines,
+                          toSkip=toSkip, colNames=colNames)
+
+  result = newDataFrame()
+  var ff = memfiles.open(fname)
+  var lineCnt = 0
+  for slice in memSlices(ff):
+    if slice.size > 0:
+      inc lineCnt
+
+  ## we're dealing with ASCII files, thus each byte can be interpreted as a char
+  var data = cast[ptr UncheckedArray[char]](ff.mem)
+  result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, toSkip, colNames)
+  ff.close()
 
 proc readCsvAlt*(fname: string,
                  sep = ',',
