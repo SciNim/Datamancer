@@ -543,7 +543,9 @@ proc parseCsvString*(csvData: string,
                      header: string = "",
                      skipLines = 0,
                      toSkip: set[char] = {},
-                     colNames: seq[string] = @[]): DataFrame =
+                     colNames: seq[string] = @[],
+                     skipInitialSpace = true,
+                     quote = '"'): DataFrame =
   ## Parses a `DataFrame` from a string containing CSV data.
   ##
   ## `toSkip` can be used to skip optional characters that may be present
@@ -564,18 +566,22 @@ proc parseCsvString*(csvData: string,
   ## we're dealing with ASCII files, thus each byte can be interpreted as a char
   var data = cast[ptr UncheckedArray[char]](csvData[0].unsafeAddr)
   result = readCsvTypedImpl(data, csvData.len, countNonEmptyLines(csvData),
-                            sep, header, skipLines, toSkip, colNames)
+                            sep, header, skipLines, toSkip, colNames,
+                            skipInitialSpace, quote)
 
 proc readCsvFromUrl(url: string,
               sep: char = ',',
               header: string = "",
               skipLines = 0,
               toSkip: set[char] = {},
-              colNames: seq[string] = @[]
+              colNames: seq[string] = @[],
+              skipInitialSpace = true,
+              quote = '"'
              ): DataFrame =
   ## Reads a DF from a web URL (which must contain a CSV file)
   var client = newHttpClient()
-  return parseCsvString(client.getContent(url), sep, header, skipLines, toSkip, colNames)
+  return parseCsvString(client.getContent(url), sep, header, skipLines, toSkip, colNames,
+                        skipInitialSpace, quote)
 
 proc readCsv*(fname: string,
               sep: char = ',',
@@ -593,8 +599,7 @@ proc readCsv*(fname: string,
   ## web server. No caching is performed so if you plan to read from the same
   ## URL multiple times it might be best to download the file manually instead.
   ## Please note that to download files from https URLs you must compile with
-  ## the -d:ssl option. Also note that the `skipInitialSpace` and `quote`
-  ## arguments are ignored when reading from a web URL.
+  ## the -d:ssl option.
   ##
   ## `toSkip` can be used to skip optional characters that may be present
   ## in the data. For instance if a CSV file is separated by `,`, but contains
@@ -630,7 +635,8 @@ proc readCsv*(fname: string,
 
   ## we're dealing with ASCII files, thus each byte can be interpreted as a char
   var data = cast[ptr UncheckedArray[char]](ff.mem)
-  result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, toSkip, colNames)
+  result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, toSkip, colNames,
+                            skipInitialSpace, quote)
   ff.close()
 
 proc readCsvAlt*(fname: string,
