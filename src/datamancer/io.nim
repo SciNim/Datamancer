@@ -590,7 +590,7 @@ proc readCsv*(fname: string,
   ## 
   ## `fname` can be a local filename or a web URL. If `fname` starts with
   ## "http://" or "https://" the file contents will be read from the selected
-  ## web server. No catching is performed so if you plan to read from the same
+  ## web server. No caching is performed so if you plan to read from the same
   ## URL multiple times it might be best to download the file manually instead.
   ## Please note that to download files from https URLs you must compile with
   ## the -d:ssl option. Also note that the `skipInitialSpace` and `quote`
