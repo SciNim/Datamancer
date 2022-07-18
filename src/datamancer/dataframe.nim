@@ -498,9 +498,9 @@ macro toTab*(args: varargs[untyped]): untyped =
       let aName = a.toStrLit
       result.add quote do:
         `asgnSym`(`data`, `aName`, `a`)
-
   result = quote do:
     block:
+      mixin extendShortColumns
       `result`
       # finally fill up possible columns shorter than df.len
       `data`.extendShortColumns()
