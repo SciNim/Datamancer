@@ -1568,10 +1568,14 @@ proc rename*(df: DataFrame, cols: varargs[FormulaNode]): DataFrame =
 
   result = df
   for fn in cols:
-    doAssert fn.kind == fkAssign
-    result[fn.lhs] = df[fn.rhs.toStr]
-    # remove the column of the old name
-    result.drop(fn.rhs.toStr)
+    if fn.kind == fkAssign:
+      result[fn.lhs] = df[fn.rhs.toStr]
+      # remove the column of the old name
+      result.drop(fn.rhs.toStr)
+    else:
+      raise newException(FormulaMismatchError, "To rename columns use a formula " &
+        "of kind `fkAssign`, i.e. `\"foo\" <- \"bar\"`. Given formula " & $fn &
+        "is of kind `" & $fn.kind & "`.")
 
 proc arrangeSortImpl[T](toSort: var seq[(int, T)], order: SortOrder) =
   ## sorts the given `(index, Value)` pair according to the `Value`
