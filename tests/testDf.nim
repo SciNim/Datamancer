@@ -1085,28 +1085,28 @@ suite "DataFrame tests":
 """
     else:
       let defaultExp = """
-       Idx         x         y
-    dtype:     float     float
-         0         0         0
-         1   0.06283   0.06279
-         2    0.1257    0.1253
-         3    0.1885    0.1874
-         4    0.2513    0.2487
-         5    0.3141     0.309
-         6     0.377    0.3681
-         7    0.4398    0.4258
-         8    0.5026    0.4817
-         9    0.5655    0.5358
-        10    0.6283    0.5878
-        11    0.6911    0.6374
-        12     0.754    0.6845
-        13    0.8168     0.729
-        14    0.8796    0.7705
-        15    0.9425     0.809
-        16     1.005    0.8443
-        17     1.068    0.8763
-        18     1.131    0.9048
-        19     1.194    0.9298
+          Idx            x            y
+       dtype:        float        float
+            0            0            0
+            1      0.06283      0.06279
+            2       0.1257       0.1253
+            3       0.1885       0.1874
+            4       0.2513       0.2487
+            5       0.3141        0.309
+            6        0.377       0.3681
+            7       0.4398       0.4258
+            8       0.5026       0.4817
+            9       0.5655       0.5358
+           10       0.6283       0.5878
+           11       0.6911       0.6374
+           12        0.754       0.6845
+           13       0.8168        0.729
+           14       0.8796       0.7705
+           15       0.9425        0.809
+           16        1.005       0.8443
+           17        1.068       0.8763
+           18        1.131       0.9048
+           19        1.194       0.9298
 """
     let dfStr = pretty(df, header = false)
     check dfStr == defaultExp
@@ -1136,28 +1136,28 @@ suite "DataFrame tests":
   """
     else:
       let expPrecision12 = """
-               Idx                 x                 y
-            dtype:             float             float
-                 0                 0                 0
-                 1           0.06283    0.062788670114
-                 2           0.12566    0.125329556644
-                 3           0.18849    0.187375853836
-                 4           0.25132    0.248682707741
-                 5           0.31415    0.309008182482
-                 6           0.37698    0.368114215006
-                 7           0.43981    0.425767554563
-                 8           0.50264    0.481740683175
-                 9           0.56547    0.535812713502
-                10            0.6283    0.587770260526
-                11           0.69113    0.637408283636
-                12           0.75396    0.684530895785
-                13           0.81679    0.728952136516
-                14           0.87962    0.770496705823
-                15           0.94245    0.809000655938
-                16           1.00528    0.844312038323
-                17           1.06811    0.876291503299
-                18           1.13094     0.90481284997
-                19           1.19377    0.929763524249
+                  Idx                    x                    y
+               dtype:                float                float
+                    0                    0                    0
+                    1              0.06283       0.062788670114
+                    2              0.12566       0.125329556644
+                    3              0.18849       0.187375853836
+                    4              0.25132       0.248682707741
+                    5              0.31415       0.309008182482
+                    6              0.37698       0.368114215006
+                    7              0.43981       0.425767554563
+                    8              0.50264       0.481740683175
+                    9              0.56547       0.535812713502
+                   10               0.6283       0.587770260526
+                   11              0.69113       0.637408283636
+                   12              0.75396       0.684530895785
+                   13              0.81679       0.728952136516
+                   14              0.87962       0.770496705823
+                   15              0.94245       0.809000655938
+                   16              1.00528       0.844312038323
+                   17              1.06811       0.876291503299
+                   18              1.13094        0.90481284997
+                   19              1.19377       0.929763524249
 """
     let dfPrecision12 = pretty(df, precision = 12, header = false)
     check expPrecision12 == dfPrecision12
@@ -1880,6 +1880,51 @@ t_in_s,  C1_in_V,  C2_in_V,  type
       check res[[3]].toTensor(int) == [3, 4].toTensor
       check res[[2]].toTensor(int) == [5, 6].toTensor
       check res[[1]].toTensor(int) == [7, 8].toTensor
+
+  test "Mutate - computing a new column based on two existing":
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
+    let dfRes = df.mutate(f{"x+y" ~ `x` + `y`})
+    check dfRes.ncols == 4
+    check "x+y" in dfRes
+    check dfRes["x+y", int] == [11,13,15].toTensor
+
+  test "Mutate - computing a new column using a local variable":
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
+    # of course local variables can be referenced:
+    let foo = 5
+    let dfRes = df.mutate(f{"x+foo" ~ `x` + foo})
+    check "x+foo" in dfRes
+    check dfRes["x+foo", int] == [6,7,8].toTensor
+
+  test "Mutate - computing a new column by calling a function":
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
+    # they can change type and infer it
+    let foo = 5
+    let dfRes = df.mutate(f{"asInt" ~ parseInt(`z`)})
+    check "asInt" in dfRes
+    check dfRes["asInt", int] == [5,6,7].toTensor
+
+  test "Mutate - computing a new column without an explicit name":
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
+    # and if no name is given:
+    let dfRes = df.mutate(f{`x` + `y`})
+    check "(+ x y)" in dfRes
+    check dfRes["(+ x y)", int] == [11,13,15].toTensor
+
+  test "Mutate - assigning a constant column":
+    let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
+    let dfRes = df.mutate(
+      f{"foo" <- 2},   # generates a constant column with value 2
+      f{"bar" <- "x"}, # generates a constant column with value "x", does *not* rename "x" to "bar"
+      f{"baz" ~ 2}     # generates a (non-constant!) column of only values 2
+    )
+    check dfRes["foo"].kind == colConstant
+    check dfRes["foo", 0] == %~ 2
+    check dfRes["bar"].kind == colConstant
+    check dfRes["bar", 0] == %~ "x"
+    check "x" in dfRes # "x" untouched
+    check dfRes["baz"].kind == colInt # integer column, not constant!
+    check dfRes["baz", int] == toTensor [2, 2, 2]
 
 suite "Formulas":
   test "Formula containing `if`":
