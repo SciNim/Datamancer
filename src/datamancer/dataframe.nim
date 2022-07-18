@@ -1422,8 +1422,8 @@ proc mutateImpl(df: var DataFrame, fns: varargs[FormulaNode],
         df.asgn($fn.val, constantColumn(fn.val, df.len))
         colsToKeep.add $fn.val
     of fkAssign:
-      # essentially a rename
-      df.asgn(fn.lhs, df[fn.rhs.toStr])
+      # Assign given value as new constant column
+      df.asgn(fn.lhs, constantColumn(fn.rhs, df.len))
       # colToKeep only relevant for `transmute`, where we only want to keep
       # the LHS
       colsToKeep.add fn.lhs
@@ -1494,6 +1494,16 @@ proc mutate*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
       let dfRes = df.mutate(f{`x` + `y`})
       doAssert "(+ x y)" in dfRes
       doAssert dfRes["(+ x y)", int] == [11,13,15].toTensor
+    block:
+      let dfRes = df.mutate(
+        f{"foo" <- 2},   # generates a constant column with value 2
+        f{"bar" <- "x"}, # generates a constant column with value "x", does *not* rename "x" to "bar"
+        f{"baz" ~ 2}     # generates a (non-constant!) column of only values 2
+      )
+      doAssert df["foo"].kind == colConstant
+      doAssert df["bar"].kind == colConstant
+      doAssert "x" in df # "x" untouched
+      doAssert df["baz"].kind == colInt # integer column, not constant!
 
   result = df.shallowCopy()
   result.mutateInplace(fns)
