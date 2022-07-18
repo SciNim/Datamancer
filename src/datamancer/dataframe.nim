@@ -715,7 +715,11 @@ proc pretty*(df: DataFrame, numLines = 20, precision = 4, header = true): string
   ## `pretty` is called by `$` with the default parameters.
   # TODO: need to improve printing of string columns if length of elements
   # more than `alignBy`.
-  var maxLen = 6 # default width for a column name
+
+  ## XXX: should columns of different types have different default widths? e.g. float being
+  ## at least 9 chars, ints X, strings Y ?
+  ## maybe can also look at data if DF not too long and/or we only print `numLines << 1e9` elements?
+  var maxLen = 9 # default width for a column name
   for k in keys(df):
     maxLen = max(k.len, maxLen)
   if header:
