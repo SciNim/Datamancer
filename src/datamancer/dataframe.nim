@@ -1500,10 +1500,10 @@ proc mutate*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
         f{"bar" <- "x"}, # generates a constant column with value "x", does *not* rename "x" to "bar"
         f{"baz" ~ 2}     # generates a (non-constant!) column of only values 2
       )
-      doAssert df["foo"].kind == colConstant
-      doAssert df["bar"].kind == colConstant
-      doAssert "x" in df # "x" untouched
-      doAssert df["baz"].kind == colInt # integer column, not constant!
+      doAssert dfRes["foo"].kind == colConstant
+      doAssert dfRes["bar"].kind == colConstant
+      doAssert "x" in dfRes # "x" untouched
+      doAssert dfRes["baz"].kind == colInt # integer column, not constant!
 
   result = df.shallowCopy()
   result.mutateInplace(fns)
