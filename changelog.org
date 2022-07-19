@@ -16,6 +16,15 @@
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
 
+* v0.2.6
+- hotfix release fixing an issue with =readCsv=.
+  - if a file contained columns that do not allow us to determine
+    types, fixes an issue in which parsing of them failed, due to a
+    missing reset of =col=
+  - add a =maxGuesses= argument to =readCsv= to stop guessing types
+    after this many rows (set to 'object' columns in that case)
+  - fix a small issue in which we always entered the =skipLines= loop,
+    even if we didn't have to skip any lines
 * v0.2.5
 - add support for reading CSV files from http and https URLs.
 - do not ignore `skipInitialSpace` and `quote` readCsv arguments.
