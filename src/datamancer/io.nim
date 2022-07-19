@@ -482,6 +482,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     raise newException(IOError, "Input data contains " & $(dataColsIdx + 1) & " in the data portion, but " &
       $numCols & " columns in the header.")
   # 2a. revert the indices (make it a peek)
+  col = 0 # reset `col` to 0 regardless
   idx = lastIdx
   colStart = lastColStart
   row = lastRow
