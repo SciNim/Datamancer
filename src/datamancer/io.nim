@@ -409,8 +409,12 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
                       toSkip: set[char] = {},
                       colNamesIn: seq[string] = @[],
                       skipInitialSpace = true,
-                      quote = '"'): DataFrame =
+                      quote = '"',
+                      maxGuesses = 20): DataFrame =
   ## Implementation of the CSV parser that works on a data array of chars.
+  ##
+  ## `maxGuesses` is the maximum number of rows to look at before we give up
+  ## trying to determine the datatype of the column and set it to 'object'.
   result = newDataFrame()
   var
     idx = 0
@@ -437,6 +441,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     # reset index and row back to 0
     row = 0
     idx = 0
+    col = 0
 
   # 1a. if `header` is set, skip all additional lines starting with header
   if header.len > 0:
@@ -464,6 +469,8 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   var lastColStart = colStart
   var lastRow = row
   var dataColsIdx = 0
+  var guessAttempts = 0
+  const maxGuesses = 20
   while idx < size:
     parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
       guessType(data, buf, colTypes, col, idx, colStart, numCols)
@@ -472,8 +479,9 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
         if lastWasSep and sep in {' ', '\t'}:
           dec col # don't count "empty space columns" at end
         dataColsIdx = col
-        if not allColTypesSet(colTypes): # manually perform steps to go to next line and skip
-                                         # `when toBreak` logic
+        inc guessAttempts
+        if not allColTypesSet(colTypes) and # manually perform steps to go to next line and skip
+           guessAttempts < maxGuesses:              # `when toBreak` logic
           advanceToNextRow()
           inc idx
           continue
@@ -487,11 +495,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   colStart = lastColStart
   row = lastRow
 
-  # 2b. if one column was *completely* empty, turn it into colObject
-  # TODO: The `while` above should break after N lines. Otherwise we risk running over the whole
-  # file if it contains only empty values in one column. After N > 20? 50? whatever rows we can
-  # reasonably argue it will likely be an object column. Otherwise the user can reconvert back to native
-  # should be the saner default
+  # 2b. for columns we did not correctly determine the type, set to object
   # Note: for a *fully* empty column, we *could* also assign a constant value of VNull
   if not allColTypesSet(colTypes):
     for c in mitems(colTypes):
@@ -547,7 +551,9 @@ proc parseCsvString*(csvData: string,
                      toSkip: set[char] = {},
                      colNames: seq[string] = @[],
                      skipInitialSpace = true,
-                     quote = '"'): DataFrame =
+                     quote = '"',
+                     maxGuesses = 20
+                    ): DataFrame =
   ## Parses a `DataFrame` from a string containing CSV data.
   ##
   ## `toSkip` can be used to skip optional characters that may be present
@@ -563,6 +569,9 @@ proc parseCsvString*(csvData: string,
   ##
   ## `skipLines` is used to skip `N` number of lines at the beginning of the
   ## file.
+  ##
+  ## `maxGuesses` is the maximum number of rows to look at before we give up
+  ## trying to determine the datatype of the column and set it to 'object'.
   result = newDataFrame()
 
   ## we're dealing with ASCII files, thus each byte can be interpreted as a char
@@ -593,9 +602,10 @@ proc readCsv*(fname: string,
               colNames: seq[string] = @[],
               skipInitialSpace = true,
               quote = '"',
+              maxGuesses = 20
              ): DataFrame =
   ## Reads a DF from a CSV file or a web URL using the separator character `sep`.
-  ## 
+  ##
   ## `fname` can be a local filename or a web URL. If `fname` starts with
   ## "http://" or "https://" the file contents will be read from the selected
   ## web server. No caching is performed so if you plan to read from the same
@@ -623,7 +633,9 @@ proc readCsv*(fname: string,
   ## but there `is` a header in the file, make sure to use `skipLines` to skip
   ## that header, as we will not try to parse any header information if `colNames`
   ## is supplied.
-
+  ##
+  ## `maxGuesses` is the maximum number of rows to look at before we give up
+  ## trying to determine the datatype of the column and set it to 'object'.
   if fname.startsWith("http://") or fname.startsWith("https://"):
     return readCsvFromUrl(fname, sep=sep, header=header, skipLines=skipLines,
                           toSkip=toSkip, colNames=colNames)
