@@ -15,7 +15,12 @@
   - ... whatever else you can think of. As long as it fits into a
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
-
+* v0.2.7
+- another quick release to help with some windows line ending CSV
+  files
+  - adds a =lineBreak= and =eat= option to =readCsv= to help with
+    certain windows style line ending CSV files in which otherwise we
+    might miscount the number of lines
 * v0.2.6
 - hotfix release fixing an issue with =readCsv=.
   - if a file contained columns that do not allow us to determine
