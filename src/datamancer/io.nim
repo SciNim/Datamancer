@@ -232,7 +232,7 @@ proc parseNumber(data: ptr UncheckedArray[char],
     return rtError                              # ONLY "[+-]*\.*"
 
   # `\0` is necessary to support parsing until the end of the file in case of no line break
-  if data[idx] notin {'\0', sep, '\n', '\r', '\l', 'e', 'E'}: ## TODO: generalize this?
+  if data[idx] notin {'\0', sep, '\n', '\r', 'e', 'E'}: ## TODO: generalize this?
     # might be "nan", "inf" or "-inf" or some other invalid string
     var ret = tryParse(@['n', 'a', 'n'], data, idx,
                        sep,
@@ -345,15 +345,14 @@ template advanceToNextRow() {.dirty.} =
   ## Stored in a dirty template as we also use it while guessing types.
   inc row
   col = 0
-  if data[idx] == '\r' and data[idx + 1] == '\l':
+  if data[idx] == eat and data[idx + 1] == lineBreak:
     inc idx
   colStart = idx + 1
   rowStart = idx + 1
   lastWasSep = false
 
 template parseLine(data: ptr UncheckedArray[char], buf: var string,
-                   sep: char,
-                   quote: char,
+                   sep, quote, lineBreak, eat: char,
                    col, idx, colStart, row, rowStart: var int,
                    lastWasSep, inQuote: var bool,
                    toBreak: static bool,
@@ -364,11 +363,11 @@ template parseLine(data: ptr UncheckedArray[char], buf: var string,
     inc idx
     # skip ahead in case we start quote
     continue
-  elif unlikely(data[idx] in {'\n', '\r', '\l'}) and rowStart == idx:
+  elif unlikely(data[idx] in {lineBreak, eat}) and rowStart == idx:
     # empty line, skip
     colStart = idx + 1
     rowStart = idx + 1
-  elif unlikely(data[idx] in {'\n', '\r', '\l'}):
+  elif unlikely(data[idx] in {lineBreak, eat}):
     fnToCall
     advanceToNextRow()
     when toBreak:
@@ -410,7 +409,8 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
                       colNamesIn: seq[string] = @[],
                       skipInitialSpace = true,
                       quote = '"',
-                      maxGuesses = 20): DataFrame =
+                      maxGuesses = 20,
+                      lineBreak = '\n', eat = '\r'): DataFrame =
   ## Implementation of the CSV parser that works on a data array of chars.
   ##
   ## `maxGuesses` is the maximum number of rows to look at before we give up
@@ -430,7 +430,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   var colNames = colNamesIn
   if colNames.len == 0:
     while idx < size:
-      parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
+      parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
         parseHeaderCol(data, buf, colNames, header, sep, quote, idx, colStart)
 
   if colNamesIn.len > 0 and colNamesIn.len != colNames.len:
@@ -446,7 +446,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   # 1a. if `header` is set, skip all additional lines starting with header
   if header.len > 0:
     while idx < size:
-      parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
+      parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
         if col == 0 and data[colStart] != header[0]:
           break
 
@@ -455,7 +455,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   let rowDataStart = row
   if skipLines > 0:
     while idx < size:
-      parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
+      parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
         if row - rowDataStart == skipLines:
           break
   # compute the number of skipped lines in total
@@ -472,7 +472,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   var guessAttempts = 0
   const maxGuesses = 20
   while idx < size:
-    parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
+    parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
       guessType(data, buf, colTypes, col, idx, colStart, numCols)
       # if we see the end of the line, store the current column number
       if data[idx] in {'\n', '\r', '\l'}:
@@ -516,12 +516,15 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     intVal: int
     floatVal: float
   while idx < size:
-    parseLine(data, buf, sep, quote, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
+    parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
       parseCol(data, buf, cols[col], sep, colTypes, col, idx, colStart, row, numCols,
                intVal, floatVal, retType)
   if row + skippedLines < lineCnt:
     # missing linebreak at end of last line
-    doAssert row + skippedLines == lineCnt - 1, "Bad file. Please report an issue."
+    doAssert row + skippedLines == lineCnt - 1, "Line counts mismatch. " &
+      $(row + skippedLines) & " lines read, expected " & $(lineCnt - 1) &
+      ". Is your file using non unix line breaks? Try switching the `lineBreak` " &
+      "and `eat` options to `readCsv`."
     parseCol(data, buf, cols[col], sep, colTypes, col, idx, colStart, row, numCols,
              intVal, floatVal, retType)
   for i, col in colNames:
@@ -552,7 +555,9 @@ proc parseCsvString*(csvData: string,
                      colNames: seq[string] = @[],
                      skipInitialSpace = true,
                      quote = '"',
-                     maxGuesses = 20
+                     maxGuesses = 20,
+                     lineBreak = '\n',
+                     eat = '\r'
                     ): DataFrame =
   ## Parses a `DataFrame` from a string containing CSV data.
   ##
@@ -572,13 +577,19 @@ proc parseCsvString*(csvData: string,
   ##
   ## `maxGuesses` is the maximum number of rows to look at before we give up
   ## trying to determine the datatype of the column and set it to 'object'.
+  ##
+  ## `lineBreak` is the character used to detect if a new line starts. `eat`
+  ## on the other hand is simply ignore. For unix style line endings the defaults
+  ## are fine. In principle for windows style endings `\r\n` the defaults *should*
+  ## work as well, but in rare cases the default causes issues with mismatched
+  ## line counts. In those cases try to switch `lineBreaks` and `eat` around.
   result = newDataFrame()
 
   ## we're dealing with ASCII files, thus each byte can be interpreted as a char
   var data = cast[ptr UncheckedArray[char]](csvData[0].unsafeAddr)
   result = readCsvTypedImpl(data, csvData.len, countNonEmptyLines(csvData),
                             sep, header, skipLines, toSkip, colNames,
-                            skipInitialSpace, quote)
+                            skipInitialSpace, quote, maxGuesses, lineBreak, eat)
 
 proc readCsvFromUrl(url: string,
               sep: char = ',',
@@ -602,7 +613,9 @@ proc readCsv*(fname: string,
               colNames: seq[string] = @[],
               skipInitialSpace = true,
               quote = '"',
-              maxGuesses = 20
+              maxGuesses = 20,
+              lineBreak = '\n',
+              eat = '\r'
              ): DataFrame =
   ## Reads a DF from a CSV file or a web URL using the separator character `sep`.
   ##
@@ -636,6 +649,12 @@ proc readCsv*(fname: string,
   ##
   ## `maxGuesses` is the maximum number of rows to look at before we give up
   ## trying to determine the datatype of the column and set it to 'object'.
+  ##
+  ## `lineBreak` is the character used to detect if a new line starts. `eat`
+  ## on the other hand is simply ignore. For unix style line endings the defaults
+  ## are fine. In principle for windows style endings `\r\n` the defaults *should*
+  ## work as well, but in rare cases the default causes issues with mismatched
+  ## line counts. In those cases try to switch `lineBreaks` and `eat` around.
   if fname.startsWith("http://") or fname.startsWith("https://"):
     return readCsvFromUrl(fname, sep=sep, header=header, skipLines=skipLines,
                           toSkip=toSkip, colNames=colNames)
@@ -643,14 +662,14 @@ proc readCsv*(fname: string,
   result = newDataFrame()
   var ff = memfiles.open(fname)
   var lineCnt = 0
-  for slice in memSlices(ff):
+  for slice in memSlices(ff, delim = lineBreak, eat = eat):
     if slice.size > 0:
       inc lineCnt
 
   ## we're dealing with ASCII files, thus each byte can be interpreted as a char
   var data = cast[ptr UncheckedArray[char]](ff.mem)
   result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, toSkip, colNames,
-                            skipInitialSpace, quote)
+                            skipInitialSpace, quote, maxGuesses, lineBreak, eat)
   ff.close()
 
 proc readCsvAlt*(fname: string,
