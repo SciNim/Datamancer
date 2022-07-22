@@ -15,6 +15,20 @@
   - ... whatever else you can think of. As long as it fits into a
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
+* v0.2.8
+- *BREAKING*: change semantics of assignment formula (using =<-=) in
+  the context of =mutate=. Previously, using such formulas in a
+  =mutate= (or =transmute=) call would end up renaming a column from
+  RHS to LHS. However, this was never clearly communicated & was a bit
+  unclear. In particular it made it impossible to generate a constant
+  column in a =mutate= call, which seems much more useful to me.
+  To rename a column, simply use the =rename= procedure as
+  before. Note that a =f{"bar" <- "foo"}= formula is required in that
+  case.
+- raise an exception in =rename= if a formula of different kind than
+  =fkAssign= is given
+- change default printing width of columns in a DF. Make them a bit
+  wider to accommodate float columns printed in exp notation.
 * v0.2.7
 - another quick release to help with some windows line ending CSV
   files
