@@ -1362,18 +1362,18 @@ proc relocate*[T: string | FormulaNode](df: DataFrame, cols: varargs[T], after =
     doAssert df[[0]].toTensor(int) == toTensor [1, 2, 3] ## first column is `x`
     block:
       let dfR = df.relocate("x", after = "y")
-      doAssert df[[0]].toTensor(int) == toTensor [10, 11, 12] ## first column is now `y`
-      doAssert df[[1]].toTensor(int) == toTensor [1, 2, 3] ## second column is now `x`
+      doAssert dfR[[0]].toTensor(int) == toTensor [10, 11, 12] ## first column is now `y`
+      doAssert dfR[[1]].toTensor(int) == toTensor [1, 2, 3] ## second column is now `x`
     block:
       let dfR = df.relocate(f{"X" <- "x"}, after = "y") ## can also rename a column while relocating
-      doAssert df[[0]].toTensor(int) == toTensor [10, 11, 12] ## first column is now `y`
-      doAssert df[[1]].toTensor(int) == toTensor [1, 2, 3] ## second column is now `x`
+      doAssert dfR[[0]].toTensor(int) == toTensor [10, 11, 12] ## first column is now `y`
+      doAssert dfR[[1]].toTensor(int) == toTensor [1, 2, 3] ## second column is now `x`
       doAssert "X" in dfR and "x" notin dfR
     block:
       let dfR = df.relocate(["y", "x"], after = "z") ## can relocate multiple & order is respected
-      doAssert df[[0]].toTensor(string) == toTensor ["5", "6", "7"] ## first column is now `z`
-      doAssert df[[1]].toTensor(int) == toTensor [10, 11, 12] ## second column is now `y`
-      doAssert df[[2]].toTensor(int) == toTensor [1, 2, 3] ## last is now `x`
+      doAssert dfR[[0]].toTensor(string) == toTensor ["5", "6", "7"] ## first column is now `z`
+      doAssert dfR[[1]].toTensor(int) == toTensor [10, 11, 12] ## second column is now `y`
+      doAssert dfR[[2]].toTensor(int) == toTensor [1, 2, 3] ## last is now `x`
 
   let cols = @cols
   var keys = df.getKeys()
