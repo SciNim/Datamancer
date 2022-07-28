@@ -15,6 +15,8 @@
   - ... whatever else you can think of. As long as it fits into a
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
+* v0.2.10
+- remove outdated warning about failed type deduction in formulas
 * v0.2.9
 This release gets rid of all hints during compile time, afaict.
 - remove unused imports
