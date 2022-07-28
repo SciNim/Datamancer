@@ -163,7 +163,7 @@ proc `[]`*[T](df: DataFrame, k: string, slice: Slice[int], dtype: typedesc[T]): 
   ##
   ## If `dtype` does ``not`` match the data type of the underlying `Tensor` the slice
   ## will be read as its native type and then converted to `dtype` via explicit
-  ## `asType` conversion.
+  ## `astype` conversion.
   assert not df.isNil, "DF is used in uninitialized context!"
   result = df.data[k][slice.a .. slice.b, dtype]
 
@@ -193,7 +193,7 @@ proc `[]`*[T](df: DataFrame, key: string, dtype: typedesc[T]): Tensor[T] =
   ##
   ## If `dtype` matches the actual data type of the `Tensor` underlying the column,
   ## this is a no copy operation. Otherwise a type conversion is performed on the
-  ## `Tensor` using `asType`
+  ## `Tensor` using `astype`
   ##
   ## This is the easiest way to access the raw `Tensor` underlying a column for
   ## further processing.
@@ -288,15 +288,15 @@ proc `[]=`*[T](df: var DataFrame, k: string, idx: int, val: T) {.inline.} =
   # unsafe procedure!
   assert df.data[k].len > idx, "Invalid index " & $idx & " for DF column of length " & $df.data.len
   when T is float:
-    df.data[k].fcol[idx] = val
+    df.data[k].fCol[idx] = val
   elif T is int:
-    df.data[k].icol[idx] = val
+    df.data[k].iCol[idx] = val
   elif T is string:
-    df.data[k].scol[idx] = val
+    df.data[k].sCol[idx] = val
   elif T is bool:
-    df.data[k].bcol[idx] = val
+    df.data[k].bCol[idx] = val
   elif T is Value:
-    df.data[k].ocol[idx] = val
+    df.data[k].oCol[idx] = val
 
 proc `[]=`*[T](df: var Dataframe, fn: FormulaNode, key: string, val: T) =
   ## Evaluates the given `FormulaNode fn`, which needs to be a function returning a bool,
@@ -1762,8 +1762,8 @@ proc innerJoin*(df1, df2: DataFrame, by: string): DataFrame =
     df2S = df2.arrange(by)
   withNativeDtype(df1S[by]): ## TODO: this likely means we convert constants to `Value`...
     let
-      col1 = df1S[by].toTensor(dtype).toRawSeq
-      col2 = df2S[by].toTensor(dtype).toRawSeq
+      col1 = df1S[by].toTensor(dtype).toSeq1D
+      col2 = df2S[by].toTensor(dtype).toSeq1D
     let colSet1 = col1.toHashSet
     let colSet2 = col2.toHashSet
     let intersection = colSet1 * colSet2
