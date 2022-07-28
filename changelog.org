@@ -15,6 +15,12 @@
   - ... whatever else you can think of. As long as it fits into a
     =Tensor[T]=, you can now place it into a DF!
   See XXX for a short introduction on the feature.
+* v0.2.9
+This release gets rid of all hints during compile time, afaict.
+- remove unused imports
+- make sure variables follow same naming
+- remove dead code
+- add =styles:usage= to =nim.cfg=
 * v0.2.8
 - *BREAKING*: change semantics of assignment formula (using =<-=) in
   the context of =mutate=. Previously, using such formulas in a
