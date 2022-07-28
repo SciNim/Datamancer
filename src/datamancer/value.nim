@@ -310,19 +310,19 @@ template withNativeConversion*(kind: ValueKind,
   case kind
   of VInt:
     template `procName`(v: Value): untyped = v.toInt
-    type dtype {.inject.} = int
+    type dtype {.inject, used.} = int
     body
   of VFloat:
     template `procName`(v: Value): untyped = v.toFloat
-    type dtype {.inject.} = float
+    type dtype {.inject, used.} = float
     body
   of VString:
     template `procName`(v: Value): untyped = v.toStr
-    type dtype {.inject.} = string
+    type dtype {.inject, used.} = string
     body
   of VBool:
     template `procName`(v: Value): untyped = v.toBool
-    type dtype {.inject.} = bool
+    type dtype {.inject, used.} = bool
     body
   of VObject, VNull:
     doAssert false, "not implemented / makes no sense for current usage"

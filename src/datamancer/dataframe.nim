@@ -1,8 +1,5 @@
-import macros, tables, strutils, options, fenv, sets, hashes, sugar, math
-import sequtils, stats, strformat, algorithm, parseutils
-
-# for error messages to print types
-import typetraits
+import std / [macros, tables, strutils, options, sets, hashes, math,
+              sequtils, stats, strformat, algorithm, typetraits]
 
 import arraymancer/tensor
 export tensor
@@ -214,7 +211,7 @@ proc `[]`*(df: DataFrame, idx: array[1, int]): Column =
 
   let j = idx[0]
   if j < 0 or j >= df.ncols:
-    raise newException(IndexError, "Index " & $j & " is out of bounds for DF with " & $df.ncols & " columns.")
+    raise newException(IndexDefect, "Index " & $j & " is out of bounds for DF with " & $df.ncols & " columns.")
   doAssert j >= 0 and j < df.ncols
   for i, k in df.getKeys:
     if i == j: return df[k]
@@ -298,7 +295,7 @@ proc `[]=`*[T](df: var DataFrame, k: string, idx: int, val: T) {.inline.} =
   elif T is Value:
     df.data[k].oCol[idx] = val
 
-proc `[]=`*[T](df: var Dataframe, fn: FormulaNode, key: string, val: T) =
+proc `[]=`*[T](df: var DataFrame, fn: FormulaNode, key: string, val: T) =
   ## Evaluates the given `FormulaNode fn`, which needs to be a function returning a bool,
   ## and assigns a constant value `val` to all rows of column `key` matching the condition.
   ##
@@ -460,7 +457,7 @@ macro toTab*(args: varargs[untyped]): untyped =
   ##
   ## or a table constructor:
   ## - `toTab({ "foo" : x, "y" : bar() })`
-  expectKind(args, nnkArglist)
+  expectKind(args, nnkArgList)
   var s = args
   if args.len == 1:
     let arg = args[0]
@@ -490,11 +487,9 @@ macro toTab*(args: varargs[untyped]): untyped =
     of nnkExprColonExpr:
       let nameCh = a[0]
       let valCh = a[1]
-      let colN = genSym(nskLet, "column")
       result.add quote do:
         `asgnSym`(`data`, `nameCh`, `valCh`)
     else:
-      let colN = genSym(nskLet, "column")
       let aName = a.toStrLit
       result.add quote do:
         `asgnSym`(`data`, `aName`, `a`)
@@ -709,7 +704,7 @@ proc pretty*(df: DataFrame, numLines = 20, precision = 4, header = true): string
   ## The precision argument is relevant for `VFloat` values, but can also be
   ## (mis-) used to set the column width, e.g. to show long string columns.
   ##
-  ## The `header` is the `Dataframe with ...` information line, which can be disabled
+  ## The `header` is the `DataFrame with ...` information line, which can be disabled
   ## in the returned output to more easily output a simple DF as a string table.
   ##
   ## `pretty` is called by `$` with the default parameters.
@@ -723,7 +718,7 @@ proc pretty*(df: DataFrame, numLines = 20, precision = 4, header = true): string
   for k in keys(df):
     maxLen = max(k.len, maxLen)
   if header:
-    result.add "Dataframe with " & $df.getKeys.len & " columns and " & $df.len & " rows:\n"
+    result.add "DataFrame with " & $df.getKeys.len & " columns and " & $df.len & " rows:\n"
   let alignBy = max(maxLen + precision, 10)
   let num = if numLines > 0: min(df.len, numLines) else: df.len
   # write header
@@ -992,7 +987,7 @@ proc assignStack*(dfs: seq[DataFrame]): DataFrame =
       inc idx, df.len
     result[k] = col
 
-proc hashColumn(s: var seq[Hash], c: Column, finish: static bool = false) =
+proc hashColumn(s: var seq[Hash], c: Column, finish: static bool = false) {.used.} =
   ## Performs a partial hash of a DF. I.e. a single column, where
   ## the hash is added to each index in `s`. The hash is not finalized,
   ## rather the idea is to use this to hash all columns on `s` first.
@@ -1191,7 +1186,6 @@ proc filterImpl(df: DataFrame, conds: varargs[FormulaNode]): DataFrame =
   ## Does not differentiate between grouped and ungrouped inputs (done in
   ## exported `filter` below).
   result = newDataFrame(df.ncols)
-  var fullCondition: FormulaNode
   var filterIdx = newColumn(colBool)
   for c in conds:
     if filterIdx.kind == colBool and filterIdx.len > 0:
@@ -1906,7 +1900,6 @@ proc summarize*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
     # in a `Value` first does not matter in practice
     var sumStats = initOrderedTable[string, seq[Value]]()
     var keys = initOrderedTable[string, seq[Value]](df.groupMap.len)
-    var idx = 0
     var keyLabelsAdded = false
     for fn in fns:
       if fn.kind != fkScalar:
@@ -1914,7 +1907,7 @@ proc summarize*(df: DataFrame, fns: varargs[FormulaNode]): DataFrame =
           " is not a scalar formula. Did you forget to apply a reducing procedure to the arguments?")
       lhsName = fn.valName
       sumStats[lhsName] = newSeqOfCap[Value](1000) # just start with decent size
-      for class, subdf in groups(df):
+      for class, subDf in groups(df):
         if not keyLabelsAdded:
           # keys and labels only have to be added for a single `fn`, since the DF
           # will yield the same subgroups anyways!
@@ -1952,7 +1945,7 @@ proc count*(df: DataFrame, col: string, name = "n"): DataFrame =
   var counts = newSeqOfCap[int](1000) # just start with decent size
   var keys = initOrderedTable[string, seq[Value]](grouped.groupMap.len)
   var idx = 0
-  for class, subdf in groups(grouped):
+  for class, subDf in groups(grouped):
     for (c, val) in class:
       if c notin keys: keys[c] = newSeqOfCap[Value](1000)
       keys[c].add val

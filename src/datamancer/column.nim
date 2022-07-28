@@ -1,5 +1,5 @@
 import arraymancer/tensor
-import value, sugar, math, strformat
+import value, sugar, strformat
 from sequtils import allIt, anyIt, mapIt
 
 type
@@ -69,7 +69,7 @@ proc `[]`*(c: Column, slice: Slice[int]): Column =
     # for constant keep column, only adjust the length to the slice
     result = c
     result.len = slice.b - slice.a + 1
-  of colNone: raise newException(IndexError, "Accessed column is empty!")
+  of colNone: raise newException(IndexDefect, "Accessed column is empty!")
 
 proc newColumn*(kind = colNone, length = 0): Column =
   case kind

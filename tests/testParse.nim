@@ -87,7 +87,7 @@ suite "`parseNumber` tests":
       let ret = buf.parseNumber(sep = ',',
                                 idxIn = 0,
                                 intBuf, floatBuf)
-      if class notin {fcNaN, fcInf, fcNegInf}:
+      if class notin {fcNan, fcInf, fcNegInf}:
         check floatBuf =~= v # this implies we reconstruct the same number as `$` produces!
       check ret == retTyp
       check classify(floatBuf) == class
@@ -109,7 +109,7 @@ suite "`parseNumber` tests":
     checkFloat(-0.0, class = fcZero)
     checkFloat(Inf, class = fcInf, retTyp = rtInf)
     checkFloat(-Inf, class = fcNegInf, retTyp = rtInf)
-    checkFloat(NaN, class = fcNaN, retTyp = rtNaN)
+    checkFloat(NaN, class = fcNan, retTyp = rtNaN)
 
   test "Valid float values with separator":
     initBuf()
@@ -118,7 +118,7 @@ suite "`parseNumber` tests":
       let ret = buf.parseNumber(sep = ',',
                                 idxIn = start,
                                 intBuf, floatBuf)
-      if class notin {fcNaN, fcInf, fcNegInf}:
+      if class notin {fcNan, fcInf, fcNegInf}:
         check floatBuf =~= val
       check ret == retTyp
       check classify(floatBuf) == class
@@ -167,13 +167,13 @@ suite "`parseNumber` tests":
     checkFloat("-INF,-Inf", Inf, start = 5, retTyp = rtInf, class = fcNegInf)
 
     # nan first element
-    checkFloat("nan,nan", Nan, start = 0, retTyp = rtNan, class = fcNan)
-    checkFloat("Nan,Nan", Nan, start = 0, retTyp = rtNan, class = fcNan)
-    checkFloat("NAN,Nan", Nan, start = 0, retTyp = rtNan, class = fcNan)
+    checkFloat("nan,nan", NaN, start = 0, retTyp = rtNaN, class = fcNan)
+    checkFloat("Nan,Nan", NaN, start = 0, retTyp = rtNaN, class = fcNan)
+    checkFloat("NAN,Nan", NaN, start = 0, retTyp = rtNaN, class = fcNan)
     # nan second element
-    checkFloat("nan,nan", Nan, start = 4, retTyp = rtNan, class = fcNan)
-    checkFloat("Nan,Nan", Nan, start = 4, retTyp = rtNan, class = fcNan)
-    checkFloat("NAN,Nan", Nan, start = 4, retTyp = rtNan, class = fcNan)
+    checkFloat("nan,nan", NaN, start = 4, retTyp = rtNaN, class = fcNan)
+    checkFloat("Nan,Nan", NaN, start = 4, retTyp = rtNaN, class = fcNan)
+    checkFloat("NAN,Nan", NaN, start = 4, retTyp = rtNaN, class = fcNan)
 
   test "Invalid float values":
     initBuf()
@@ -221,8 +221,8 @@ suite "`parseNumber` tests":
       check classify(floatBuf) == class
 
     # only signs invalid
-    checkFloat(",", start = 0, retTyp = rtNaN, class = fcNaN)
-    checkFloat(",,", start = 1, retTyp = rtNaN, class = fcNaN)
-    checkFloat("\n", start = 0, retTyp = rtNaN, class = fcNaN) # e.g. end of line
-    checkFloat("0,1,\n", start = 4, retTyp = rtNaN, class = fcNaN) # e.g. end of line
-    checkFloat("1,2,3,\0", start = 6, retTyp = rtNaN, class = fcNaN) # end of file w/o linebreak
+    checkFloat(",", start = 0, retTyp = rtNaN, class = fcNan)
+    checkFloat(",,", start = 1, retTyp = rtNaN, class = fcNan)
+    checkFloat("\n", start = 0, retTyp = rtNaN, class = fcNan) # e.g. end of line
+    checkFloat("0,1,\n", start = 4, retTyp = rtNaN, class = fcNan) # e.g. end of line
+    checkFloat("1,2,3,\0", start = 6, retTyp = rtNaN, class = fcNan) # end of file w/o linebreak

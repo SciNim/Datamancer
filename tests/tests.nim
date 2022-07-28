@@ -2,8 +2,7 @@ import unittest
 import datamancer
 
 import tables, sets
-import sequtils, seqmath
-import math
+import seqmath
 
 proc almostEq(a, b: float, epsilon = 1e-8): bool =
   ## version of `almostEqual` for testing, which prints the values, if

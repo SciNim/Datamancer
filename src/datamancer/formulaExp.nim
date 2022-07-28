@@ -1,7 +1,7 @@
 import macros, sequtils, strformat, options, sets, tables, algorithm, strutils
 import formulaNameMacro
 
-import column, value, df_types
+import column, value
 
 type
   AssignKind* = enum
@@ -83,10 +83,9 @@ type
 const
   InIdent = "in"
   ResIdent = "res"
-  AccumIdent = "+="
   ResultIdent = "result"
   RIdent = "r"
-  DFIdent = "df"
+  DfIdent = "df"
   IdxIdent = "idx"
   ColIdent = "Column"
   ValueIdent = "Value"
@@ -624,11 +623,11 @@ proc generateClosure*(fct: FormulaCT): NimNode =
                    body = procBody,
                    procType = nnkLambda)
 
-proc compileFormula(stmts: NimNode): NimNode =
+proc compileFormula(stmts: NimNode): NimNode {.used.} =
   let fct = parseFormulaCT(stmts)
   result = generateClosure(fct)
 
-macro formula(y: untyped): untyped =
+macro formula(y: untyped): untyped {.used.} =
   ## TODO: add some ability to explicitly create formulas of
   ## different kinds more easily! Essentially force the type without
   ## a check to avoid having to rely on heuristics.

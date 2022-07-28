@@ -329,10 +329,10 @@ NaN,N/A,0.3,300
       check df["x"].kind == colObject # because of invalid floats
       check df["y"].kind == colFloat
       check df["z"].kind == colInt
-      check cmpElements(df["w", float].toRawSeq, @[1'f64, 2, NaN, 4])
-      check cmpElements(df["x", Value].toRawSeq, @[%~ 10, %~ "ERR", %~ "N/A", %~ 40])
-      check cmpElements(df["y", float].toRawSeq, @[0.1, Inf, 0.3, 0.4])
-      check cmpElements(df["z", int].toRawSeq, @[100, 200, 300, 400])
+      check cmpElements(df["w", float].toSeq1D, @[1'f64, 2, NaN, 4])
+      check cmpElements(df["x", Value].toSeq1D, @[%~ 10, %~ "ERR", %~ "N/A", %~ 40])
+      check cmpElements(df["y", float].toSeq1D, @[0.1, Inf, 0.3, 0.4])
+      check cmpElements(df["z", int].toSeq1D, @[100, 200, 300, 400])
 
     block NoNewline:
       checkBlock(exp)
@@ -382,9 +382,9 @@ NaN,N/A,0.3,300
       check df["x"].kind == colFloat
       check df["y"].kind == colFloat
       check df["z"].kind == colFloat
-      check cmpElements(df["x", float].toRawSeq, @[1'f64,4,NaN])
-      check cmpElements(df["y", float].toRawSeq, @[2'f64,NaN,8])
-      check cmpElements(df["z", float].toRawSeq, @[NaN,6,9])
+      check cmpElements(df["x", float].toSeq1D, @[1'f64,4,NaN])
+      check cmpElements(df["y", float].toSeq1D, @[2'f64,NaN,8])
+      check cmpElements(df["z", float].toSeq1D, @[NaN,6,9])
 
     block FromString:
       let df = parseCsvString(exp)
@@ -410,9 +410,9 @@ b,,foo
       check df["x"].kind == colString
       check df["y"].kind == colFloat
       check df["z"].kind == colString
-      check cmpElements(df["x", string].toRawSeq, @["a", "aa", "b", ""])
-      check cmpElements(df["y", float].toRawSeq, @[2'f64,3,NaN,8])
-      check cmpElements(df["z", string].toRawSeq, @["","","foo","bar"])
+      check cmpElements(df["x", string].toSeq1D, @["a", "aa", "b", ""])
+      check cmpElements(df["y", float].toSeq1D, @[2'f64,3,NaN,8])
+      check cmpElements(df["z", string].toSeq1D, @["","","foo","bar"])
 
     block FromString:
       let df = parseCsvString(exp)
@@ -822,8 +822,8 @@ suite "DataFrame tests":
     let mpg2groups = mpggroup.group_by("class", add = true)
     let classes = mpg["class"].unique
     let cyls = mpg["cyl"].unique
-    let product = product([classes.toTensor(Value).toRawSeq,
-                           cyls.toTensor(Value).toRawSeq])
+    let product = product([classes.toTensor(Value).toSeq1D,
+                           cyls.toTensor(Value).toSeq1D])
     var subgroupCount = 0
     for (by, df) in groups(mpg2groups):
       # check whether current subgroup is part of our cartesian product, i.e. combinations we
@@ -1037,7 +1037,7 @@ suite "DataFrame tests":
   test "Spread":
     let df = readCsv("data/fishdata_sparse.csv")
     let dfSpread = df.spread(namesFrom = "station", valuesFrom = "seen")
-    let namesExp = concat(df["station"].unique.toTensor(string).toRawSeq,
+    let namesExp = concat(df["station"].unique.toTensor(string).toSeq1D,
                           @["fish"]).sorted
     check dfSpread.len == 19
     check dfSpread.getKeys().len == 12
