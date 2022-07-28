@@ -417,14 +417,6 @@ proc determineHeuristicTypes(body: NimNode,
     # also assign result type. In this case override regardless of automatic
     # determination
     typ.resType = typeHint.resType
-  if typ.inputType.isNone or typ.resType.isNone:
-    # attempt via formula
-    warning("Could not determine data types of tensors in formula:\n" &
-      "  name: " & $name & "\n" &
-      "  formula: " & $body.repr & "\n" &
-      "  data type: " & $typ.inputType.repr & "\n" &
-      "  output data type: " & $typ.resType.repr & "\n" &
-      "Consider giving type hints via: `f{T -> U: <theFormula>}`")
   result = typ
 
 proc genColSym(name, s: string): NimNode =
