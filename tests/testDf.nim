@@ -565,12 +565,12 @@ suite "DataFrame tests":
                     "b" : b })
     check df["a"].kind == colInt
     check df["b"].kind == colFloat
-    check df["a"].toTensor(int) == a.toTensor.asType(int)
-    check df["b"].toTensor(float) == b.toTensor.asType(float)
+    check df["a"].toTensor(int) == a.toTensor.astype(int)
+    check df["b"].toTensor(float) == b.toTensor.astype(float)
     # check toColumn directly
     df["c"] = toColumn c
     check df["c"].kind == colInt
-    check df["c"].toTensor(int) == c.toTensor.asType(int)
+    check df["c"].toTensor(int) == c.toTensor.astype(int)
 
   test "Accessed column of DF is mutable / reference semantics":
     let a = @[123'u8, 12, 55]
@@ -578,26 +578,26 @@ suite "DataFrame tests":
     let b = @[1.123'f32, 4.234, 1e12]
     var df = toDf({ "a" : a })
     check df["a"].kind == colInt
-    check df["a"].toTensor(int) == a.toTensor.asType(int)
+    check df["a"].toTensor(int) == a.toTensor.astype(int)
     df["a"][df.high] = 33
     check df["a"].kind == colInt
-    check df["a"].toTensor(int) == aRepl.toTensor.asType(int)
+    check df["a"].toTensor(int) == aRepl.toTensor.astype(int)
     df["a"] = b
     check df["a"].kind == colFloat
-    check df["a"].toTensor(float) == b.toTensor.asType(float)
+    check df["a"].toTensor(float) == b.toTensor.astype(float)
 
     # check reference semantics
     let bMod = @[1.123'f32, 4.234, 1e4]
     var colB = df["a"]
     # modifying `colB` modifies `df["a"]`
     colB[df.high] = 1e4
-    check df["a"].toTensor(float) == bMod.toTensor.asType(float)
+    check df["a"].toTensor(float) == bMod.toTensor.astype(float)
 
     # modifying underlying tensor modifies data too
     let bMod2 = @[1.123'f32, 4.234, 1e6]
     var tensorB = df["a"].toTensor(float)
     tensorB[df.high] = 1e6
-    check df["a"].toTensor(float) == bMod2.toTensor.asType(float)
+    check df["a"].toTensor(float) == bMod2.toTensor.astype(float)
 
   test "Extending a DF by a column":
     let a = [1, 2, 3]

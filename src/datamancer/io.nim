@@ -189,7 +189,7 @@ func tryParse(toEat: seq[char], data: ptr UncheckedArray[char], idx: var int,
 proc parseNumber(data: ptr UncheckedArray[char],
                  sep: char, # if this sep is found parsing ends
                  idxIn: int,
-                 intVal: var int, floatVal: var float): RetType {.inline, noInit.} =
+                 intVal: var int, floatVal: var float): RetType {.inline, noinit.} =
   ## this code is taken and adapted from @c-blake's code in Nim PR #16055.
   # Parse/validate/classify all at once, returning the type we parsed into
   # and if not `rtError` the `intVal/floatVal` will store the parsed number
@@ -292,7 +292,7 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
       of rtFloat, rtNaN, rtInf:
         # before we copy everything check if can be parsed to float, this branch will only
         # be called a single time
-        col = toColumn col.iCol.asType(float)
+        col = toColumn col.iCol.astype(float)
         col.fCol[row] = floatVal # `floatVal` may be NaN, Inf or regular value
         colTypes[colIdx] = colFloat
       of rtError:

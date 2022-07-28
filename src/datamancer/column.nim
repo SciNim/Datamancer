@@ -29,11 +29,11 @@ func isConstant*(c: Column): bool = c.kind == colConstant
 proc toColumn*[T: SomeFloat | SomeInteger | string | bool | Value](t: Tensor[T]): Column =
   when T is SomeInteger:
     result = Column(kind: colInt,
-                    iCol: t.asType(int),
+                    iCol: t.astype(int),
                     len: t.size)
   elif T is SomeFloat:
     result = Column(kind: colFloat,
-                    fCol: t.asType(float),
+                    fCol: t.astype(float),
                     len: t.size)
   elif T is bool:
     result = Column(kind: colBool,
@@ -252,7 +252,7 @@ template withDtypeByColKind*(colKind: ColKind, body: untyped): untyped =
     body
   of colNone: raise newException(ValueError, "Invalid column kind!")
 
-proc asValue*[T](t: Tensor[T]): Tensor[Value] {.noInit.} =
+proc asValue*[T](t: Tensor[T]): Tensor[Value] {.noinit.} =
   ## Apply type conversion on the whole tensor
   result = t.map(x => (%~ x))
 
@@ -301,7 +301,7 @@ proc toTensor*[T](c: Column, dtype: typedesc[T],
     when T is int:
       result = c.iCol
     elif T is SomeNumber:
-      result = c.iCol.asType(T)
+      result = c.iCol.astype(T)
     elif T is Value:
       result = c.iCol.asValue
     elif T is string:
@@ -312,7 +312,7 @@ proc toTensor*[T](c: Column, dtype: typedesc[T],
     when T is float:
       result = c.fCol
     elif T is SomeNumber:
-      result = c.fCol.asType(T)
+      result = c.fCol.astype(T)
     elif T is Value:
       result = c.fCol.asValue
     elif T is string:
@@ -345,12 +345,12 @@ proc toTensor*[T](c: Column, slice: Slice[int], dtype: typedesc[T]): Tensor[T] =
     when T is int:
       result = c.iCol[slice.a .. slice.b]
     elif T is SomeNumber:
-      result = c.iCol[slice.a .. slice.b].asType(T)
+      result = c.iCol[slice.a .. slice.b].astype(T)
   of colFloat:
     when T is float:
       result = c.fCol[slice.a .. slice.b]
     elif T is SomeNumber:
-      result = c.fCol[slice.a .. slice.b].asType(T)
+      result = c.fCol[slice.a .. slice.b].astype(T)
   of colString:
     when T is string:
       result = c.sCol[slice.a .. slice.b]
@@ -497,7 +497,7 @@ proc `[]=`*[T](c: var Column, slice: Slice[int], t: Tensor[T]) =
     when T is float:
       c.fCol[sa .. sb] = t
     elif T is int:
-      c.fCol[sa .. sb] = t.asType(float)
+      c.fCol[sa .. sb] = t.astype(float)
     else:
       c = c.toObjectColumn()
       c.oCol[sa .. sb] = t.asValue()
@@ -634,7 +634,7 @@ proc add*(c1, c2: Column): Column =
     of colInt:
       # c1 is int, c2 is float
       let c2T = c2.constantToFull().toTensor(float)
-      result = toColumn concat(c1.iCol.asType(float), c2T, axis = 0)
+      result = toColumn concat(c1.iCol.astype(float), c2T, axis = 0)
     of colFloat:
       # c1 is float, c2 is int
       let c2T = c2.constantToFull().toTensor(float)
@@ -784,7 +784,7 @@ template map_inline*(c: Column, body: untyped): Column =
         "` for dtype of column: " & $(c.kind.toNimType))
     res
 
-proc lag*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noInit.} =
+proc lag*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noinit.} =
   ## Lags the input tensor by `n`, i.e. returns a shifted tensor
   ## such that it *lags* behind `t`:
   ##
@@ -803,7 +803,7 @@ proc lag*(c: Column, n = 1): Column =
   withNativeDtype(c):
     result = toColumn lag(c.toTensor(dtype), n)
 
-proc lead*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noInit.} =
+proc lead*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noinit.} =
   ## Leads the input tensor by `n`, i.e. returns a shifted tensor
   ## such that it *leads* ahead of `t`:
   ##
