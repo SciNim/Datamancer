@@ -1,4 +1,4 @@
-import strformat, macros, strutils
+import strformat, macros
 
 proc build(n: NimNode): string
 proc buildArgs(n: NimNode, head = ""): string =

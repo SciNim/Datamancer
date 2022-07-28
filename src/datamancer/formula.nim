@@ -1,4 +1,4 @@
-import macros, tables, sequtils, sets, algorithm, options, strutils, hashes
+import macros, tables, sequtils, sets, options, strutils, hashes
 import value, column, df_types
 # formulaNameMacro contains a macro and type based on the fallback `FormulaNode`,
 # which is used to generate the names of each `FormulaNode` in lisp representation
@@ -81,7 +81,6 @@ proc raw*(node: FormulaNode): string =
 proc toUgly*(result: var string, node: FormulaNode) =
   ## This is the formula stringification, which can be used to access the corresponding
   ## column of in a DF that corresponds to the formula
-  var comma = false
   case node.kind:
   of fkVariable:
     result = $node.val
@@ -106,7 +105,7 @@ proc add(p: var PossibleTypes, pt: ProcType) =
     p = PossibleTypes(kind: tkProcedure)
   p.procTypes.add pt
 
-proc add(p: var PossibleTypes, p2: PossibleTypes) =
+proc add(p: var PossibleTypes, p2: PossibleTypes) {.used.} =
   doAssert p.kind == p2.kind
   case p.kind
   of tkExpression: p.types.add p2.types
@@ -133,10 +132,6 @@ proc isGeneric(n: NimNode): bool =
   of nnkEmpty: result = true # sort of generic...
   else: error("Invalid call to `isGeneric` for non-type like node " &
     $(n.treeRepr) & "!")
-
-func isLiteral(n: NimNode): bool = n.kind in {nnkIntLit .. nnkFloat64Lit, nnkStrLit}
-
-func isScalar(n: NimNode): bool = n.strVal in DtypesAll
 
 proc reorderRawTilde(n: NimNode, tilde: NimNode): NimNode =
   ## a helper proc to reorder an nnkInfix tree according to the
@@ -356,10 +351,6 @@ const StringSet = toHashSet(@["&", "$"])
 const BoolSet = toHashSet(@["and", "or", "xor", ">", "<", ">=", "<=", "==", "!=",
                             "true", "false", "in", "notin", "not"])
 
-func inFloatSet(n: string): bool = n in FloatSet
-func inStringSet(n: string): bool = n in StringSet
-func inBoolSet(n: string): bool = n in BoolSet
-
 proc determineHeuristicTypes(body: NimNode,
                              typeHint: TypeHint,
                              name: string): TypeHint =
@@ -546,41 +537,8 @@ proc countArgs(n: NimNode): tuple[args, optArgs: int] =
     if ch[ch.len - 1].kind != nnkEmpty:
       inc result.optArgs, chLen - 2
 
-proc typeToAsgnKind(n: NimNode): AssignKind =
-  ## NOTE: only use this function if you know that `n` represents a
-  ## `type` and it is either `Tensor[T]` or `T` where `T` has to be
-  ## in `Dtypes` (DF allowed types)
-  case n.kind
-  of nnkBracketExpr: result = byTensor
-  of nnkIdent, nnkSym: result = byIndex
-  else: error("Invalid call to `typeToAsgnKind` for non-type like node " &
-    $(n.treeRepr) & "!")
-
 func isTensorType(n: NimNode): bool =
   n[0].kind in {nnkSym, nnkIdent} and n[0].strVal == "Tensor"
-
-proc typeAcceptableOrNone(n: NimNode): Option[NimNode] =
-  ## Returns a type that either matches `Dtypes` (everything storable
-  ## in a DF) or is a `Tensor[T]`. Returns that type.
-  ## Otherwise returns an empty node.
-  case n.kind
-  of nnkIdent, nnkSym:
-    if n.strVal in DtypesAll:
-      result = some(n)
-  of nnkBracketExpr:
-    if isTensorType(n):
-      result = some(n)
-  of nnkCall:
-    # sometimes the type shows up as something like (nnkCall (openSymChoice openArray T))
-    doAssert n.len == 3
-    if n[1].kind == nnkSym and n[1].strVal == "Tensor":
-      result = some(n)
-  of nnkRefTy, nnkPtrTy, nnkInfix: discard
-  of nnkEmpty:
-    # no return type
-    discard
-  else:
-    error("Invalid type `" & $(n.treeRepr) & "`!")
 
 import sugar
 proc typeAcceptable(n: NimNode): bool =
@@ -776,15 +734,6 @@ proc toTypeSet(p: seq[ProcType], inputs: bool): HashSet[string] =
     else:
       if pt.resType.isSome:
         result.incl pt.resType.get.repr
-
-proc toTypeSet(p: PossibleTypes, inputs: bool): HashSet[string] =
-  case p.kind
-  of tkExpression:
-    result = p.types.toTypeSet
-  of tkProcedure:
-    result = p.procTypes.toTypeSet(inputs = inputs)
-  else:
-    discard
 
 proc matchingTypes(t, u: PossibleTypes): seq[NimNode] =
   ## Checks if the types match.
@@ -1038,7 +987,7 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
     ## `a.myCall().b.idx("a")`
     ## which does not really make sense.
     doAssert not (n[0].isPureTree and n[1].isPureTree), "Not both trees can be pure"
-    let typ0 = tab.getTypeIfPureTree(n[0], detNumArgs(n))
+    # let typ0 = tab.getTypeIfPureTree(n[0], detNumArgs(n))
     let typ1 = tab.getTypeIfPureTree(n[1], detNumArgs(n))
     doAssert n[1].isPureTree, "Impure tree as second child to `nnkDotExpr` does not make sense"
     # extract types from `typ1`. Since `typ1` receives `n[0]` as its input, we can use
@@ -1065,7 +1014,7 @@ proc determineTypes(loop: NimNode, tab: Table[string, NimNode]): Preface =
                                                         resType: newEmptyNode()))
   result = Preface(args: args)
 
-proc parseOptionValue(n: NimNode): Option[FormulaKind] =
+proc parseOptionValue(n: NimNode): Option[FormulaKind] {.used.} =
   ## parses the AST of a `FormulaKind` into an `Option[T]` at CT
   ## Note: shouldn't there be an easier way?...
   expectKind n, nnkObjConstr
@@ -1271,7 +1220,7 @@ proc compileFormula(n: NimNode, fullNode = false): NimNode =
 
   var formulaName = newNilLit()
   var formulaRhs = newNilLit()
-  if tilde.kind != nnkNilLit and node[0].ident != toNimIdent"~":
+  if tilde.kind != nnkNilLit and node[0].strVal != "~":
     # only reorder the tree, if it does contain a tilde and the
     # tree is not already ordered (i.e. nnkInfix at top with tilde as
     # LHS)
