@@ -1,0 +1,55 @@
+VNull	value.html#VNull	ValueKind.VNull	
+VBool	value.html#VBool	ValueKind.VBool	
+VInt	value.html#VInt	ValueKind.VInt	
+VFloat	value.html#VFloat	ValueKind.VFloat	
+VString	value.html#VString	ValueKind.VString	
+VObject	value.html#VObject	ValueKind.VObject	
+ValueKind	value.html#ValueKind	value: ValueKind	
+Value	value.html#Value	value: Value	
+toValKind	value.html#toValKind,typedesc[T]	value: toValKind[T](dtype: typedesc[T]): ValueKind	
+items	value.html#items.i,Value	value: items(row: Value): Value	
+keys	value.html#keys.i,Value	value: keys(row: Value): string	
+pairs	value.html#pairs.i,Value	value: pairs(row: Value): tuple[key: string, val: Value]	
+contains	value.html#contains,Value,string	value: contains(v: Value; key: string): bool	
+`[]`	value.html#[],Value,string	value: `[]`(v: Value; key: string): Value	
+`[]=`	value.html#[]=,Value,string,Value	value: `[]=`(v: var Value; key: string; val: Value)	
+`%~`	value.html#%~,char	value: `%~`(c: char): Value	
+`%~`	value.html#%~,string	value: `%~`(v: string): Value	
+`%~`	value.html#%~,SomeFloat	value: `%~`(v: SomeFloat): Value	
+`%~`	value.html#%~,SomeInteger	value: `%~`(v: SomeInteger): Value	
+`%~`	value.html#%~,bool	value: `%~`(v: bool): Value	
+`%~`	value.html#%~,OrderedTable[string,Value]	value: `%~`(v: OrderedTable[string, Value]): Value	
+null	value.html#null	value: null(): Value	
+newVObject	value.html#newVObject,int	value: newVObject(length = 8): Value	
+`%~`	value.html#%~,openArray[T]	value: `%~`[T: not Value](s: openArray[T]): seq[Value]	
+`%~`	value.html#%~.t,openArray[Value]	value: `%~`(s: openArray[Value]): seq[Value]	
+toObject	value.html#toObject,seq[]	value: toObject(s: seq[(string, Value)]): Value	
+toObject	value.html#toObject	value: toObject(s: (string, Value)): Value	
+isNumber	value.html#isNumber,string	value: isNumber(s: string): bool	
+isNumber	value.html#isNumber,Value	value: isNumber(v: Value): bool	
+isInt	value.html#isInt,string	value: isInt(s: string): bool	
+isBool	value.html#isBool,string	value: isBool(s: string): bool	
+isInt	value.html#isInt,Value	value: isInt(v: Value): bool	
+toFloat	value.html#toFloat,Value,staticbool	value: toFloat(v: Value; allowNull: static bool = false): float	
+toInt	value.html#toInt,Value	value: toInt(v: Value): int	
+toBool	value.html#toBool,Value	value: toBool(v: Value): bool	
+toStr	value.html#toStr,Value	value: toStr(v: Value): string	
+to	value.html#to,Value,typedesc[T]	value: to[T: int | float | string | bool](v: Value; dtype: typedesc[T]): T	
+withNative	value.html#withNative.t,Value,untyped,untyped	value: withNative(v: Value; valName: untyped; body: untyped): untyped	
+withNativeConversion	value.html#withNativeConversion.t,ValueKind,untyped,untyped	value: withNativeConversion(kind: ValueKind; procName: untyped; body: untyped): untyped	
+isNull	value.html#isNull,Value	value: isNull(v: Value): Value	
+almostEqual	value.html#almostEqual,float,float,float	value: almostEqual(a, b: float; epsilon = 1e-8): bool	
+`==`	value.html#==,Value,Value	value: `==`(v, w: Value): bool	
+convenienceValueComparisons	value.html#convenienceValueComparisons.t	value: convenienceValueComparisons(): untyped	
+`&lt;`	value.html#<,Value,Value	value: `&lt;`(v, w: Value): bool	
+`&lt;=`	value.html#<=,Value,Value	value: `&lt;=`(v, w: Value): bool	
+smallerOrFalse	value.html#smallerOrFalse,Value,float	value: smallerOrFalse(v: Value; f: float): bool	
+largerOrFalse	value.html#largerOrFalse,Value,float	value: largerOrFalse(v: Value; f: float): bool	
+`+`	value.html#+,Value,Value	value: `+`(v`gensym86, w`gensym86: Value): Value	
+`-`	value.html#-,Value,Value	value: `-`(v`gensym90, w`gensym90: Value): Value	
+`*`	value.html#*,Value,Value	value: `*`(v`gensym94, w`gensym94: Value): Value	
+`/`	value.html#/,Value,Value	value: `/`(v`gensym98, w`gensym98: Value): Value	
+pretty	value.html#pretty,Value,int	value: pretty(v: Value; precision = 4; emphStrNumber = true): string	
+`$`	value.html#$.t,Value	value: `$`(v: Value): string	
+hash	value.html#hash,Value	value: hash(x: Value): Hash	
+contains	value.html#contains,Value,Value	value: contains(v: Value; has: Value): bool	

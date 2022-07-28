@@ -1,0 +1,60 @@
+colNone	column.html#colNone	ColKind.colNone	
+colFloat	column.html#colFloat	ColKind.colFloat	
+colInt	column.html#colInt	ColKind.colInt	
+colBool	column.html#colBool	ColKind.colBool	
+colString	column.html#colString	ColKind.colString	
+colObject	column.html#colObject	ColKind.colObject	
+colConstant	column.html#colConstant	ColKind.colConstant	
+ColKind	column.html#ColKind	column: ColKind	
+Column	column.html#Column	column: Column	
+`%~`	column.html#%~.t,Value	column: `%~`(v: Value): Value	
+toColumn	column.html#toColumn.t,Column	column: toColumn(c: Column): Column	
+high	column.html#high,Column	column: high(c: Column): int	
+isConstant	column.html#isConstant,Column	column: isConstant(c: Column): bool	
+toColumn	column.html#toColumn,Tensor[T: float or float32 or float64 or int or int8 or int16 or int32 or int64 or uint or uint8 or uint16 or uint32 or uint64 or string or bool or Value]	column: toColumn[T: SomeFloat | SomeInteger | string | bool | Value](t: Tensor[T]): Column	
+constantColumn	column.html#constantColumn,T,int	column: constantColumn[T](val: T; len: int): Column	
+constantToFull	column.html#constantToFull,Column	column: constantToFull(c: Column): Column	
+`[]`	column.html#[],Column,Slice[int]	column: `[]`(c: Column; slice: Slice[int]): Column	
+newColumn	column.html#newColumn,int	column: newColumn(kind = colNone; length = 0): Column	
+toColKind	column.html#toColKind,typedesc[T]	column: toColKind[T](dtype: typedesc[T]): ColKind	
+toColKind	column.html#toColKind,ValueKind	column: toColKind(vKind: ValueKind): ColKind	
+toValueKind	column.html#toValueKind,Column	column: toValueKind(col: Column): ValueKind	
+toValueKind	column.html#toValueKind,ColKind	column: toValueKind(col: ColKind): ValueKind	
+nativeColKind	column.html#nativeColKind,Column	column: nativeColKind(col: Column): ColKind	
+toNimType	column.html#toNimType,ColKind	column: toNimType(colKind: ColKind): string	
+withNativeTensor	column.html#withNativeTensor.t,Column,untyped,untyped	column: withNativeTensor(c: Column; valName: untyped; body: untyped): untyped	
+combinedColKind	column.html#combinedColKind,seq[Column]	column: combinedColKind(c: seq[Column]): ColKind	
+withNative	column.html#withNative.t,Column,int,untyped,untyped	column: withNative(c: Column; idx: int; valName: untyped; body: untyped): untyped	
+withNativeDtype	column.html#withNativeDtype.t,Column,untyped	column: withNativeDtype(c: Column; body: untyped): untyped	
+withDtypeByColKind	column.html#withDtypeByColKind.t,ColKind,untyped	column: withDtypeByColKind(colKind: ColKind; body: untyped): untyped	
+asValue	column.html#asValue,Tensor[T]	column: asValue[T](t: Tensor[T]): Tensor[Value]	
+valueTo	column.html#valueTo,Tensor[Value],typedesc[T],staticbool	column: valueTo[T](t: Tensor[Value]; dtype: typedesc[T]; dropNulls: static bool = false): Tensor[\n    T]	
+toTensor	column.html#toTensor,Column,typedesc[T],staticbool	column: toTensor[T](c: Column; dtype: typedesc[T]; dropNulls: static bool = false): Tensor[\n    T]	
+toTensor	column.html#toTensor,Column,Slice[int],typedesc[T]	column: toTensor[T](c: Column; slice: Slice[int]; dtype: typedesc[T]): Tensor[T]	
+`[]`	column.html#[],Column,int,typedesc[T]	column: `[]`[T](c: Column; idx: int; dtype: typedesc[T]): T	
+toObjectColumn	column.html#toObjectColumn,Column	column: toObjectColumn(c: Column): Column	
+`[]=`	column.html#[]=,Column,int,T	column: `[]=`[T](c: var Column; idx: int; val: T)	
+`[]=`	column.html#[]=,Column,Slice[int],Tensor[T]	column: `[]=`[T](c: var Column; slice: Slice[int]; t: Tensor[T])	
+`[]=`	column.html#[]=,Column,Slice[int],Column	column: `[]=`(c: var Column; slice: Slice[int]; col: Column)	
+withNative2	column.html#withNative2.t,Column,Column,int,int,untyped,untyped,untyped	column: withNative2(c1, c2: Column; idx1, idx2: int; valName1, valName2: untyped;\n            body: untyped): untyped	
+compatibleColumns	column.html#compatibleColumns,Column,Column	column: compatibleColumns(c1, c2: Column): bool	
+equal	column.html#equal,Column,int,Column,int	column: equal(c1: Column; idx1: int; c2: Column; idx2: int): bool	
+toObject	column.html#toObject,Column	column: toObject(c: Column): Column	
+add	column.html#add,Column,Column	column: add(c1, c2: Column): Column	
+toColumn	column.html#toColumn,openArray[T]	column: toColumn[T: SomeFloat | SomeInteger | string | bool | Value](s: openArray[T]): Column	
+toColumn	column.html#toColumn,T	column: toColumn[T: SomeFloat | SomeInteger | string | bool | Value](x: T): Column	
+toNativeColumn	column.html#toNativeColumn,openArray[Value]	column: toNativeColumn(s: openArray[Value]): Column	
+toNativeColumn	column.html#toNativeColumn,Column,staticbool	column: toNativeColumn(c: Column; failIfImpossible: static bool = true): Column	
+nullColumn	column.html#nullColumn,int	column: nullColumn(num: int): Column	
+contains	column.html#contains,Column,T	column: contains[T: float | string | int | bool | Value](c: Column; val: T): bool	
+liftScalarToColumn	column.html#liftScalarToColumn.t,untyped	column: liftScalarToColumn(name: untyped): untyped	
+max	column.html#max,Column	column: max(c`gensym949: Column): Value	
+pretty	column.html#pretty,Column	column: pretty(c: Column): string	
+`$`	column.html#$.t,Column	column: `$`(c: Column): string	
+clone	column.html#clone,Column	column: clone(c: Column): Column	
+map	column.html#map,Column,	column: map[T; U](c: Column; fn: (T -&gt; U)): Column	
+map_inline	column.html#map_inline.t,Column,untyped	column: map_inline(c: Column; body: untyped): Column	
+lag	column.html#lag,Tensor[T],int,T	column: lag[T](t: Tensor[T]; n = 1; fill: T = default(T)): Tensor[T]	
+lag	column.html#lag,Column,int	column: lag(c: Column; n = 1): Column	
+lead	column.html#lead,Tensor[T],int,T	column: lead[T](t: Tensor[T]; n = 1; fill: T = default(T)): Tensor[T]	
+lead	column.html#lead,Column,int	column: lead(c: Column; n = 1): Column	

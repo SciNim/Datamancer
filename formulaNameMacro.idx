@@ -1,0 +1,2 @@
+buildName	formulaNameMacro.html#buildName,NimNode	formulaNameMacro: buildName(n: NimNode): string	
+buildResultColName	formulaNameMacro.html#buildResultColName,NimNode	formulaNameMacro: buildResultColName(n: NimNode): NimNode	

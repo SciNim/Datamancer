@@ -1,0 +1,32 @@
+byIndex	formulaExp.html#byIndex	AssignKind.byIndex	
+byTensor	formulaExp.html#byTensor	AssignKind.byTensor	
+byCustom	formulaExp.html#byCustom	AssignKind.byCustom	
+AssignKind	formulaExp.html#AssignKind	formulaExp: AssignKind	
+fkNone	formulaExp.html#fkNone	FormulaKind.fkNone	
+fkVariable	formulaExp.html#fkVariable	FormulaKind.fkVariable	
+fkAssign	formulaExp.html#fkAssign	FormulaKind.fkAssign	
+fkVector	formulaExp.html#fkVector	FormulaKind.fkVector	
+fkScalar	formulaExp.html#fkScalar	FormulaKind.fkScalar	
+FormulaKind	formulaExp.html#FormulaKind	formulaExp: FormulaKind	
+Assign	formulaExp.html#Assign	formulaExp: Assign	
+Preface	formulaExp.html#Preface	formulaExp: Preface	
+FormulaCT	formulaExp.html#FormulaCT	formulaExp: FormulaCT	
+Lift	formulaExp.html#Lift	formulaExp: Lift	
+TypeHint	formulaExp.html#TypeHint	formulaExp: TypeHint	
+HeuristicType	formulaExp.html#HeuristicType	formulaExp: HeuristicType	
+FormulaTypes	formulaExp.html#FormulaTypes	formulaExp: FormulaTypes	
+Dtypes	formulaExp.html#Dtypes	formulaExp: Dtypes	
+DtypesAll	formulaExp.html#DtypesAll	formulaExp: DtypesAll	
+DtypeOrderMap	formulaExp.html#DtypeOrderMap	formulaExp: DtypeOrderMap	
+toStrType	formulaExp.html#toStrType,NimNode	formulaExp: toStrType(n: NimNode): NimNode	
+isValidType	formulaExp.html#isValidType,NimNode	formulaExp: isValidType(n: NimNode): bool	
+sortTypes	formulaExp.html#sortTypes,seq[string]	formulaExp: sortTypes(s: seq[string]): seq[string]	
+sortTypes	formulaExp.html#sortTypes,seq[NimNode]	formulaExp: sortTypes(s: seq[NimNode]): seq[string]	
+isColumnType	formulaExp.html#isColumnType,NimNode	formulaExp: isColumnType(n: NimNode): bool	
+extractCall	formulaExp.html#extractCall,NimNode,string	formulaExp: extractCall(stmts: NimNode; id: string): NimNode	
+parsePreface	formulaExp.html#parsePreface,NimNode	formulaExp: parsePreface(n: NimNode): Preface	
+`$`	formulaExp.html#$,Preface	formulaExp: `$`(p: Preface): string	
+nodeIsDf	formulaExp.html#nodeIsDf,NimNode	formulaExp: nodeIsDf(n: NimNode): bool	
+nodeIsDfIdx	formulaExp.html#nodeIsDfIdx,NimNode	formulaExp: nodeIsDfIdx(n: NimNode): bool	
+hasExplicitTypeHint	formulaExp.html#hasExplicitTypeHint,NimNode	formulaExp: hasExplicitTypeHint(n: NimNode): bool	
+generateClosure	formulaExp.html#generateClosure,FormulaCT	formulaExp: generateClosure(fct: FormulaCT): NimNode	

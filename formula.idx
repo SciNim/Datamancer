@@ -1,0 +1,10 @@
+FormulaNode	formula.html#FormulaNode	formula: FormulaNode	
+FormulaMismatchError	formula.html#FormulaMismatchError	formula: FormulaMismatchError	
+hash	formula.html#hash,FormulaNode	formula: hash(fn: FormulaNode): Hash	
+raw	formula.html#raw,FormulaNode	formula: raw(node: FormulaNode): string	
+toUgly	formula.html#toUgly,string,FormulaNode	formula: toUgly(result: var string; node: FormulaNode)	
+`$`	formula.html#$,FormulaNode	formula: `$`(node: FormulaNode): string	
+compileFormulaImpl	formula.html#compileFormulaImpl.m,staticstring,staticFormulaKind	formula: compileFormulaImpl(rawName: static string; funcKind: static FormulaKind): untyped	
+`{}`	formula.html#{}.m,,untyped	formula: `{}`(x: untyped{ident}; y: untyped): untyped	
+fn	formula.html#fn.m,untyped	formula: fn(x: untyped): untyped	
+formula	formula.html#formula.m,untyped	formula: formula(n: untyped): untyped	

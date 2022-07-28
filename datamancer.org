@@ -1,0 +1,366 @@
+* Datamancer overview
+
+The =datamancer= packages is a dataframe library, which (as a
+companion to [[https://github.com/Vindaar/ggplotnim][ggplotnim]]) is also heavily inspired by a specific R
+library. In this case [[https://dplyr.tidyverse.org/][dplyr]], a dataframe library of the tidyverse.
+
+What follows is a basic introduction covering all fundamentals. We
+won't cover the full API in this document, but rather aim to give the
+understanding so that using the full library becomes easy.
+
+** What is a dataframe?
+
+A dataframe is a data structure that consists of multiple 1
+dimensional datasets of equal lengths - but possibly different types -
+that have names associated to them.
+
+From an abstract perspective it is a set of heterogeneous arrays (array not
+specifically in terms of CT sized Nim arrays, but as general flat,
+contiguous data structures) stored in a hash table. Each entry in the
+table is called a column and the keys represent the column names.
+
+In a sense then they are a data structure similar to what is
+represented by a spreadsheet or naturally in a CSV file.
+
+One useful distinction about the nature of individual columns of a
+dataframe is whether the data described in it is continuous
+(possibly N different values for a dataframe of length N) or discrete
+(small number of N different values compared to a possibly much larger
+M number of elements). 
+
+** What is the point of a dataframe?
+
+A huge amount of data about the real world or most physical systems
+can be described by individual numbers (scalars) or sets of such. For
+one system or topic of interest, it is often natural (or slightly less
+natural, but possible) to express the state of the system by a set of
+numbers. Let's call that a "record". From this follows that possibly:
+- a set of such systems
+- the time evolution of such a system
+- ...
+can be described by a (possibly ordered) list of such records. Such a
+list directly represents a dataframe.
+
+What this implies is that as long as we can write down a number of
+operations we can perform on or with a dataframe, we can apply such
+operations to a large number of possible systems.
+
+Therefore, dataframes are a very powerful datastructure.
+
+The library inspiring datamancer defines a small set of (base)
+operations to perform with dataframes. A small number of operations
+makes it easy to reason about and combine them to produce complex
+operations.
+
+The five base operations ("the verbs of dplyr") are:
+- =mutate=: modify an existing column or add a new one 
+- =select=: select a subset of columns
+- =filter=: filter out a subset of records based on one or more conditions
+- =summarize=: reduce one or more columns to a single scalar
+- =arrange=: sort the dataframe according to one or more columns
+
+For discrete columns in a dataframe one more procedure is almost as
+basic, namely =group_by=. It allows one to iterate over all subsets of
+a dataframe that have the same value 'x' in a column 'A'.
+
+The five verbs above naturally combine with =groub_by=. This means if
+one of these operations is performed on a grouped dataframe, the
+operation will be performed of each subgroup instead of the full
+dataframe (which may or may not produce a different result).
+
+** Creating a dataframe
+
+With some understanding of why we might want to bother with
+dataframes, we can now ask ourselves how to create one. 
+
+Usage typically starts with one of the following cases:
+1. data already available in =seq[T]/Tensor[T]= or some Nim object from which such
+   can be created
+2. some CSV / TSV like ascii file or a =string= representing such a thing
+3. some binary file like HDF5
+4. some database 
+
+Note about 3 and 4: simple access (without manually reading into a
+=seq[T]/Tensor[T]=) is not supported for these two yet. These can be
+added easily (code for HDF5 exists, but not as part of this
+repository) if there is demand.
+
+*** Supported datatypes and internal representation
+
+The datamancer dataframes currently support the following types:
+- =int=
+- =float=
+- =string=
+- =bool=
+- =Value=
+where =Value= is a variant object that can store either of the above
+datatypes. That type is used in case a single column stores multiple
+data types.
+
+At this moment there is no direct support for =DateTime= or =Time=
+objects. That could be added if desired. It's a bit of work, but
+manageable. It's mainly missing, because so far I personally didn't
+really need it. 
+
+Internally, one column is stored in a =Column= object. This object is
+a variant object, with different possible =ColumnKinds= (one kind for
+each of the native data types). The column stores an [[https://github.com/mratsim/Arraymancer][Arraymancer]]
+=Tensor[T]= for the respective type of the column.
+
+The usage of variant objects allows for a fully dynamic, runtime
+mutable design. This is a trade-off between safety and convenience,
+which is placed more towards convenience for the simple reason that
+for often recurring computations of the same kind it is highly
+recommended to make use of a custom datatype that allows for
+optimizations applicable to the specific domain.
+
+*** From =seq[T]/Tensor[T]=
+
+For the case of having the data as =seq[T]=, we just use the
+=toDf= template to create a DF from it. The template does not care
+whether the input is of type =seq[T]= or =Tensor[T]=. In the future
+support for pointer + length pairs can be added as well.
+
+There are two ways to use =toDf=. Assuming we have three sequences of possibly different types:
+#+BEGIN_SRC nim
+let s1: seq[int] = @[22, 54, 34]
+let s2: seq[float] = @[1.87, 1.75, 1.78]
+let s3: seq[string] = @["Mike", "Laura", "Sue"]
+#+END_SRC
+we can either create a DF and let the library automatically deduce the
+column names from the Nim identifiers of the given variables:
+#+BEGIN_SRC nim
+let dfAutoNamed = toDf(s1, s2, s3)
+#+END_SRC
+which will give us a DF with column names:
+#+BEGIN_SRC nim
+"s1", "s2", "s3"
+#+END_SRC
+In many cases one might rather like a different name. In this case use the following
+syntax:
+#+BEGIN_SRC nim
+let df = toDf({ "Age" : s1,
+                "Height" : s2,
+                "Name" : s3 })
+#+END_SRC
+which will then use the given strings for the column names.
+
+If we print this dataframe we get the following output:
+#+begin_src
+Dataframe with 3 columns and 3 rows:
+       Idx       Age    Height      Name
+    dtype:       int     float    string
+         0        22      1.87      Mike
+         1        54      1.75     Laura
+         2        34      1.78       Sue
+#+end_src
+
+We see that we get information about:
+- the number of columns in the dataframe
+- the number of rows in the dataframe
+- the names of each column
+- the data types of each column
+- their values with one record per row
+- and an additional index column          
+
+*** From a CSV / TSV file
+
+The second supported case is a CSV like file. For these the library
+provides a generalized =readCsv= proc. Strictly speaking it can also
+read TSV (or any delimited ASCII file) and provides a number of
+different options to make it suitable to a large variety of
+differently organized CSV files (what a euphemism):
+#+BEGIN_SRC nim
+proc readCsv*(fname: string,
+              sep: char = ',',
+              header: string = "",
+              skipLines = 0,
+              toSkip: set[char] = {},
+              colNames: seq[string] = @[],
+              skipInitialSpace = true,
+              quote = '"',
+             ): DataFrame
+#+END_SRC
+For a regular CSV file (comma separated) with a header line storing
+the column names, all we need is a filename. 
+
+In addition to that the separator can be changed with =sep= and the
+header can have a designation (e.g. =#= indicating header lines that
+will be skipped automatically after the first). 
+
+Further a specific number of lines can be skipped after the
+header. =toSkip= allows to skip any set of characters. These will be
+completely ignored outside of columns. 
+
+If the file does not have a header =colNames= can be used to give
+names to the columns.
+
+=skipInitialSpace= is useful to remove whitespace that might appear in
+addition to a separator (e.g. a comma separated file that also has a
+space after every comma). If it is false such spaces will be parsed
+into the data fields.
+
+Finally, =quote= allows to ignore all characters that would otherwise
+act as separators, line breaks, ... within these. If ="= is used as
+quote and spaces to separate, there may be spaces within individual
+fields as long as these are within quotes.
+
+Let's use this procedure to read the supplied =mpg= dataset:
+#+BEGIN_SRC nim :results raw 
+import datamancer
+let df = readCsv("../data/mpg.csv")
+#+END_SRC
+
+
+
+We're now proud owner of dataframe that's a bit more exciting than the
+3 column / 3 row one from before. We'll explore it in the next section.
+
+** Manipulating a DF
+
+Now we have a DF. What then?
+
+First of all we can look at it. Echoing a DF calls the =pretty=
+proc. For the DF introduced above, this looks like:
+#+BEGIN_SRC nim
+echo df
+#+END_SRC
+gives for the =mpg= dataset:
+#+BEGIN_SRC sh
+#+RESULTS:
+Dataframe with 11 columns and 234 rows:
+   Idx  manufacturer           model  displ  year  cyl  ...     drv   cty   hwy      fl     class
+dtype:        string          string  float   int  int  ...  string   int   int  string    string
+     0          audi              a4    1.8  1999    4  ...       f    18    29       p   compact
+     1          audi              a4    1.8  1999    4  ...       f    21    29       p   compact
+     2          audi              a4      2  2008    4  ...       f    20    31       p   compact
+     3          audi              a4      2  2008    4  ...       f    21    30       p   compact
+     4          audi              a4    2.8  1999    6  ...       f    16    26       p   compact
+     5          audi              a4    2.8  1999    6  ...       f    18    26       p   compact
+     6          audi              a4    3.1  2008    6  ...       f    18    27       p   compact
+     7          audi      a4 quattro    1.8  1999    4  ...     "4"    18    26       p   compact
+     8          audi      a4 quattro    1.8  1999    4  ...     "4"    16    25       p   compact
+     9          audi      a4 quattro      2  2008    4  ...     "4"    20    28       p   compact
+    10          audi      a4 quattro      2  2008    4  ...     "4"    19    27       p   compact
+    11          audi      a4 quattro    2.8  1999    6  ...     "4"    15    25       p   compact
+    12          audi      a4 quattro    2.8  1999    6  ...     "4"    17    25       p   compact
+    13          audi      a4 quattro    3.1  2008    6  ...     "4"    17    25       p   compact
+    14          audi      a4 quattro    3.1  2008    6  ...     "4"    15    25       p   compact
+    15          audi      a6 quattro    2.8  1999    6  ...     "4"    15    24       p   midsize
+    16          audi      a6 quattro    3.1  2008    6  ...     "4"    17    25       p   midsize
+    17          audi      a6 quattro    4.2  2008    8  ...     "4"    16    23       p   midsize
+    18     chevrolet c1500 suburb...    5.3  2008    8  ...       r    14    20       r       suv
+    19     chevrolet c1500 suburb...    5.3  2008    8  ...       r    11    15       e       suv
+#+END_SRC
+(NOTE: I shortened the output for the docs here)
+Notice how in the =drv= column the 4WD entries are echoed as "4"
+instead of just 4. That is to highlight that those values are actually
+stored as strings to not confuse them with numbers. 
+
+By default only the first 20 entries will be shown. For more/less
+elements, call =pretty= directly:
+#+BEGIN_SRC nim
+echo df.pretty(100)
+#+END_SRC
+
+=pretty= also takes a =precision= argument. This is given to the
+string conversion for =float= values to set the number of digits
+printed after the decimal point. However, it can also be used to
+change the width of the columns more generally. Note however the
+precision is added to a width of =6= by default. Also the column is at
+least as wide as the longest DF key.
+
+Let's now check which cars in the dataset have the highest and lowest
+city fuel economy. For that we can simply arrange the dataframe
+according to the =cty= column and take the tail or head of the
+result. 
+#+BEGIN_SRC nim :results raw
+echo df.arrange("cty").head(5)
+#+END_SRC
+results in:
+#+BEGIN_SRC sh
+Dataframe with 11 columns and 5 rows:
+Idx    manufacturer           model           displ  ...  cyl  ...  drv   cty   hwy      fl    class
+dtype:       string          string           float       int    string   int   int  string   string
+  0           dodge dakota picku...             4.7  ...    8  ...  "4"     9    12       e   pickup
+  1           dodge     durango 4wd             4.7  ...    8  ...  "4"     9    12       e      suv
+  2           dodge ram 1500 pic...             4.7  ...    8  ...  "4"     9    12       e   pickup
+  3           dodge ram 1500 pic...             4.7  ...    8  ...  "4"     9    12       e   pickup
+  4            jeep grand cherok...             4.7  ...    8  ...  "4"     9    12       e      suv
+#+END_SRC
+and looking at the tail instead:
+#+BEGIN_SRC nim
+echo df.arrange("cty").tail(5)
+#+END_SRC
+will tell us that a new beetle is the most efficient car in the dataset:
+#+BEGIN_SRC sh
+Dataframe with 11 columns and 5 rows:
+Idx    manufacturer           model           displ  ...  cyl  ...  drv   cty   hwy     fl        class
+dtype:       string          string           float       int    string   int   int  string      string
+  0           honda           civic             1.6  ...    4  ...    f    28    33      r   subcompact
+  1          toyota         corolla             1.8  ...    4  ...    f    28    37      r      compact
+  2      volkswagen      new beetle             1.9  ...    4  ...    f    29    41      d   subcompact
+  3      volkswagen           jetta             1.9  ...    4  ...    f    33    44      d      compact
+  4      volkswagen      new beetle             1.9  ...    4  ...    f    35    44      d   subcompact
+#+END_SRC
+(=arrange= also takes an order argument, using the Nim stdlib's
+=SortOrder= enum).
+
+As another example here to showcase the usage of =FormulaNodes=, let's
+find some cars with an engine displacement of more than 5 L and which
+are 2 seaters (I wonder what car might show up...):
+#+BEGIN_SRC nim
+echo df.filter(f{`displ` > 5.0 and `class` == "2seater"})
+#+END_SRC
+#+BEGIN_SRC sh
+Dataframe with 11 columns and 5 rows:
+Idx    manufacturer           model           displ  ...  cyl  ...  drv   cty   hwy     fl     class
+dtype:       string          string           float       int    string   int   int string    string
+  0       chevrolet        corvette             5.7  ...    8  ...    r    16    26      p   2seater
+  1       chevrolet        corvette             5.7  ...    8  ...    r    15    23      p   2seater
+  2       chevrolet        corvette             6.2  ...    8  ...    r    16    26      p   2seater
+  3       chevrolet        corvette             6.2  ...    8  ...    r    15    25      p   2seater
+  4       chevrolet        corvette               7  ...    8  ...    r    15    24      p   2seater
+#+END_SRC
+Surprise, surprise we found ourselves a bunch of corvettes!
+
+(Note: for an explanation of this mythical =f{}= thing and those
+accented quotes, see the =Formula= section below).
+
+Finally, let's make use of a formula, which takes an assignment. Let's
+say we want to convert the city fuel economy of the cars from MPG to
+L/100 km as is the standard in Germany. We'll do this with
+=mutate=. =mutate= will add an additional column to the dataframe.
+(well, if only it was clear whether the =mpg= given are US gallon or
+imperial gallon?)
+#+BEGIN_SRC nim :results raw
+import datamancer
+let df = readCsv("../data/mpg.csv")
+
+let dfl100km = df.filter(f{`displ` > 5.0 and `class` == "2seater"})
+  .mutate(f{"cty / L/100km" ~ 235 / `cty`})
+echo dfl100km.pretty(5)
+#+END_SRC
+shows us:
+#+BEGIN_SRC sh
+Dataframe with 12 columns and 5 rows:
+Idx     manufacturer            model            displ  ...       trans  ...  cty   ...   cty / L/100km
+dtype:        string           string            float  ...      string  ...  int   ...           float
+  0        chevrolet         corvette              5.7  ...  manual(m6)  ...   16   ...           14.69
+  1        chevrolet         corvette              5.7  ...    auto(l4)  ...   15   ...           15.67
+  2        chevrolet         corvette              6.2  ...  manual(m6)  ...   16   ...           14.69
+  3        chevrolet         corvette              6.2  ...    auto(s6)  ...   15   ...           15.67
+  4        chevrolet         corvette                7  ...  manual(m6)  ...   15   ...           15.67
+#+END_SRC
+where I removed a couple of columns for better visibility again.
+
+I used the chaining of =filter= and =mutate= above mainly to showcase
+that this works reliably. 
+
+When looking at the formula above note that as in ggplot2 the tilde ~
+is used to indicate a dependency or in other words a mapping of
+something like Tensor to Tensor.
+
+** Formula
+
+Here will go parts of what's in the README.

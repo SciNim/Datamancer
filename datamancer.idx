@@ -1,0 +1,9 @@
+Datamancer overview	datamancer.html#datamancer-overview	 Datamancer overview	
+What is a dataframe?	datamancer.html#datamancer-overview-what-is-a-dataframeqmark	  What is a dataframe?	
+What is the point of a dataframe?	datamancer.html#datamancer-overview-what-is-the-point-of-a-dataframeqmark	  What is the point of a dataframe?	
+Creating a dataframe	datamancer.html#datamancer-overview-creating-a-dataframe	  Creating a dataframe	
+Supported datatypes and internal representation	datamancer.html#creating-a-dataframe-supported-datatypes-and-internal-representation	   Supported datatypes and internal representation	
+From seq[T]/Tensor[T]	datamancer.html#creating-a-dataframe-from-seq-t-slashtensor-t	   From <tt class="docutils literal"><span class="pre">seq[T]/Tensor[T]</span></tt>	
+From a CSV / TSV file	datamancer.html#creating-a-dataframe-from-a-csv-slash-tsv-file	   From a CSV / TSV file	
+Manipulating a DF	datamancer.html#datamancer-overview-manipulating-a-df	  Manipulating a DF	
+Formula	datamancer.html#datamancer-overview-formula	  Formula	

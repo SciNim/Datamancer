@@ -1,0 +1,83 @@
+ValueNull	dataframe.html#ValueNull	dataframe: ValueNull	
+ncols	dataframe.html#ncols.t,DataFrame	dataframe: ncols(df: DataFrame): int	
+high	dataframe.html#high,DataFrame	dataframe: high(df: DataFrame): int	
+newDataFrame	dataframe.html#newDataFrame,int	dataframe: newDataFrame(size = 8; kind = dfNormal): DataFrame	
+clone	dataframe.html#clone,DataFrame	dataframe: clone(df: DataFrame): DataFrame	
+shallowCopy	dataframe.html#shallowCopy,DataFrame	dataframe: shallowCopy(df: DataFrame): DataFrame	
+len	dataframe.html#len,Tensor[T]	dataframe: len[T](t: Tensor[T]): int	
+contains	dataframe.html#contains,DataFrame,string	dataframe: contains(df: DataFrame; key: string): bool	
+keys	dataframe.html#keys.i,DataFrame	dataframe: keys(df: DataFrame): string	
+getKeys	dataframe.html#getKeys,DataFrame	dataframe: getKeys(df: DataFrame): seq[string]	
+`[]`	dataframe.html#[],DataFrame,string	dataframe: `[]`(df: DataFrame; k: string): var Column	
+`[]`	dataframe.html#[],DataFrame,Value	dataframe: `[]`(df: DataFrame; k: Value): Column	
+`[]`	dataframe.html#[],DataFrame,string,int	dataframe: `[]`(df: DataFrame; k: string; idx: int): Value	
+`[]`	dataframe.html#[],DataFrame,string,int,typedesc[T]	dataframe: `[]`[T](df: DataFrame; k: string; idx: int; dtype: typedesc[T]): T	
+`[]`	dataframe.html#[],DataFrame,string,Slice[int],typedesc[T]	dataframe: `[]`[T](df: DataFrame; k: string; slice: Slice[int]; dtype: typedesc[T]): Tensor[\n    T]	
+`[]`	dataframe.html#[],DataFrame,string,Slice[int]	dataframe: `[]`(df: DataFrame; k: string; slice: Slice[int]): Column	
+`[]`	dataframe.html#[],DataFrame,HSlice[T,U]	dataframe: `[]`[T, U](df: DataFrame; rowSlice: HSlice[T, U]): DataFrame	
+`[]`	dataframe.html#[],DataFrame,string,typedesc[T]	dataframe: `[]`[T](df: DataFrame; key: string; dtype: typedesc[T]): Tensor[T]	
+`[]`	dataframe.html#[],DataFrame,array[,int]	dataframe: `[]`(df: DataFrame; idx: array[1, int]): Column	
+get	dataframe.html#get,DataFrame,string	dataframe: get(df: DataFrame; key: string): Column	
+`[]=`	dataframe.html#[]=,DataFrame,string,Column	dataframe: `[]=`(df: var DataFrame; k: string; col: Column)	
+`[]=`	dataframe.html#[]=,DataFrame,string,T	dataframe: `[]=`[T: SomeNumber | string | bool](df: var DataFrame; k: string; t: T)	
+`[]=`	dataframe.html#[]=,DataFrame,string,T_2	dataframe: `[]=`[T: Tensor | seq | array](df: var DataFrame; k: string; t: T)	
+`[]=`	dataframe.html#[]=,DataFrame,string,int,T	dataframe: `[]=`[T](df: var DataFrame; k: string; idx: int; val: T)	
+`[]=`	dataframe.html#[]=,DataFrame,FormulaNode,string,T	dataframe: `[]=`[T](df: var DataFrame; fn: FormulaNode; key: string; val: T)	
+asgn	dataframe.html#asgn,DataFrame,string,Column	dataframe: asgn(df: var DataFrame; k: string; col: Column)	
+extendShortColumns	dataframe.html#extendShortColumns,DataFrame	dataframe: extendShortColumns(df: var DataFrame)	
+strTabToDf	dataframe.html#strTabToDf,OrderedTable[string,seq[string]]	dataframe: strTabToDf(t: OrderedTable[string, seq[string]]): DataFrame	
+valTabToDf	dataframe.html#valTabToDf,OrderedTable[string,seq[Value]]	dataframe: valTabToDf(t: OrderedTable[string, seq[Value]]): DataFrame	
+toTab	dataframe.html#toTab.m,varargs[untyped]	dataframe: toTab(args: varargs[untyped]): untyped	
+seqsToDf	dataframe.html#seqsToDf.t,varargs[untyped]	dataframe: seqsToDf(s: varargs[untyped]): untyped	
+colsToDf	dataframe.html#colsToDf.t,varargs[untyped]	dataframe: colsToDf(s: varargs[untyped]): untyped	
+dataFrame	dataframe.html#dataFrame.t,varargs[untyped]	dataframe: dataFrame(s: varargs[untyped]): untyped	
+toDf	dataframe.html#toDf.t,varargs[untyped]	dataframe: toDf(s: varargs[untyped]): untyped	
+row	dataframe.html#row,DataFrame,int,varargs[string]	dataframe: row(df: DataFrame; idx: int; cols: varargs[string]): Value	
+items	dataframe.html#items.i,DataFrame	dataframe: items(df: DataFrame): Value	
+values	dataframe.html#values.i,DataFrame,varargs[string]	dataframe: values(df: DataFrame; cols: varargs[string]): Tensor[Value]	
+isColumn	dataframe.html#isColumn,FormulaNode,DataFrame	dataframe: isColumn(fn: FormulaNode; df: DataFrame): bool	
+isConstant	dataframe.html#isConstant,FormulaNode,DataFrame	dataframe: isConstant(fn: FormulaNode; df: DataFrame): bool	
+withCombinedType	dataframe.html#withCombinedType.t,DataFrame,seq[string],untyped	dataframe: withCombinedType(df: DataFrame; cols: seq[string]; body: untyped): untyped	
+add	dataframe.html#add,DataFrame,T	dataframe: add[T: tuple](df: var DataFrame; args: T)	
+add	dataframe.html#add.t,DataFrame,varargs[untyped]	dataframe: add(df: var DataFrame; args: varargs[untyped]): untyped	
+pretty	dataframe.html#pretty,DataFrame,int,int	dataframe: pretty(df: DataFrame; numLines = 20; precision = 4; header = true): string	
+`$`	dataframe.html#$.t,DataFrame	dataframe: `$`(df: DataFrame): string	
+drop	dataframe.html#drop,DataFrame,string	dataframe: drop(df: var DataFrame; key: string)	
+drop	dataframe.html#drop,DataFrame,varargs[string]	dataframe: drop(df: DataFrame; keys: varargs[string]): DataFrame	
+colMax	dataframe.html#colMax,DataFrame,string	dataframe: colMax(df: DataFrame; col: string; ignoreInf = true): float	
+colMin	dataframe.html#colMin,DataFrame,string	dataframe: colMin(df: DataFrame; col: string; ignoreInf = true): float	
+bind_rows	dataframe.html#bind_rows,varargs[],string	dataframe: bind_rows(dfs: varargs[(string, DataFrame)]; id: string = &quot;&quot;): DataFrame	
+bind_rows	dataframe.html#bind_rows.t,varargs[DataFrame],string	dataframe: bind_rows(dfs: varargs[DataFrame]; id: string = &quot;&quot;): DataFrame	
+add	dataframe.html#add,DataFrame,DataFrame	dataframe: add(df: var DataFrame; dfToAdd: DataFrame)	
+assignStack	dataframe.html#assignStack,seq[DataFrame]	dataframe: assignStack(dfs: seq[DataFrame]): DataFrame	
+groups	dataframe.html#groups.i,DataFrame	dataframe: groups(df: DataFrame; order = SortOrder.Ascending): (seq[(string, Value)],\n    DataFrame)	
+filterToIdx	dataframe.html#filterToIdx,DataFrame,T,seq[string]	dataframe: filterToIdx[T: seq[int] | Tensor[int]](df: DataFrame; indices: T;\n                                       keys: seq[string] = @[]): DataFrame	
+filter	dataframe.html#filter,DataFrame,varargs[FormulaNode]	dataframe: filter(df: DataFrame; conds: varargs[FormulaNode]): DataFrame	
+calcNewColumn	dataframe.html#calcNewColumn,DataFrame,FormulaNode	dataframe: calcNewColumn(df: DataFrame; fn: FormulaNode): (string, Column)	
+calcNewConstColumnFromScalar	dataframe.html#calcNewConstColumnFromScalar,DataFrame,FormulaNode	dataframe: calcNewConstColumnFromScalar(df: DataFrame; fn: FormulaNode): (string, Column)	
+select	dataframe.html#select,DataFrame,varargs[T]	dataframe: select[T: string | FormulaNode](df: DataFrame; cols: varargs[T]): DataFrame	
+selectInplace	dataframe.html#selectInplace,DataFrame,varargs[T]	dataframe: selectInplace[T: string | FormulaNode](df: var DataFrame; cols: varargs[T])	
+relocate	dataframe.html#relocate,DataFrame,varargs[T],string,string	dataframe: relocate[T: string | FormulaNode](df: DataFrame; cols: varargs[T]; after = &quot;&quot;;\n                                  before = &quot;&quot;): DataFrame	
+relocate	dataframe.html#relocate,DataFrame,seq[T]	dataframe: relocate[T: string | FormulaNode](df: DataFrame; cols: seq[T]): DataFrame	
+mutateInplace	dataframe.html#mutateInplace,DataFrame,varargs[FormulaNode]	dataframe: mutateInplace(df: var DataFrame; fns: varargs[FormulaNode])	
+mutate	dataframe.html#mutate,DataFrame,varargs[FormulaNode]	dataframe: mutate(df: DataFrame; fns: varargs[FormulaNode]): DataFrame	
+transmuteInplace	dataframe.html#transmuteInplace,DataFrame,varargs[FormulaNode]	dataframe: transmuteInplace(df: var DataFrame; fns: varargs[FormulaNode])	
+transmute	dataframe.html#transmute,DataFrame,varargs[FormulaNode]	dataframe: transmute(df: DataFrame; fns: varargs[FormulaNode]): DataFrame	
+rename	dataframe.html#rename,DataFrame,varargs[FormulaNode]	dataframe: rename(df: DataFrame; cols: varargs[FormulaNode]): DataFrame	
+arrange	dataframe.html#arrange,DataFrame,varargs[string]	dataframe: arrange(df: DataFrame; by: varargs[string]; order = SortOrder.Ascending): DataFrame	
+innerJoin	dataframe.html#innerJoin,DataFrame,DataFrame,string	dataframe: innerJoin(df1, df2: DataFrame; by: string): DataFrame	
+toHashSet	dataframe.html#toHashSet,Tensor[T]	dataframe: toHashSet[T](t: Tensor[T]): HashSet[T]	
+group_by	dataframe.html#group_by,DataFrame,varargs[string]	dataframe: group_by(df: DataFrame; by: varargs[string]; add = false): DataFrame	
+summarize	dataframe.html#summarize,DataFrame,varargs[FormulaNode]	dataframe: summarize(df: DataFrame; fns: varargs[FormulaNode]): DataFrame	
+count	dataframe.html#count,DataFrame,string,string	dataframe: count(df: DataFrame; col: string; name = &quot;n&quot;): DataFrame	
+setDiff	dataframe.html#setDiff,DataFrame,DataFrame	dataframe: setDiff(df1, df2: DataFrame; symmetric = false): DataFrame	
+head	dataframe.html#head,DataFrame,int	dataframe: head(df: DataFrame; num: int): DataFrame	
+tail	dataframe.html#tail,DataFrame,int	dataframe: tail(df: DataFrame; num: int): DataFrame	
+gather	dataframe.html#gather,DataFrame,varargs[string],string,string	dataframe: gather(df: DataFrame; cols: varargs[string]; key = &quot;key&quot;; value = &quot;value&quot;;\n       dropNulls = false): DataFrame	
+spread	dataframe.html#spread,DataFrame,string,string,T	dataframe: spread[T](df: DataFrame; namesFrom, valuesFrom: string; valuesFill: T = 0): DataFrame	
+unique	dataframe.html#unique,Column	dataframe: unique(c: Column): Column	
+unique	dataframe.html#unique,DataFrame,varargs[string]	dataframe: unique(df: DataFrame; cols: varargs[string]; keepAll = true): DataFrame	
+drop_null	dataframe.html#drop_null,DataFrame,varargs[string],bool	dataframe: drop_null(df: DataFrame; cols: varargs[string]; convertColumnKind = false;\n          failIfConversionFails: bool = false): DataFrame	
+evaluate	dataframe.html#evaluate,FormulaNode	dataframe: evaluate(node: FormulaNode): Value	
+evaluate	dataframe.html#evaluate,FormulaNode,DataFrame	dataframe: evaluate(node: FormulaNode; df: DataFrame): Column	
+reduce	dataframe.html#reduce,FormulaNode,DataFrame	dataframe: reduce(node: FormulaNode; df: DataFrame): Value	
