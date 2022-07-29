@@ -329,7 +329,7 @@ proc `[]=`*[T: SomeNumber | string | bool](df: var DataFrame[T], k: string, t: T
     doAssert df["y", 0, int] == 5
     doAssert df["y", 1, int] == 5
     doAssert df["y", 2, int] == 5
-  df[k] = constantColumn(t, df.len)
+  df[k] = T.constantColumn(t, df.len)
 
 proc `[]=`*[T: ColumnLike; U: Tensor | seq | array](df: var DataFrame[T], k: string, t: U) {.inline.} =
   ## Assigns a `Tensor`, `seq` or `array` to the `DataFrame df` as column key `k`.
@@ -429,7 +429,7 @@ proc extendShortColumns*[T](df: var DataFrame[T]) =
   for k in keys(df):
     if df[k].len == 1:
       ## make it a constant column of `df` length
-      df[k] = constantColumn(df[k][0, Value], df.len)
+      df[k] = T.constantColumn(df[k][0, Value], df.len)
     elif df[k].len < df.len:
       let nFill = df.len - df[k].len
       df[k] = df[k].add nullColumn(nFill)
@@ -482,10 +482,10 @@ proc convertDataFrame*[T; U](df: DataFrame[T], dtype: typedesc[U]): auto =
   #type retType = patchDataFrame(T)
   when T is U: result = df
   else:
-    type unionType = unionType(T, U)
-    result = newDataFrameLike[unionType]()
+    #type unionType =
+    result = newDataFrameLike[unionType(T, U)]()
     for k in keys(df):
-      result[k] = convertToDfColType(unionType, df[k])
+      result[k] = convertToDfColType(unionType(T, U), df[k])
 
 proc extendDataFrame*[T: ColumnLike; U](df: DataFrame[T], key: string, arg: U): auto =
   ## Given a type that is not a normal DF type, returns a new DF type that can store
@@ -493,7 +493,7 @@ proc extendDataFrame*[T: ColumnLike; U](df: DataFrame[T], key: string, arg: U): 
   ## join T + U to generate `df` return type
   #type retType = patchDataFrame(T)
   result = df.convertDataFrame(U)
-  result[key] = toColumn(arg)
+  result[key] = toColumn(arg.toTensor(), unionType(T, U)) #convertToDfColType(toColumn(arg)
 
 #proc extendDataFrame*[T: ColumnLike; U: not ColumnLike](df: DataFrame[T], key: string, arg: U): auto =
 #  ## Given a type that is not a normal DF type, returns a new DF type that can store
@@ -1129,9 +1129,13 @@ proc arrangeSortImpl[T](toSort: var seq[(int, T)], order: SortOrder) =
     )
 
 proc sortBySubset[T](df: DataFrame[T], by: string, idx: seq[int], order: SortOrder): seq[int] =
-  withNativeDtype(df[by]):
+  static:
+    echo "===============INPUT TYPE FOR SROTBY SUBSET\n", typeof(T)
+    #if true: quit()
+  let C = df[by]
+  withNativeDtype(C):
     var res = newSeq[(int, dtype)](idx.len)
-    let t = toTensor(df[by], dtype)
+    let t = toTensor(C, dtype)
     for i, val in idx:
       res[i] = (val, t[val])
     res.arrangeSortImpl(order = order)
@@ -1199,7 +1203,8 @@ proc sortRecurse[T](df: DataFrame[T], by: seq[string],
                     resIdx: seq[int],
                     order: SortOrder): seq[int] =
   result = resIdx
-  withNativeDtype(df[by[0]]):
+  let C = df[by[0]]
+  withNativeDtype(C):
     sortRecurseImpl[dtype, T](result, df, by, startIdx, resIdx, order)
 
 proc sortBys[T](df: DataFrame[T], by: seq[string], order: SortOrder): seq[int] =
@@ -1376,7 +1381,7 @@ iterator groups*[T](df: DataFrame[T], order = SortOrder.Ascending): (seq[(string
 #        "return boolean value, but " & $fn.valKind & ". Only boolean reducing formulae " &
 #        "are supported in `filter`.")
 #    let scaleVal = fn.fnS(df)
-#    result = constantColumn(scaleVal.toBool, df.len)
+#    result = T.constantColumn(scaleVal.toBool, df.len)
 #  else:
 #    raise newException(FormulaMismatchError, "Given formula " & $fn.name & " is of unsupported kind " &
 #      $fn.kind & ". Only reducing `<<` and mapping `~` formulas are supported in `filter`.")
@@ -1441,28 +1446,27 @@ iterator groups*[T](df: DataFrame[T], order = SortOrder.Ascending): (seq[(string
 #    for (tup, subDf) in groups(df):
 #      var mdf = subDf.filterImpl(conds)
 #      for (str, val) in tup:
-#        mdf[str] = constantColumn(val, mdf.len)
+#        mdf[str] = T.constantColumn(val, mdf.len)
 #      dfs.add mdf
 #      inc i
 #    result = assignStack(dfs)
 #  else:
 #    result = df.filterImpl(conds)
 #
-proc calcNewColumn*[T](df: DataFrame[T], fn: FormulaNode): (string, auto) =
+proc calcNewColumn*[T; U](df: DataFrame[T], fn: FormulaNode[U, T]): (string, T) =
   ## Calculates a new column based on the `fn` given. Returns the name of the resulting
   ## column (derived from the formula) as well as the column.
   ##
   ## This is not indented for the user facing API. It is used internally in `ggplotnim`.
-
   result = (fn.colName, fn.fnV(df))
 
-proc calcNewConstColumnFromScalar*[T](df: DataFrame[T], fn: FormulaNode): (string, Column) =
+proc calcNewConstColumnFromScalar*[T; U](df: DataFrame[T], fn: FormulaNode[U, T]): (string, T) =
   ## Calculates a new constant column based on the scalar (reducing) `fn` given.
   ## Returns the name of the resulting column (derived from the formula) as well as the column.
   ##
   ## This is not indented for the user facing API. It is used internally in `ggplotnim`.
   assert fn.kind == fkScalar
-  result = (fn.valName, constantColumn(fn.fnS(df), df.len))
+  result = (fn.valName, T.constantColumn(fn.fnS(df), df.len))
 
 proc selectInplace*[T: string | FormulaNode](df: var DataFrame[T], cols: varargs[T]) =
   ## Inplace variant of `select` below.
@@ -1517,7 +1521,7 @@ proc select*[T: string | FormulaNode](df: DataFrame[T], cols: varargs[T]): auto 
   result = df.shallowCopy()
   result.selectInplace(cols)
 
-proc mutateImpl[T; U](df: var DataFrame[T], fns: varargs[FormulaNode[T, U]],
+proc mutateImpl[T; U](df: var DataFrame[T], fns: varargs[FormulaNode[U, T]],
                       dropCols: static bool) =
   ## implementation of mutation / transmutation. Allows to statically
   ## decide whether to only keep touched columns or not.
@@ -1529,7 +1533,7 @@ proc mutateImpl[T; U](df: var DataFrame[T], fns: varargs[FormulaNode[T, U]],
         colsToKeep.add fn.val.toStr
       else:
         # create column of value
-        df.asgn($fn.val, constantColumn(fn.val, df.len))
+        df.asgn($fn.val, T.constantColumn(fn.val, df.len))
         colsToKeep.add $fn.val
     of fkAssign:
       # essentially a rename
@@ -1551,7 +1555,7 @@ proc mutateImpl[T; U](df: var DataFrame[T], fns: varargs[FormulaNode[T, U]],
   when dropCols:
     df.selectInplace(colsToKeep)
 
-proc mutateInplace*[T](df: var DataFrame[T], fns: varargs[FormulaNode]) =
+proc mutateInplace*[T; U](df: var DataFrame[T], fns: varargs[FormulaNode[U, T]]) =
   ## Inplace variasnt of `mutate` below.
   #case df.kind
   #of dfGrouped:
@@ -1606,9 +1610,12 @@ proc mutate*[T](df: DataFrame[T], fns: varargs[FormulaNode[T, T]]): DataFrame[T]
       doAssert dfRes["(+ x y)", int] == [11,13,15].toTensor
 
   result = df.shallowCopy()
+  #when T is U:
   result.mutateInplace(fns)
+  #else:
+  #  result = convertDataFram
 
-proc mutate*[T; U](df: DataFrame[T], fn: FormulaNode[T, U]): auto = #DataFrame[U] =
+proc mutate*[T; U: not T](df: DataFrame[T], fn: FormulaNode[U, U]): auto = #DataFrame[U] =
   ## Return type is `auto` for the case that `U` is actually a "lesser" type than `T`.
   ## I.e. `T = ColumnKiloGram` and `U = Column`
   # we know the types are different (hence this overload), convert and call mutate
@@ -2250,10 +2257,10 @@ proc evaluate*[T](node: FormulaNode, df: DataFrame[T]): auto =
       result = df[node.val.toStr]
     else:
       # create constant column
-      result = constantColumn(node.val, df.len)
+      result = T.constantColumn(node.val, df.len)
   of fkAssign: result = df[node.rhs.toStr]
   of fkVector: result = node.fnV(df)
-  of fkScalar: result = constantColumn(node.fnS(df), df.len)
+  of fkScalar: result = T.constantColumn(node.fnS(df), df.len)
   of fkNone: result = newColumn(colNone, df.len)
 
 proc reduce*[T](node: FormulaNode, df: DataFrame[T]): Value =

@@ -14,12 +14,14 @@ proc `%~`[T: SomeUnit](m: T): Value =
   result = newVObject()
   result[$T] = (%~ m.float)
 
-when false:
+when true:
   proc makeCol[T](s: seq[T]) =
     var c = toColumn(s.toTensor)
     echo pretty(c)
 
   #var t = toTensor(@[2.kg])
+  genColumn(KiloGram)
+  genColumn(Measurement[float])
   block:
     let ti = @[1.kg, 2.kg].toTensor
     var c = toColumn(ti)
@@ -43,8 +45,6 @@ when false:
   makeCol(x)
 
 
-
-
   echo "================================================================================"
   #patchDataFrame(Tensor[KiloGram])
   let df = seqsToDf({"x" : [1,2,3]})
@@ -52,11 +52,15 @@ when false:
   echo typeof(fn)
 
   defUnit(kg²)
-  type kg2Col = patchColumn(KiloGram²)
-  type mCol = patchColumn(Meter)
+  #genTypeEnum(KiloGram²)
+  #type kg2Col = patchColumn(KiloGram²)
+  genColumn(KiloGram²)
+  genColumn(Meter)
+  #genTypeEnum(Meter)
+  #type mCol = patchColumn(Meter)
 
   # needs multi generics. to be impl'd next
-  # let dfNM = dfN.mutate(f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`})
+  #let dfNM = dfN.mutate(f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`})
 
 
   let dfN = extendDataFrame(df, "kg", @[1.kg, 2.kg, 3.kg])
@@ -66,13 +70,16 @@ when false:
 
   let fn2 = compileFn(dfN, f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`})
   echo typeof(fn2)
-
-  type ttCol = patchColumn(KiloGram, Meter)
+  #
+  genColumn(KiloGram, Meter)
+  ##genTypeEnum(KiloGram, Meter)
+  ##type ttCol = patchColumn(KiloGram, Meter)
   let dfNM = extendDataFrame(dfN, "meter", @[1.m, 2.m, 3.m])
   echo dfNM.pretty(precision = 10)
 
+  echo df.mutate(f{float -> KiloGram: "Kg" ~ `x`.kg}).pretty(precision = 10)
 
-when true:
+when false:
 
   genTypeEnum(KiloGram)
   patchColumn(getTypeEnum(KiloGram))
@@ -89,8 +96,9 @@ when true:
 
   echo c2.pretty
   echo c3.pretty
-  #type ckgm = patchColumn(KiloGram, Meter)
-  #let c2 = ckgm(kind: colGeneric, gKiloGram: @[1.kg, 2.kg].toTensor)
-  #let c3 = ckgm(kind: colGeneric, gMeter: @[3.m, 4.m].toTensor)
   #echo c2.getField(KiloGram)[1]
   #echo c3.getField(Meter)[0]
+
+  var df = newDataFrameLike[ckgm]()
+  df["blub"] = @[1.2.kg, 2.2.kg].toTensor
+  echo df

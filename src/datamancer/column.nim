@@ -70,30 +70,31 @@ proc getGenericTypeBranch(n: NimNode): NimNode =
   of nnkObjectTy: result = n.getRecList.getGenericTypeBranch()
   else: error("Invalid branch: " & $n.kind)
 
-macro genType*(enumTyp: typed): untyped =
-  let comb = genCombinedTypeStr(typesFromEnum(enumTyp))
-  let typName = "Foo" & $comb
-  let resTyp = genSym(nskType, typName)
-  TypeNames[typName] = resTyp
-  TypeToEnumType[typName] = enumTyp
-  result = nnkTypeDef.newTree(resTyp, newEmptyNode())
-  var rec = nnkRecList.newTree()
-  # some common fields
-  rec.add nnkIdentDefs.newTree(ident"name", ident"string", newEmptyNode())
-
-  # now add all enum fields
-  rec.add genRecCase(enumTyp)
-
-  var obj = nnkObjectTy.newTree(newEmptyNode(), newEmptyNode(), rec)
-  result.add obj
-  result = nnkTypeSection.newTree(result)
-  echo result.treerepr
-  echo result.repr
+#macro genType*(enumTyp: typed): untyped =
+#  let comb = genCombinedTypeStr(typesFromEnum(enumTyp))
+#  let typName = "Foo" & $comb
+#  let resTyp = genSym(nskType, typName)
+#  TypeNames[typName] = resTyp
+#  TypeToEnumType[typName] = enumTyp
+#  result = nnkTypeDef.newTree(resTyp, newEmptyNode())
+#  var rec = nnkRecList.newTree()
+#  # some common fields
+#  rec.add nnkIdentDefs.newTree(ident"name", ident"string", newEmptyNode())
+#
+#  # now add all enum fields
+#  rec.add genRecCase(enumTyp)
+#
+#  var obj = nnkObjectTy.newTree(newEmptyNode(), newEmptyNode(), rec)
+#  result.add obj
+#  result = nnkTypeSection.newTree(result)
+#  echo result.treerepr
+#  echo result.repr
 
 macro patchColumn*(enumTyp: typed): untyped =
   # get base `Column` type information
+  echo "ENUM TYPE ", enumTyp.repr
   var typImp = getTypeInst(Column).getImpl
-  #echo typImp.treerepr
+  echo typImp.repr # treerepr
   var refTy = getRefType(typImp)
   #echo refTy.treerepr
   var body = getRecList(refTy)
@@ -104,6 +105,7 @@ macro patchColumn*(enumTyp: typed): untyped =
   let typName = "Column" & $comb
   if typName notin TypeNames:
     let colSym = genSym(nskType, typName)
+    echo "gen'd ", colSym.repr
     TypeNames[typName] = colSym
     TypeToEnumType[typName] = enumTyp
     rec[1] = nnkRecList.newTree(genRecCase(enumTyp))
@@ -111,7 +113,16 @@ macro patchColumn*(enumTyp: typed): untyped =
     result = nnkTypeDef.newTree(colSym, newEmptyNode(), refTy)
     result = nnkTypeSection.newTree(result)
     result = result.replaceSymsByIdents()
+  else:
+    result = TypeNames[typName]
   # else nothing to do, type exists
+  echo "RESULT patchColumn : ", result.repr
+
+macro genColumn*(types: varargs[typed]): untyped =
+  result = quote do:
+    genTypeEnum(`types`)
+    patchColumn(getTypeEnum(`types`))
+  echo "GEN COLUMN\n", result.repr
 
 macro assignField(c, val: typed): untyped =
   # get the correct field name
@@ -121,9 +132,11 @@ macro assignField(c, val: typed): untyped =
   #echo val.getImpl.treerepr
   #echo val.getTypeInst[1].getImpl.treerepr
   echo "INNER START ", val.treerepr
-  let typ0 = c.getInnerType()
+  echo val.getTypeInst.repr
+  let typ0 = val.getTypeInst.getInnerType() #c.getInnerType()
   echo "INNER TYPE ", typ0.treerepr
   let fn = getGenericField(typ0) #FieldNames[@[typ0.strVal]]
+  echo "FN ", fn.repr
   result = quote do:
     `c`.`fn` = `val`
   #echo fn.repr
@@ -199,7 +212,7 @@ macro printType(t: typed): untyped =
 
 #macro resolveAlias(t: typed):
 
-template makeColumn(s: typed): untyped =
+template makeColumn(s, T: typed): untyped =
   #type retTyp = patchColumn(T)
   var result = patchColumn(T)(kind: colGeneric, len: s.len) #
   when typeof(s) is Tensor:
@@ -279,14 +292,15 @@ proc toColumn*[C: ColumnLike; T](t: Tensor[T], _: typedesc[C]): C =
     ## get correct type using `getTypeEnum` and `getColType` and set
     ## use `getTypeEnum` to set the correct field value
     result = C(kind: colGeneric,
-               len: t.size)
+               len: t.size,
+               gkKind: getEnumField(T))
     assignData(result, t)
 
 proc toColumn*[T: not SupportedTypes](t: openArray[T]): auto =
-  result = makeColumn(t)
+  result = makeColumn(t, getTypeEnum(T))
 
 proc toColumn*[T: not SupportedTypes](t: Tensor[T]): auto =
-  result = makeColumn(t)
+  result = makeColumn(t, getTypeEnum(T))
 
 type
   ScalarLike = concept x
@@ -307,10 +321,9 @@ proc toColumn*[T: ScalarLike](x: T): Column =
   let vals = newTensorWith[T](1, x)
   result = toColumn(vals)
 
-proc constantColumn*[T](val: T, len: int): auto =
+proc constantColumn*[C: ColumnLike; T](_: typedesc[C], val: T, len: int): auto =
   ## creates a constant column based on `val` and its type
-  when T is SupportedTypes:
-    result = Column(len: len, kind: colConstant, cCol: %~ val)
+  result = C(len: len, kind: colConstant, cCol: %~ val)
   #else:
   #  var tmp: Tensor[T]
   #  type retType = patchColumn(typeof(T))
@@ -345,7 +358,7 @@ proc newColumn*(kind = colNone, length = 0): Column =
   of colString: result = toColumn newTensor[string](length)
   of colBool: result = toColumn newTensor[bool](length)
   of colObject: result = toColumn newTensor[Value](length)
-  of colConstant: result = constantColumn(Value(kind: VNull), length)
+  of colConstant: result = Column.constantColumn(Value(kind: VNull), length)
   of colNone: result = Column(kind: colNone, len: 0)
   of colGeneric: raise newException(Exception, "implement me")
 
@@ -358,8 +371,9 @@ proc newColumnLike*[T: ColumnLike](kind = colNone, length = 0): T =
   of colObject: result = toColumn(newTensor[Value](length), T)
   # XXX: fix constant
   #of colConstant: result = constantColumn(Value(kind: VNull), length)
-  of colGeneric: result = toColumn(newTensor[getGenericFieldType(T)](length), T)
+  #of colGeneric: result = toColumn(newTensor[getGenericFieldType(T)](length), T)
   of colNone, colConstant: result = T(kind: colNone, len: 0)
+  of colGeneric: doAssert false, "Constructing a generic column not supported, as it's not a specific type!"
 
 proc toColKind*[T](dtype: typedesc[T]): ColKind =
   when T is SomeFloat:
@@ -493,7 +507,7 @@ template withNativeDtype*[C: ColumnLike](c: C, body: untyped): untyped =
     body
   of colGeneric:
     withCaseStmt(c, gk, C):
-      type dtype {.inject.} = typeof(c.gk)
+      type dtype {.inject.} = fieldToType(gk)
       body
   of colNone: raise newException(ValueError, "Accessed column is empty!")
 

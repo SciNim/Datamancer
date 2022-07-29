@@ -12,6 +12,8 @@ import arraymancer / laser / strided_iteration / foreach
 export foreach
 
 type
+  ## NOTE: type of formula must only be single generic and must always match the
+  ## *output* type!
   FormulaNode*[T; U] = object
     name*: string # stringification of whole formula. Only for printing and
                   # debugging
@@ -192,7 +194,7 @@ proc compileVectorFormula(fct: FormulaCT): NimNode =
   let dfTyp = fct.dfType
   let colResType = fct.colResType
   result = quote do:
-    FormulaNode[`dfTyp`, `colResType`](name: `rawName`,
+    FormulaNode[`colResType`, `colResType`](name: `rawName`,
                                        colName: `colName`, kind: fkVector,
                                        resType: toColKind(type(`dtype`)),
                                        fnV: `fnClosure`)

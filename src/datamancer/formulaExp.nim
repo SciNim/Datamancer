@@ -514,7 +514,7 @@ proc generateClosure*(fct: FormulaCT): NimNode =
     procBody.add convertDtype(fct.resType)
   procBody.add convertLoop(fct.preface, fct.resType, fct.loop, fct.funcKind)
   result = procBody
-  let dfTyp = fct.dfType
+  let dfTyp = fct.colResType
   var params: array[2, NimNode]
   case fct.funcKind
   of fkVector:
