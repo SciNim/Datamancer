@@ -8,6 +8,8 @@ import macrocache, ast_utils
 
 const EnumNames = CacheTable"EnumNameTab"
 const TypeNames = CacheTable"ColTypeNames"
+# add default Column
+static: TypeNames["Column"] = ident"Column"
 const EnumFieldNames = CacheTable"EnumFieldTab"
 const GenericFieldNames = CacheTable"GenericFieldTab"
 const TypeToEnumType = CacheTable"TypeToEnumType"
@@ -18,9 +20,14 @@ proc nodeRepr*(n: NimNode): string =
   of nnkIdent, nnkSym: result = n.strVal
   else: result = n.toStrLit.strVal.multiReplace([("[", "_"), ("]", "_")])
 
+from formulaExp import DtypesAll
 proc genCombinedTypeStr*(types: seq[string]): string =
-  let typClean = types.filterIt(it != "Column")
-  result = $(typClean.mapIt(it.dup(removePrefix("Column")).capitalizeAscii).sorted.join("|"))
+  let typClean = types.filterIt(it != "Column").deduplicate
+  ## FIX UP LOGIC
+  result = $(typClean.mapIt(it.dup(removePrefix("Column"))) #.capitalizeAscii)
+             .sorted
+             .filterIt(it.normalize() notin DtypesAll)
+             .join("|"))
 
 proc genCombinedTypeStr*(types: seq[NimNode]): string =
   let typStrs = types.mapIt(it.nodeRepr)
@@ -32,6 +39,12 @@ proc stripObject(n: NimNode): NimNode =
     var tmp = n.strVal
     tmp.removeSuffix(":ObjectType")
     result = ident(tmp)
+
+proc columnToTypes*(n: NimNode): seq[string] =
+  doAssert n.kind in {nnkSym, nnkIdent}
+  var r = n.strVal
+  r.removePrefix("Column")
+  result = r.split("|").filterIt(it.len > 0)
 
 proc getInnerType*(n: NimNode, last = newEmptyNode()): NimNode =
   #echo n.repr, " of kind ", n.kind

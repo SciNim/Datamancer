@@ -215,6 +215,7 @@ proc convertPreface(p: Preface): NimNode =
   ## Instead of generating a `let colT = df["col", dType]` we need to just call
   ## the function that
   proc toLet(a: Assign): NimNode =
+    echo "============================== A COL TYPE ", a.colType.repr, " for ", a.col.repr
     result = nnkIdentDefs.newTree(
       a.tensor,
       newEmptyNode(),
@@ -298,8 +299,10 @@ proc hasExplicitTypeHint*(n: NimNode): bool =
   result = (n.nodeIsDf or n.nodeIsDfIdx) and
     n.kind == nnkCall and
     n.len == 3 and
-    n[2].kind in {nnkIdent, nnkSym} and
-    n[2].strVal in DtypesAll
+    n[2].kind in {nnkIdent, nnkSym} # and
+    #n[2].strVal in DtypesAll
+    # XXX: DtypesAll check not allowed here! otherwise overwrites `
+    # explicit hints of custom types
 
 proc get(p: var Preface, node: NimNode, useIdx: bool): NimNode =
   let n = p[node]
@@ -444,7 +447,7 @@ proc fixupTensorIndices(loopStmts: NimNode, preface: var Preface,
           loop)
       )
 
-proc convertLoop(p: Preface, dtype, loop: NimNode,
+proc convertLoop(p: Preface, dtype, fctColResType, loop: NimNode,
                  fnKind: FormulaKind): NimNode =
   let memCopyable = ["float", "int", "bool"]
   let isMemCopyable = dtype.strVal in memCopyable and
@@ -473,7 +476,7 @@ proc convertLoop(p: Preface, dtype, loop: NimNode,
     let resId = ident(ResIdent)
     let resultId = ident(ResultIdent)
     result = quote do:
-      `resultId` = toColumn `resId`
+      `resultId` = toColumn(`fctColResType`, `resId`)
 
   case fnKind
   of fkVector:
@@ -512,7 +515,8 @@ proc generateClosure*(fct: FormulaCT): NimNode =
   procBody.add convertPreface(fct.preface)
   if fct.funcKind == fkVector:
     procBody.add convertDtype(fct.resType)
-  procBody.add convertLoop(fct.preface, fct.resType, fct.loop, fct.funcKind)
+  procBody.add convertLoop(fct.preface, fct.resType, fct.colResType, fct.loop, fct.funcKind)
+  echo "PROCBOY ", procBody.repr
   result = procBody
   let dfTyp = fct.colResType
   var params: array[2, NimNode]

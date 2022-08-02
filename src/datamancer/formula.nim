@@ -206,11 +206,13 @@ proc compileScalarFormula(fct: FormulaCT): NimNode =
   let rawName = newLit(fct.rawName)
   let valName = if fct.name.kind == nnkNilLit: rawName else: fct.name
   let dtype = fct.resType
+  let C = ident(ColIdent)
   result = quote do:
-    FormulaNode(name: `rawName`,
+    FormulaNode[`C`, `C`](name: `rawName`,
                 valName: `valName`, kind: fkScalar,
                 valKind: toValKind(`dtype`),
                 fnS: `fnClosure`)
+  echo result.repr
   when defined(echoFormulas):
     echo result.repr
 
@@ -409,6 +411,7 @@ proc addColRef(n: NimNode, typeHint: FormulaTypes, asgnKind: AssignKind): seq[As
   case n.kind
   of nnkAccQuoted:
     let name = n[0].strVal
+    echo "Assigning type ", dType.repr
     result.add Assign(asgnKind: asgnKind,
                       node: n,
                       element: ident(name & "Idx"),
@@ -467,13 +470,14 @@ proc addColRef(n: NimNode, typeHint: FormulaTypes, asgnKind: AssignKind): seq[As
     var dtypeOverride = dtype
     var resTypeOverride = resType
     if n.len == 3:
-      doAssert n[2].kind in {nnkSym, nnkIdent} and
-        n[2].strVal in DtypesAll, "Type to read as needs to " &
-        "be a supported type: " & $Dtypes & ", but is " & $n[2].repr
+      #doAssert n[2].kind in {nnkSym, nnkIdent} and
+      #  n[2].strVal in DtypesAll, "Type to read as needs to " &
+      #  "be a supported type: " & $Dtypes & ", but is " & $n[2].repr
       dtypeOverride = n[2]
-      if resTypeOverride.kind == nnkEmpty:
-        # use input type as return type as well
-        resTypeOverride = dtypeOverride
+      #if resTypeOverride.kind == nnkEmpty:
+      #  # use input type as return type as well
+      #  resTypeOverride = dtypeOverride
+    echo "=======+++++++++++++++++++++ A COL TYPE ", dtypeOverride.repr, " for ", n[1].repr
     result.add Assign(asgnKind: asgnKind,
                       node: n,
                       element: colIdxName,
@@ -549,8 +553,9 @@ proc typeAcceptable(n: NimNode): bool =
     let nStr = n.strVal
     if not n.isGeneric: # in DtypesAll:
       result = true
-    elif nStr.startsWith("Tensor") and
-         nStr.dup(removePrefix("Tensor["))[0 ..< ^1] in DtypesAll:
+    elif nStr.startsWith("Tensor"): # and
+      #   nStr.dup(removePrefix("Tensor["))[0 ..< ^1] in DtypesAll:
+      ## XXX: DtypesAll not allowed here, otherwise might override explicit type hints!
       # stringified type `Tensor[int, float, ...]`. Check is a bit of a hack
       result = true
   of nnkBracketExpr:
@@ -1036,15 +1041,19 @@ proc parseOptionValue(n: NimNode): Option[FormulaKind] =
     error("Bad input node " & $n.repr & " in `parseOptionValue`.")
 
 import macrocache # needed only here
-proc genClosureRetType(resType: NimNode): NimNode =
-  if resType.strVal in DtypesAll:
-    result = ident(ColIdent)
-  else:
-    let name = genColNameStr(@[resType])
-    if name notin TypeNames:
-      error("The column type `" & $name & "` has not been generated yet. If you haven't added " &
-        "a column using this type to a DF yet, call `patchColumn` with the type.")
-    result = TypeNames[name] #TypeNames[@[typ0.strVal]]
+proc genClosureRetType(resType, dfType: NimNode): NimNode =
+  echo "=============== GEN CLOSURE RES =============== ", dfType.treerepr
+  var typs = dfType.columnToTypes()
+  ## replace mapIt!
+  echo "typs: ", typs.repr
+  echo "Res typ ", resType.repr
+  let name = genColNameStr(concat(typs.mapIt(ident(it)), @[resType]))
+  if name != "Column" and name notin TypeNames:
+    for k , v in TypeNames:
+      echo "k ", k
+    error("The column type `" & $name & "` has not been generated yet. If you haven't added " &
+      "a column using this type to a DF yet, call `patchColumn` with the type.")
+  result = TypeNames[name] #TypeNames[@[typ0.strVal]]
 
 macro compileFormulaImpl*(rawName: static string,
                           funcKind: static FormulaKind): untyped =
@@ -1143,11 +1152,11 @@ macro compileFormulaImpl*(rawName: static string,
   else:
     fct.funcKind = if allScalar: fkScalar else: fkVector
 
+  echo "Df Type ", fct.dfType.repr
+  # set the column return type
+  fct.colResType = genClosureRetType(fct.resType, fct.dfType)
   case fct.funcKind
-  of fkVector:
-    # set the column return type
-    fct.colResType = genClosureRetType(fct.resType)
-    result = compileVectorFormula(fct)
+  of fkVector: result = compileVectorFormula(fct)
   of fkScalar: result = compileScalarFormula(fct)
   else: error("Unreachable branch. `fkAssign` and `fkVariable` are already handled!")
 
@@ -1301,6 +1310,7 @@ proc compileFormula(n: NimNode, df: NimNode = newEmptyNode()): NimNode =
         addSymbols(`rawName`, `sName`, `s`)
     # now add input data frame if any
     if df.kind != nnkEmpty:
+      echo "DF ", df.kind, " and ", df.repr , " ading to tab\n\n\n"
       result.add quote do:
         addSymbols(`rawName`, `InputDF`, `df`)
     var cpCall = nnkCall.newTree(ident"compileFormulaImpl",
@@ -1308,9 +1318,9 @@ proc compileFormula(n: NimNode, df: NimNode = newEmptyNode()): NimNode =
                                  newLit funcKind)
     result.add cpCall
 
-macro compileFn*(df, fn: untyped): untyped =
-  echo fn.treerepr
-  echo df.treerepr
+macro dfFn*(df, fn: untyped): untyped =
+  echo "COMPILEFN ", fn.treerepr
+  echo "COMPILEFN ", df.treerepr
   var fn = fn
   if fn.kind == nnkCurlyExpr:
     fn = fn[1]

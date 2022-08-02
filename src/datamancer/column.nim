@@ -196,7 +196,7 @@ template `%~`*(v: Value): Value = v
 proc pretty*(c: ColumnLike): string
 proc compatibleColumns*(c1, c2: Column): bool {.inline.}
 # just a no-op
-template toColumn*[T: ColumnLike](c: T): T = c
+template toColumn*[C: ColumnLike](c: C): C = c
 
 func high*(c: Column): int = c.len - 1
 
@@ -223,7 +223,7 @@ template makeColumn(s, T: typed): untyped =
   result
   #printType(result)
 
-proc assignData*[T: ColumnLike; U](c: var T, data: Tensor[U]) =
+proc assignData*[C: ColumnLike; U](c: var C, data: Tensor[U]) =
   ## Unsafe if `data` does not match `c's` kind!
   when U is int:
     c.iCol = data
@@ -252,8 +252,12 @@ proc toColumn*[T: SupportedTypes](t: Tensor[T]): Column =
                     bCol: t,
                     len: t.size)
   elif T is string or T is char:
+    when T is char:
+      let s = t.map_inline($x)
+    else:
+      let s = t
     result = Column(kind: colString,
-                    sCol: t.asType(string),
+                    sCol: s,
                     len: t.size)
   elif T is Value:
     result = Column(kind: colObject,
@@ -262,10 +266,9 @@ proc toColumn*[T: SupportedTypes](t: Tensor[T]): Column =
   #elif T isnot seq and T isnot Tensor:
   #  ## generate a new type and return it
   #  result = makeColumn(t)
+  else: {.error: "The type " & $T & " is not supported!".}
 
-  else: error("The type " & $T & " is not supported!")
-
-proc toColumn*[C: ColumnLike; T](t: Tensor[T], _: typedesc[C]): C =
+proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
   when T is SomeInteger:
     result = C(kind: colInt,
                     iCol: t.asType(int),
@@ -307,11 +310,19 @@ type
     (x.float is float) or (x is SupportedTypes)
     #(%~ x) is Value
 
+proc constantColumn*[T](val: T, len: int): Column =
+  ## creates a constant column based on `val` and its type
+  result = Column(len: len, kind: colConstant, cCol: %~ val)
+
 proc toColumn*[T: SupportedTypes](s: openArray[T]): Column =
   var vals = newTensor[T](s.len)
   for i, x in s:
     vals[i] = x
   result = toColumn(vals)
+
+proc toColumn*(s: string): Column =
+  ## explicit string overload so that it doesn't match the above `openArray[T]` call
+  result = constantColumn(s, 1)
 
 ## XXX: We need a way to declare the following is only allowed for scalar data types. For some reason
 ## `T: not seq | not array | not Tensor` does not work
@@ -320,8 +331,9 @@ proc toColumn*[T: ScalarLike](x: T): Column =
   # for `summarize` though there's no way around
   let vals = newTensorWith[T](1, x)
   result = toColumn(vals)
+  #result = constantColumn(x, len = 1)
 
-proc constantColumn*[C: ColumnLike; T](_: typedesc[C], val: T, len: int): auto =
+proc constantColumn*[C: ColumnLike; T](_: typedesc[C], val: T, len: int): C =
   ## creates a constant column based on `val` and its type
   result = C(len: len, kind: colConstant, cCol: %~ val)
   #else:
@@ -329,11 +341,11 @@ proc constantColumn*[C: ColumnLike; T](_: typedesc[C], val: T, len: int): auto =
   #  type retType = patchColumn(typeof(T))
   #  result = retType(len: len, kind: colConstant, cCol: %~ val)
 
-proc constantToFull*[T: ColumnLike](c: T): T =
+proc constantToFull*[C: ColumnLike](c: C): C =
   ## creates a real constant full tensor column based on a constant column
   if c.kind != colConstant: return c
   withNative(c.cCol, val):
-    result = toColumn(newTensorWith[type(val)](c.len, val), T)
+    result = toColumn(C, newTensorWith[type(val)](c.len, val))
 
 proc `[]`*[C: ColumnLike](c: C, slice: Slice[int]): C =
   case c.kind
@@ -362,17 +374,17 @@ proc newColumn*(kind = colNone, length = 0): Column =
   of colNone: result = Column(kind: colNone, len: 0)
   of colGeneric: raise newException(Exception, "implement me")
 
-proc newColumnLike*[T: ColumnLike](kind = colNone, length = 0): T =
+proc newColumnLike*[C: ColumnLike](_: typedesc[C], kind = colNone, length = 0): C =
   case kind
-  of colFloat: result = toColumn(newTensor[float](length), T)
-  of colInt: result = toColumn(newTensor[int](length), T)
-  of colString: result = toColumn(newTensor[string](length), T)
-  of colBool: result = toColumn(newTensor[bool](length), T)
-  of colObject: result = toColumn(newTensor[Value](length), T)
+  of colFloat: result = toColumn(C, newTensor[float](length))
+  of colInt: result = toColumn(C, newTensor[int](length))
+  of colString: result = toColumn(C, newTensor[string](length))
+  of colBool: result = toColumn(C, newTensor[bool](length))
+  of colObject: result = toColumn(C, newTensor[Value](length))
   # XXX: fix constant
   #of colConstant: result = constantColumn(Value(kind: VNull), length)
-  #of colGeneric: result = toColumn(newTensor[getGenericFieldType(T)](length), T)
-  of colNone, colConstant: result = T(kind: colNone, len: 0)
+  #of colGeneric: result = toColumn(C, newTensor[getGenericFieldType(C)](length))
+  of colNone, colConstant: result = C(kind: colNone, len: 0)
   of colGeneric: doAssert false, "Constructing a generic column not supported, as it's not a specific type!"
 
 proc toColKind*[T](dtype: typedesc[T]): ColKind =
@@ -448,6 +460,13 @@ template withNativeTensor*[C: ColumnLike](c: C,
       let `valName` {.inject.} = c.gk
       body
   of colNone: raise newException(ValueError, "Accessed column is empty!")
+
+proc toColumn*[C: ColumnLike; U: ColumnLike](_: typedesc[C], c: U): C =
+  withNativeTensor(c, t):
+    result = toColumn(C, t)
+
+proc toColumn*[C: ColumnLike; U: seq](_: typedesc[C], s: U): C =
+  result = toColumn(C, toTensor(s))
 
 proc combinedColKind*(c: seq[ColKind]): ColKind =
   if c.allIt(it == c[0]):
@@ -621,7 +640,7 @@ proc toTensor*[C: ColumnLike; T](c: C, dtype: typedesc[T],
     result = getTensor(c, Tensor[T])
   of colNone: raise newException(ValueError, "Accessed column is empty!")
 
-proc toTensor*[T](c: Column, slice: Slice[int], dtype: typedesc[T]): Tensor[T] =
+proc toTensor*[C: ColumnLike; T](c: C, slice: Slice[int], dtype: typedesc[T]): Tensor[T] =
   case c.kind
   of colInt:
     when T is int:
@@ -1019,6 +1038,7 @@ liftScalarToColumn(max)
 proc pretty*(c: ColumnLike): string =
   ## pretty prints a Column
   result = &"Column of type: {toNimType(c.kind)} with length: {c.len}\n"
+  echo "pretty call ", result
   withNativeTensor(c, t):
     result.add &"  contained Tensor: {t}"
 template `$`*(c: ColumnLike): string = pretty(c)
