@@ -48,7 +48,7 @@ when true:
   echo "================================================================================"
   #patchDataFrame(Tensor[KiloGram])
   let df = seqsToDf({"x" : [1,2,3]})
-  let fn = compileFn(df, f{float -> KiloGram: "y" ~ (`x` * `x`).kg})
+  let fn = dfFn(df, f{float -> KiloGram: "y" ~ (`x` * `x`).kg})
   echo typeof(fn)
 
   defUnit(kg²)
@@ -68,7 +68,8 @@ when true:
 
   echo dfN.arrange("kg", SortOrder.Descending).pretty(precision = 10)
 
-  let fn2 = compileFn(dfN, f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`})
+  genColumn(KiloGram, KiloGram²)
+  let fn2 = dfFn(dfN, f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`})
   echo typeof(fn2)
   #
   genColumn(KiloGram, Meter)
@@ -77,7 +78,21 @@ when true:
   let dfNM = extendDataFrame(dfN, "meter", @[1.m, 2.m, 3.m])
   echo dfNM.pretty(precision = 10)
 
-  echo df.mutate(f{float -> KiloGram: "Kg" ~ `x`.kg}).pretty(precision = 10)
+  echo df.mutate2(f{float -> KiloGram: "Kg" ~ `x`.kg}).pretty(precision = 10)
+
+  echo dfNM.mutate(dfFn(dfNM, f{float: "kgtofoat" ~ idx(`kg`, KiloGram).float}))
+
+  echo dfNM.mutate2(f{float: "kgtofoat" ~ idx(`kg`, KiloGram).float})
+
+  #let f2 = f{float -> KiloGram: "Kg" ~ `x`.kg}
+  #
+  #investigateFormula(fn)
+  #investigateFormula(f2)
+  #
+  #proc foo[T](f: FormulaNode[T, T]) =
+  #  investigateFormula(f)
+  #
+  #foo(f{float -> KiloGram: "Kg" ~ `x`.kg})
 
 when false:
 
