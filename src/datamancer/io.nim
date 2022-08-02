@@ -414,7 +414,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
                       toSkip: set[char] = {},
                       colNamesIn: seq[string] = @[],
                       skipInitialSpace = true,
-                      quote = '"'): DataFrame =
+                      quote = '"'): DataFrame[Column] =
   ## Implementation of the CSV parser that works on a data array of chars.
   result = newDataFrame()
   var
@@ -520,7 +520,7 @@ proc readCsv*(fname: string,
               colNames: seq[string] = @[],
               skipInitialSpace = true,
               quote = '"',
-             ): DataFrame =
+             ): DataFrame[Column] =
   ## Reads a DF from a CSV file using the separator character `sep`.
   ##
   ## `toSkip` can be used to skip optional characters that may be present
@@ -569,7 +569,7 @@ proc parseCsvString*(csvData: string,
                      header: string = "",
                      skipLines = 0,
                      toSkip: set[char] = {},
-                     colNames: seq[string] = @[]): DataFrame =
+                     colNames: seq[string] = @[]): DataFrame[Column] =
   ## Parses a `DataFrame` from a string containing CSV data.
   ##
   ## `toSkip` can be used to skip optional characters that may be present
@@ -613,7 +613,7 @@ proc readCsvAlt*(fname: string,
   result = s.readCsv(sep, header, skipLines, colNames, fname = fname)
   s.close()
 
-proc writeCsv*(df: DataFrame, filename: string, sep = ',', header = "",
+proc writeCsv*[T](df: DataFrame[T], filename: string, sep = ',', header = "",
                precision = 4) =
   ## writes a DataFrame to a "CSV" (separator can be changed) file.
   ## `sep` is the actual separator to be used. `header` indicates a potential
@@ -634,7 +634,7 @@ proc writeCsv*(df: DataFrame, filename: string, sep = ',', header = "",
     data.add "\n"
   writeFile(filename, data)
 
-proc showBrowser*(df: DataFrame, fname = "df.html", path = getTempDir(), toRemove = false) =
+proc showBrowser*[T](df: DataFrame[T], fname = "df.html", path = getTempDir(), toRemove = false) =
   ## Displays the given DataFrame as a table in the default browser.
   ##
   ## Note: the HTML generation is not written for speed at this time. For very large
