@@ -143,22 +143,22 @@ proc clone*[C: ColumnLike](df: DataFrame[C]): DataFrame[C] =
     result.groupMap = df.groupMap
   else: discard
 
-proc shallowCopy*[C: ColumnLike](df: DataFrame[C]): DataFrame[C] = df
-#  ## Creates a shallowCopy of the `DataFrame` that does ``not`` deep copy the tensors.
-#  ##
-#  ## Used to return a different DF that contains the same data for those columns
-#  ## that exist in both. Only the `OrderedTable` object is cloned to not reference the
-#  ## same column keys. This is the default for all procedures that take and return
-#  ## a DF.
-#  result = C.newDataFrameLike(kind: df.kind)
-#  result.len = df.len
-#  # simply do a regular copy of the DF (no deep copy of the data, but a new
-#  # table)
-#  result.data = df.data
-#  case df.kind
-#  of dfGrouped:
-#    result.groupMap = df.groupMap
-#  else: discard
+proc shallowCopy*[C: ColumnLike](df: DataFrame[C]): DataFrame[C] =
+  ## Creates a shallowCopy of the `DataFrame` that does ``not`` deep copy the tensors.
+  ##
+  ## Used to return a different DF that contains the same data for those columns
+  ## that exist in both. Only the `OrderedTable` object is cloned to not reference the
+  ## same column keys. This is the default for all procedures that take and return
+  ## a DF.
+  result = C.newDataFrameLike(kind = df.kind)
+  result.len = df.len
+  # simply do a regular copy of the DF (no deep copy of the data, but a new
+  # table)
+  result.data = df.data
+  case df.kind
+  of dfGrouped:
+    result.groupMap = df.groupMap
+  else: discard
 
 # ---------- General convenience helpers ----------
 
