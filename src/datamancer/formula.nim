@@ -12,7 +12,9 @@ import arraymancer / laser / strided_iteration / foreach
 export foreach
 
 type
-  FormulaNode* = object
+  ## NOTE: type of formula must only be single generic and must always match the
+  ## *output* type!
+  Formula*[C: ColumnLike] = object
     name*: string # stringification of whole formula. Only for printing and
                   # debugging
     case kind*: FormulaKind
@@ -26,12 +28,14 @@ type
     of fkVector:
       colName*: string
       resType*: ColKind
-      fnV*: proc(df: DataFrame): Column
+      fnV*: proc(df: DataTable[C]): C
     of fkScalar:
       valName*: string
       valKind*: ValueKind
-      fnS*: proc(c: DataFrame): Value
+      fnS*: proc(c: DataTable[C]): Value
     of fkNone: discard
+
+  FormulaNode* = Formula[Column]
 
   FormulaMismatchError* = object of CatchableError
 
@@ -57,7 +61,7 @@ type
     inputTypes: seq[NimNode] # types of all arguments
     resType: Option[NimNode]
 
-proc hash*(fn: FormulaNode): Hash =
+proc hash*[C: ColumnLike](fn: Formula[C]): Hash =
   result = hash(fn.kind.int)
   result = result !& hash(fn.name)
   case fn.kind
@@ -74,11 +78,11 @@ proc hash*(fn: FormulaNode): Hash =
     result = result !& hash(fn.fnS)
   of fkNone: discard
 
-proc raw*(node: FormulaNode): string =
+proc raw*[C: ColumnLike](node: Formula[C]): string =
   ## prints the raw stringification of `node`
   result = node.name
 
-proc toUgly*(result: var string, node: FormulaNode) =
+proc toUgly*[C: ColumnLike](result: var string, node: Formula[C]) =
   ## This is the formula stringification, which can be used to access the corresponding
   ## column of in a DF that corresponds to the formula
   case node.kind:
@@ -94,7 +98,7 @@ proc toUgly*(result: var string, node: FormulaNode) =
     result = $node.valName
   of fkNone: discard
 
-proc `$`*(node: FormulaNode): string =
+proc `$`*[C: ColumnLike](node: Formula[C]): string =
   ## Converts `node` to its string representation
   result = newStringOfCap(1024)
   toUgly(result, node)
@@ -126,9 +130,19 @@ func isIdxCall(n: NimNode): bool =
 proc isGeneric(n: NimNode): bool =
   ## given a node that represents a type, check if it's generic by checking
   ## if the symbol or bracket[symbol] is notin `Dtypes`
-  case n.kind
-  of nnkSym, nnkIdent: result = n.strVal notin DtypesAll
-  of nnkBracketExpr: result = n[1].strVal notin DtypesAll
+  case n.kind # assume generic is single symbol. Will fail for longer!
+  of nnkSym, nnkIdent:
+    ## the generic check for an ident / sym checks for `[` and `]` and / or single
+    ## generic type name. This is a bit brittle for user defined types with a single letter
+    ## of course, but for now...
+    let nStr = n.strVal
+    if "[" in nStr:
+      let idx = find(nStr, "[")
+      doAssert nStr.len > idx + 2
+      if nStr[idx + 2] == ']': result = true
+    elif nStr.len == 1:
+      result = true
+  of nnkBracketExpr: result = n[1].strVal.len == 1 # notin DtypesAll
   of nnkEmpty: result = true # sort of generic...
   else: error("Invalid call to `isGeneric` for non-type like node " &
     $(n.treeRepr) & "!")
@@ -188,11 +202,13 @@ proc compileVectorFormula(fct: FormulaCT): NimNode =
   let rawName = newLit(fct.rawName)
   var colName = if fct.name.kind == nnkNilLit: rawName else: fct.name
   let dtype = fct.resType
+  let dfTyp = fct.dfType
+  let colResType = fct.colResType
   result = quote do:
-    FormulaNode(name: `rawName`,
-                colName: `colName`, kind: fkVector,
-                resType: toColKind(type(`dtype`)),
-                fnV: `fnClosure`)
+    Formula[`colResType`](name: `rawName`,
+                          colName: `colName`, kind: fkVector,
+                          resType: toColKind(type(`dtype`)),
+                          fnV: `fnClosure`)
   when defined(echoFormulas):
     echo result.repr
 
@@ -201,11 +217,12 @@ proc compileScalarFormula(fct: FormulaCT): NimNode =
   let rawName = newLit(fct.rawName)
   let valName = if fct.name.kind == nnkNilLit: rawName else: fct.name
   let dtype = fct.resType
+  let C = ident(ColIdent)
   result = quote do:
-    FormulaNode(name: `rawName`,
-                valName: `valName`, kind: fkScalar,
-                valKind: toValKind(`dtype`),
-                fnS: `fnClosure`)
+    Formula[`C`](name: `rawName`,
+                 valName: `valName`, kind: fkScalar,
+                 valKind: toValKind(`dtype`),
+                 fnS: `fnClosure`)
   when defined(echoFormulas):
     echo result.repr
 
@@ -490,9 +507,18 @@ proc addColRef(n: NimNode, typeHint: FormulaTypes, asgnKind: AssignKind): seq[As
     var dtypeOverride = dtype
     var resTypeOverride = resType
     if n.len == 3:
-      doAssert n[2].kind in {nnkSym, nnkIdent} and
-        n[2].strVal in DtypesAll, "Type to read as needs to " &
-        "be a supported type: " & $Dtypes & ", but is " & $n[2].repr
+      ## XXX: Since we now cannot base the valid types on the known valid types, instead we
+      ## should add this to something so that we can either:
+      ## - extend the required Column type (e.g. user wants to read `Foo`, then Column must be
+      ##   `ColumnFoo*`)
+      ## - error if the determined Column type does not allow for this.
+      ## Latter seems illogical to me right now, as the formula itself doesn't know anything about
+      ## types (that's why we have a DF argument to `compileFn` after all).
+      ## Could check for that DF type though!
+      ##
+      ## TODO: write test checking that we can hand a DF to compileFn with a type X and we try
+      ## to read a type Y. Should CT error iff a DF is handed. Else extend notion of required
+      ## type?
       dtypeOverride = n[2]
       if resTypeOverride.kind == nnkEmpty:
         # use input type as return type as well
@@ -537,10 +563,12 @@ proc typeAcceptable(n: NimNode): bool =
   case n.kind
   of nnkIdent, nnkSym:
     let nStr = n.strVal
-    if nStr in DtypesAll:
+    let typIsGeneric = n.isGeneric
+    if not typIsGeneric: # in DtypesAll:
       result = true
-    elif nStr.startsWith("Tensor") and
-         nStr.dup(removePrefix("Tensor["))[0 ..< ^1] in DtypesAll:
+    elif nStr.startsWith("Tensor") and not typIsGeneric: # and
+      #   nStr.dup(removePrefix("Tensor["))[0 ..< ^1] in DtypesAll:
+      ## XXX: DtypesAll not allowed here, otherwise might override explicit type hints!
       # stringified type `Tensor[int, float, ...]`. Check is a bit of a hack
       result = true
   of nnkBracketExpr:
@@ -1006,6 +1034,22 @@ proc determineTypes(loop: NimNode, tab: Table[string, NimNode]): Preface =
                                                         resType: newEmptyNode()))
   result = Preface(args: args)
 
+proc getGenericDataFrameType(n: NimNode): NimNode =
+  case n.kind
+  of nnkBracketExpr:
+    if n[0].strVal.normalize == "datatable":
+      result = n[1]
+    else:
+      error("Invalid args : " & $n.treerepr)
+  of nnkSym: result = n.getTypeInst.getGenericDataFrameType()
+  else: error("Invalid arg: " & $n.treerepr)
+
+proc extractDataFrameType(nOpt: Option[NimNode]): NimNode =
+  if nOpt.isSome:
+    result = nOpt.get.getGenericDataFrameType()
+  else:
+    result = ident"Column" # default use the normal `Column` type
+
 proc parseOptionValue(n: NimNode): Option[FormulaKind] {.used.} =
   ## parses the AST of a `FormulaKind` into an `Option[T]` at CT
   ## Note: shouldn't there be an easier way?...
@@ -1024,6 +1068,16 @@ proc parseOptionValue(n: NimNode): Option[FormulaKind] {.used.} =
   else:
     error("Bad input node " & $n.repr & " in `parseOptionValue`.")
 
+import macrocache # needed only here
+proc genClosureRetType(resType, dfType: NimNode): NimNode =
+  var typs = dfType.columnToTypes()
+  ## replace mapIt!
+  let name = genColNameStr(concat(typs.mapIt(ident(it)), @[resType]))
+  if name != "Column" and name notin TypeNames:
+    error("The column type `" & $name & "` has not been generated yet. If you haven't added " &
+      "a column using this type to a DF yet, call `patchColumn` with the type.")
+  result = TypeNames[name]
+
 macro compileFormulaImpl*(rawName: static string,
                           funcKind: static FormulaKind): untyped =
   ## Second stage of formula macro. The typed stage of the macro. It's important that the macro
@@ -1038,6 +1092,9 @@ macro compileFormulaImpl*(rawName: static string,
   var typeTab = initTable[string, NimNode]()
   if rawName in TypedSymbols:
     typeTab = TypedSymbols[rawName]
+  # extract df if any, (possibly) use it to determine `DataFrame` argument type
+  fct.df = if InputDF in typeTab: some(typeTab[InputDF]) else: none[NimNode]()
+  fct.dfType = fct.df.extractDataFrameType()
   # generate the `preface`
   ## generating the preface is done by extracting all references to columns,
   ## using their names as `tensor` names (not element, since we in the general
@@ -1074,6 +1131,10 @@ macro compileFormulaImpl*(rawName: static string,
       arg.colType = fct.typeHint.inputType.get
     if fct.typeHint.resType.isSome:
       arg.resType = fct.typeHint.resType.get
+
+    ## XXX: extend to check whether we have an input DF for type information. If so and if
+    ## user has given explicit type hint for an idx/col call, check that the two pieces of
+    ## info match. Else CT error!
 
     # check if any is `Empty` or column type not acceptable, if so error out at CT
     if arg.colType.kind == nnkEmpty or arg.resType.kind == nnkEmpty:
@@ -1118,6 +1179,8 @@ macro compileFormulaImpl*(rawName: static string,
   else:
     fct.funcKind = if allScalar: fkScalar else: fkVector
 
+  # set the column return type
+  fct.colResType = genClosureRetType(fct.resType, fct.dfType)
   case fct.funcKind
   of fkVector: result = compileVectorFormula(fct)
   of fkScalar: result = compileScalarFormula(fct)
@@ -1174,7 +1237,8 @@ proc isPureFormula(n: NimNode): bool =
       result = false
   else: discard
 
-proc compileFormula(n: NimNode, fullNode = false): NimNode =
+proc compileFormula(n: NimNode, fullNode = false, df: NimNode = newEmptyNode()): NimNode =
+#macro compileFormula*(n: untyped, df = newEmptyNode()): untyped =
   ## Preprocessing stage of formula macro. Performs preprocessing steps and extracts
   ## basic information:
   ## - possible type hints
@@ -1190,6 +1254,9 @@ proc compileFormula(n: NimNode, fullNode = false): NimNode =
   var fct = FormulaCT()
   # starting with a possible preface
   var node = n
+  ##
+  ## If `df` is given, use the generic type of the DF to fill the closure argument's
+  ## type field. Otherwise default to `DataTable[Column]`
   var isAssignment = false
   var isReduce = false
   var isVector = false
@@ -1247,17 +1314,19 @@ proc compileFormula(n: NimNode, fullNode = false): NimNode =
     # (and thus forces a constant mapping)
     if not isAssignment:
       ## TODO: allow in formulaExp.nim
+      let C = ident"Column"
       result = quote do:
-        FormulaNode(kind: fkVariable,
-                    name: `rawName`,
-                    val: %~ `formulaRhs`)
+        Formula[`C`](kind: fkVariable,
+                     name: `rawName`,
+                     val: %~ `formulaRhs`)
     else:
       ## TODO: allow in formulaExp.nim
+      let C = ident"Column"
       result = quote do:
-        FormulaNode(kind: fkAssign,
-                    name: `rawName`,
-                    lhs: `formulaName`,
-                    rhs: %~ `formulaRhs`)
+        Formula[`C`](kind: fkAssign,
+                     name: `rawName`,
+                     lhs: `formulaName`,
+                     rhs: %~ `formulaRhs`)
   elif isAssignment:
     error("Assignment of unpure formulas (column reference in formula body) is " &
       "unsupported. Use a reducing `<<` or mapping `~` formula.")
@@ -1282,6 +1351,7 @@ proc compileFormula(n: NimNode, fullNode = false): NimNode =
     fct.loop = if formulaRhs.kind == nnkStmtList: formulaRhs
                else: newStmtList(formulaRhs)
     fct.typeHint = typeHint
+    # `fct.df` is only assigned after typed pass is done (in `compileFormulaImpl`)
     ## assign to global formula CT table
     Formulas[fct.rawName] = fct
 
@@ -1292,10 +1362,20 @@ proc compileFormula(n: NimNode, fullNode = false): NimNode =
       result.add quote do:
         when checkSymbolIsValid(`s`):
           addSymbols(`rawName`, `sName`, `s`)
+    # now add input data frame if any
+    if df.kind != nnkEmpty:
+      result.add quote do:
+        addSymbols(`rawName`, `InputDF`, `df`)
     var cpCall = nnkCall.newTree(ident"compileFormulaImpl",
                                  rawName,
                                  newLit funcKind)
     result.add cpCall
+
+macro dfFn*(df, fn: untyped): untyped =
+  var fn = fn
+  if fn.kind == nnkCurlyExpr:
+    fn = fn[1]
+  result = compileFormula(fn, df = df)
 
 macro `{}`*(x: untyped{ident}, y: untyped): untyped =
   ## TODO: add some ability to explicitly create formulas of

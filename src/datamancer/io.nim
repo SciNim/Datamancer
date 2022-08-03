@@ -335,9 +335,9 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
         copyBuf(data, buf, idx, colStart)
         col.oCol[row] = %~ buf
     of colConstant: discard # already set
-    of colNone:
+    of colNone, colGeneric:
       raise newException(IOError, "Invalid column type to parse into: `colNone`. " &
-        "This shouldn't have happened! row = " & $row & ", col = " & $col)
+        "This shouldn't have happened! row = " & $row & ", col = ")# & $col)
 
 template advanceToNextRow() {.dirty.} =
   ## The steps done after a line break is found & we advance to the next row.
@@ -693,7 +693,7 @@ proc readCsvAlt*(fname: string,
   result = s.readCsv(sep, header, skipLines, colNames, fname = fname)
   s.close()
 
-proc writeCsv*(df: DataFrame, filename: string, sep = ',', header = "",
+proc writeCsv*[C: ColumnLike](df: DataTable[C], filename: string, sep = ',', header = "",
                precision = 4) =
   ## writes a DataFrame to a "CSV" (separator can be changed) file.
   ## `sep` is the actual separator to be used. `header` indicates a potential
@@ -714,7 +714,7 @@ proc writeCsv*(df: DataFrame, filename: string, sep = ',', header = "",
     data.add "\n"
   writeFile(filename, data)
 
-proc showBrowser*(df: DataFrame, fname = "df.html", path = getTempDir(), toRemove = false) =
+proc showBrowser*[C: ColumnLike](df: DataTable[C], fname = "df.html", path = getTempDir(), toRemove = false) =
   ## Displays the given DataFrame as a table in the default browser.
   ##
   ## Note: the HTML generation is not written for speed at this time. For very large

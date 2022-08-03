@@ -297,7 +297,7 @@ suite "Column":
       check exp[2, string] == "" # default(string)
       check exp.toTensor(string) == ["2", "3", ""].toTensor
 
-suite "DataFrame parsing":
+suite "DataTable parsing":
   proc cmpElements[T](s1, s2: seq[T]): bool =
     # comparse the two seq, while properly handling `NaN`
     result = true
@@ -446,7 +446,7 @@ b,,foo
     check df["(Name) Additional name if exists"].kind == colObject
     check df["(Name) Additional name if exists", Value][0] == null()
 
-suite "DataFrame tests":
+suite "DataTable tests":
 
   test "`toDf` is no-op for DF":
     let df = toDf(toDf(readCsv("data/mpg.csv")))
@@ -557,47 +557,49 @@ suite "DataFrame tests":
       check "three" in df
       check "four" in df
 
-  test "Creation of DF w/ int, float other than int64, float64":
-    let a = @[123'u8, 12, 55]
-    let b = @[1.123'f32, 4.234, 1e12]
-    let c = @[1001'i32, 1002, 1003]
-    var df = toDf({ "a" : a,
-                    "b" : b })
-    check df["a"].kind == colInt
-    check df["b"].kind == colFloat
-    check df["a"].toTensor(int) == a.toTensor.astype(int)
-    check df["b"].toTensor(float) == b.toTensor.astype(float)
-    # check toColumn directly
-    df["c"] = toColumn c
-    check df["c"].kind == colInt
-    check df["c"].toTensor(int) == c.toTensor.astype(int)
+  #test "Creation of DF w/ int, float other than int64, float64":
+  #  let a = @[123'u8, 12, 55]
+  #  let b = @[1.123'f32, 4.234, 1e12]
+  #  let c = @[1001'i32, 1002, 1003]
+  #  genColumn(uint8)
+  #  #genColumn(uint8, float32, int32)
+  #  var df = seqsToDf({ "a" : a,
+  #                      "b" : b })
+  #  check df["a"].kind == colInt
+  #  check df["b"].kind == colFloat
+  #  check df["a"].toTensor(int) == a.toTensor.asType(int)
+  #  check df["b"].toTensor(float) == b.toTensor.asType(float)
+  #  # check toColumn directly
+  #  df["c"] = toColumn c
+  #  check df["c"].kind == colInt
+  #  check df["c"].toTensor(int) == c.toTensor.asType(int)
 
-  test "Accessed column of DF is mutable / reference semantics":
-    let a = @[123'u8, 12, 55]
-    let aRepl = @[123'u8, 12, 33]
-    let b = @[1.123'f32, 4.234, 1e12]
-    var df = toDf({ "a" : a })
-    check df["a"].kind == colInt
-    check df["a"].toTensor(int) == a.toTensor.astype(int)
-    df["a"][df.high] = 33
-    check df["a"].kind == colInt
-    check df["a"].toTensor(int) == aRepl.toTensor.astype(int)
-    df["a"] = b
-    check df["a"].kind == colFloat
-    check df["a"].toTensor(float) == b.toTensor.astype(float)
-
-    # check reference semantics
-    let bMod = @[1.123'f32, 4.234, 1e4]
-    var colB = df["a"]
-    # modifying `colB` modifies `df["a"]`
-    colB[df.high] = 1e4
-    check df["a"].toTensor(float) == bMod.toTensor.astype(float)
-
-    # modifying underlying tensor modifies data too
-    let bMod2 = @[1.123'f32, 4.234, 1e6]
-    var tensorB = df["a"].toTensor(float)
-    tensorB[df.high] = 1e6
-    check df["a"].toTensor(float) == bMod2.toTensor.astype(float)
+  #test "Accessed column of DF is mutable / reference semantics":
+  #  let a = @[123'u8, 12, 55]
+  #  let aRepl = @[123'u8, 12, 33]
+  #  let b = @[1.123'f32, 4.234, 1e12]
+  #  var df = seqsToDf({ "a" : a })
+  #  check df["a"].kind == colInt
+  #  check df["a"].toTensor(int) == a.toTensor.asType(int)
+  #  df["a"][df.high] = 33
+  #  check df["a"].kind == colInt
+  #  check df["a"].toTensor(int) == aRepl.toTensor.asType(int)
+  #  df["a"] = b
+  #  check df["a"].kind == colFloat
+  #  check df["a"].toTensor(float) == b.toTensor.asType(float)
+  #
+  #  # check reference semantics
+  #  let bMod = @[1.123'f32, 4.234, 1e4]
+  #  var colB = df["a"]
+  #  # modifying `colB` modifies `df["a"]`
+  #  colB[df.high] = 1e4
+  #  check df["a"].toTensor(float) == bMod.toTensor.asType(float)
+  #
+  #  # modifying underlying tensor modifies data too
+  #  let bMod2 = @[1.123'f32, 4.234, 1e6]
+  #  var tensorB = df["a"].toTensor(float)
+  #  tensorB[df.high] = 1e6
+  #  check df["a"].toTensor(float) == bMod2.toTensor.asType(float)
 
   test "Extending a DF by a column":
     let a = [1, 2, 3]
@@ -698,7 +700,6 @@ suite "DataFrame tests":
 
     let c = [4, 5, 6, 7]
     let d = [8, 9, 10, 11]
-
     block:
       # bind_rows with automatic `ids`, both having same columns
       let df = toDf({"a" : a, "b" : b})
@@ -713,7 +714,6 @@ suite "DataFrame tests":
       # without specifying `id`, no column will be added
       #check toSeq(res["id"]) == %~ concat(toSeq(0..<a.len).mapIt("0"),
       #                                      toSeq(0..<c.len).mapIt("1"))
-
     block:
       # bind_rows with automatic `ids`, having different columns
       let df = toDf({"a" : a, "b" : b})
@@ -734,7 +734,6 @@ suite "DataFrame tests":
 
       #check toSeq(res["id"]) == %~ concat(toSeq(0..<a.len).mapIt("0"),
       #                                      toSeq(0..<c.len).mapIt("1"))
-
     block:
       # bind_rows with custom `id` name, both having same columns
       let df = toDf({"a" : a, "b" : b})
@@ -781,16 +780,23 @@ suite "DataFrame tests":
     # TODO: make this to `doAssert`!
     let summary = mpg.summarize(f{float: "mean_cyl" << mean(c"cyl")},
                                 f{float: "mean_hwy" << mean(c"hwy")})
+    echo "done "
+    echo summary
     when defined(defaultBackend):
       check almostEqual(summary["mean_cyl"][0].toFloat, 5.88889)
       check almostEqual(summary["mean_hwy"][0].toFloat, 23.4402)
     else:
       check almostEqual(summary["mean_cyl"][0, float], 5.88889)
       check almostEqual(summary["mean_hwy"][0, float], 23.4402)
-
-    let sum_grouped = mpggroup.summarize(f{float: "mean_displ" << mean(c"displ")},
+    echo "almost queal"
+    var sum_grouped = mpggroup.summarize(f{float: "mean_displ" << mean(c"displ")},
                                          f{float: "mean_hwy" << mean(c"hwy")})
+    echo "summarized"
+    echo sum_grouped
+    sum_grouped = sum_grouped
       .arrange("cyl")
+    echo "arranged"
+    echo sum_grouped
     check sum_grouped.len == 4
     when defined(defaultBackend):
       check sum_grouped["cyl"][0].toInt == 4
@@ -1050,7 +1056,7 @@ suite "DataFrame tests":
 
   test "Pretty printing of DFs":
     var
-      # need the data as two sequences (well actually as a DataFrame, but that is
+      # need the data as two sequences (well actually as a DataTable, but that is
       # created most easily from two or more sequences).
       x: seq[float]
       y: seq[float]
@@ -1488,8 +1494,8 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     check almostEqual(reduce(f{float: 235 / mean(c"hwy")}, mpg).toFloat, 10.0255, 1e-3)
 
   test "Allow `add` if first argument is still uninitialized":
-    # uninitialized data frame (DataFrame is ref object)
-    var df: DataFrame
+    # uninitialized data frame (DataTable is ref object)
+    var df: DataTable[Column]
     check df.isNil
     let dfToAdd = toDf({ "x" : @[1, 2, 3],
                              "y" : @[4, 5, 6] })
@@ -1730,6 +1736,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     check df.len == 3
     check df["x", int] == [1,2,3].toTensor
     check df["y", int] == [5,6,7].toTensor
+    echo df
     check df["z"].kind == colConstant
     check df["α"].kind == colConstant
     check df["z"].cCol == %~ "foo"
@@ -2131,4 +2138,5 @@ suite "Formulas with object columns using convenience operators":
     check df.filter(f{`x` == "foo"})["x", string] == ["foo"].toTensor
     check df.filter(f{`x` != "foo"})["x", string] == ["bar", "baz"].toTensor
     check df.filter(f{`x` in ["foo", "bar"]})["x", string] == ["foo", "bar"].toTensor
+    echo df.filter(f{`x` notin ["foo", "bar"]})["x", string]
     check df.filter(f{`x` notin ["foo", "bar"]})["x", string] == ["baz"].toTensor
