@@ -125,7 +125,14 @@ proc resolveTypedesc(n: NimNode): NimNode =
   doAssert n[0].kind in {nnkIdent, nnkSym} and n[0].strVal.normalize == "typedesc"
   result = n[1]
 
-macro getEnumField*(typ: typed): untyped = typ.getTypeInst.resolveTypedesc.getEnumField()
+proc columnToEnum*(t: NimNode): NimNode
+macro enumField*(colTyp, typ: typed): untyped =
+  ## Generates a fully specified enum field, i.e.
+  ##
+  ## `GenericFoo|BarKind.gkFoo`
+  let enumType = colTyp.columnToEnum()
+  let enumField = typ.getTypeInst.resolveTypedesc.getEnumField()
+  result = nnkDotExpr.newTree(enumType, ident(enumField.strVal))
 
 proc getGenericField*(typ: string): NimNode =
   if typ in GenericFieldNames:
@@ -158,19 +165,23 @@ macro genTypeEnum*(types: varargs[typed]): untyped =
   # wrap in type section
   result = nnkTypeSection.newTree(result)
 
-macro getTypeEnum*(types: varargs[typed]): untyped =
-  let typs = bracketToSeq(types)
-  let enumName = "Generic" & genCombinedTypeStr(typs) & "Kind"
+proc getTypeEnumImpl*(types: seq[string]): NimNode =
+  let enumName = "Generic" & genCombinedTypeStr(types) & "Kind"
   if enumName in EnumNames:
     result = EnumNames[enumName]
   else:
     error("The enum of name " & $enumName & " is not known yet. Create it using `genTypeEnum`")
 
-#proc strTo
+macro getTypeEnum*(types: varargs[typed]): untyped =
+  let typs = bracketToSeq(types).mapIt(it.nodeRepr)
+  result = getTypeEnumImpl(typs)
+
+proc columnToEnum*(t: NimNode): NimNode =
+  ## Turns the given type into the name of the generic enum kind
+  result = t.getTypeInst.resolveTypedesc().columnToTypes().getTypeEnumImpl()
 
 proc typesFromEnum*(typ: NimNode): seq[string] =
-  #case typ.typeKind
-  #of ntyTypeDesc:
+  ## Turns the given enum name `GenericFoo|BarKind` into a seq of type names
   result = typ.strVal.dup(removePrefix("Generic")).dup(removeSuffix("Kind")).split("|")
 
 proc kindToField*(n: NimNode, toReplace, replace: NimNode): NimNode =
