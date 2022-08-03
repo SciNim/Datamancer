@@ -215,7 +215,7 @@ proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
     ## use `getTypeEnum` to set the correct field value
     result = C(kind: colGeneric,
                len: t.size,
-               gkKind: getEnumField(T))
+               gkKind: enumField(C, T))
     assignData(result, t)
 
 proc toColumn*[T: not SupportedTypes](t: openArray[T]): auto =
