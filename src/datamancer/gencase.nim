@@ -22,7 +22,7 @@ proc nodeRepr*(n: NimNode): string =
 
 from formulaExp import DtypesAll
 proc genCombinedTypeStr*(types: seq[string]): string =
-  let typClean = types.filterIt(it != "Column").deduplicate
+  let typClean = types.filterIt(it != "Column" and it notin DtypesAll).deduplicate
   ## FIX UP LOGIC
   result = $(typClean.mapIt(it.dup(removePrefix("Column"))) #.capitalizeAscii)
              .sorted
@@ -47,7 +47,6 @@ proc columnToTypes*(n: NimNode): seq[string] =
   result = r.split("|").filterIt(it.len > 0)
 
 proc getInnerType*(n: NimNode, last = newEmptyNode()): NimNode =
-  #echo n.repr, " of kind ", n.kind
   case n.kind
   of nnkSym:
     let nstr = n.strVal.normalize
