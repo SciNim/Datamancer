@@ -599,7 +599,7 @@ proc readCsvFromUrl(url: string,
               colNames: seq[string] = @[],
               skipInitialSpace = true,
               quote = '"'
-             ): DataFrame =
+             ): DataFrame[Column] =
   ## Reads a DF from a web URL (which must contain a CSV file)
   var client = newHttpClient()
   return parseCsvString(client.getContent(url), sep, header, skipLines, toSkip, colNames,
