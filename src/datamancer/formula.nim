@@ -773,8 +773,7 @@ proc matchingTypes(t, u: PossibleTypes): seq[NimNode] =
     result = intersection(ts, us).toSeq.mapIt(ident(it))
 
 proc assignType(heuristicType: FormulaTypes, types: seq[NimNode], resType = newEmptyNode()): FormulaTypes =
-  if types.len == 1 and types[0].isValidType:
-
+  if types.len == 1:
     result = FormulaTypes(inputType: types[0],
                           resType: heuristicType.resType)
     if result.resType.kind == nnkEmpty:
