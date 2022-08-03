@@ -370,9 +370,12 @@ proc toNimType*[C: ColumnLike](c: C): string =
   of colConstant: result = "constant"
   of colNone: result = "null"
   of colGeneric:
-    var typ = $c.gkKind
-    typ.removePrefix("gk")
-    result = "generic[" & typ & "]"
+    when C isnot Column:
+      var typ = $c.gkKind
+      typ.removePrefix("gk")
+      result = "generic[" & typ & "]"
+    else:
+      raise newException(ValueError, "Invalid branch for `Column` type.")
 
 template withNativeTensor*[C: ColumnLike](c: C,
                                           valName: untyped,
