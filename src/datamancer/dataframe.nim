@@ -1725,56 +1725,6 @@ proc assignFormulaCol[C: ColumnLike; T: string | FormulaNode](df: var DataFrame[
       raise newException(FormulaMismatchError, "Formula `" & $key & "` of kind `" & $key.kind & "` not allowed " &
         "for selection.")
 
-proc select*[C: ColumnLike; T: string | FormulaNode[C, C]](df: DataFrame[C], cols: varargs[T]): DataFrame[C] =
-  ## Returns the data frame cut to the names given as `cols`. The argument
-  ## may either be the name of a column as a string, or a `FormulaNode`.
-  ##
-  ## If the input is a formula node the left hand side (left of `<-`, `~`, `<<`) if it
-  ## exists or the name of the formula is computed from the formula. In the simplest
-  ## case it may just be a `fkVariable: f{"myColumn"}` formula.
-  ##
-  ## The `FormulaNode` approach is mainly useful to select and rename a column at
-  ## the same time using an assignment formula `<-`.
-  ##
-  ## The column order of the resulting DF is the order of the input columns to `select`.
-  ##
-  ## Note: string and formula node arguments ``cannot`` be mixed. If a rename is
-  ## desired, all other arguments need to be given as `fkVariable` formulas.
-  runnableExamples:
-    let df = toDf({"Foo" : [1,2,3], "Bar" : [5,6,7], "Baz" : [1.2, 2.3, 3.4]})
-    block:
-      let dfRes = df.select(["Foo", "Bar"])
-      doAssert dfRes.ncols == 2
-      doAssert "Foo" in dfRes
-      doAssert "Bar" in dfRes
-      doAssert "Baz" notin dfRes
-    block:
-      let dfRes = df.select([f{"Foo"}, f{"New" <- "Bar"}])
-      doAssert dfRes.ncols == 2
-      doAssert "Foo" in dfRes
-      doAssert "New" in dfRes
-      doAssert "Bar" notin dfRes
-      doAssert "Baz" notin dfRes
-
-  result = C.newDataFrameLike(df.ncols, kind = df.kind)
-  for k in cols:
-    assignFormulaCol(result, df, k)
-  if df.kind == dfGrouped:
-    # check that groups are still in the DF, else raise
-    let grps = toSeq(keys(df.groupMap))
-    if not grps.allIt(it in result):
-      raise newException(ValueError, "Cannot select off (drop) a column the input data frame is grouped by!")
-
-  result.len = df.len
-
-proc selectInplace*[C: ColumnLike; T: string | FormulaNode](df: var DataFrame[C], cols: varargs[T]) =
-  ## Inplace variant of `select` above.
-  ##
-  ## Note: the implementation changed. Instead of implementing `select` based on
-  ## `selectInplace` by dropping columns, we now implement `selectInplace` based
-  ## on `select`. This is technically still shallow copy internally
-  ## of input `df`. This way the order is the order of the input keys.
-  df = df.select(cols)
 
 proc mutateImpl[T](df: var DataFrame[T], fns: varargs[FormulaNode[T, T]],
                       dropCols: static bool) =
