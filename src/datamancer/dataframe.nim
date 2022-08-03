@@ -439,7 +439,7 @@ proc extendShortColumns*[C: ColumnLike](df: var DataFrame[C]) =
       let nFill = df.len - df[k].len
       df[k] = df[k].add nullColumn(nFill)
 
-proc strTabToDf*(t: OrderedTable[string, seq[string]]): DataFrame =
+proc strTabToDf*(t: OrderedTable[string, seq[string]]): DataFrame[Column] =
   ## Creates a data frame from a table of seq[string].
   ##
   ## Note 1: This is mostly used for the old `readCsv` procedure, which is now called
@@ -503,11 +503,11 @@ proc strTabToDf*(t: OrderedTable[string, seq[string]]): DataFrame =
     result.len = max(result.data[k].len, result.len)
   result.extendShortColumns()
 
-proc valTabToDf*(t: OrderedTable[string, seq[Value]]): DataFrame =
+proc valTabToDf*(t: OrderedTable[string, seq[Value]]): DataFrame[Column] =
   ## Creates a data frame from a table of `seq[Value]`.
   ##
   ## Note: This is also mainly a fallback option for old code.
-  result = DataFrame(len: 0)
+  result = newDataFrame()
   for k, v in t:
     result[k] = v.toColumn
     result.len = max(v.len, result.len)
@@ -551,7 +551,7 @@ proc assignAdjust[T](df: var DataFrame, name: string, s: T) =
   asgn(df, name, col)
   df.len = max(df.len, col.len)
 
-proc maybeToDf[T](s: T, name = ""): DataFrame =
+proc maybeToDf[T](s: T, name = ""): DataFrame[Column] =
   ## Attempts to convert the given typed argument to a valid `DataFrame`.
   ## If one of a few known types are found, dispatches to the correct procedure.
   ## Else attempts to generate a new `DataFrame` using `assignAdjust`, which may
