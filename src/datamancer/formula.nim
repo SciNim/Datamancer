@@ -129,7 +129,17 @@ proc isGeneric(n: NimNode): bool =
   ## given a node that represents a type, check if it's generic by checking
   ## if the symbol or bracket[symbol] is notin `Dtypes`
   case n.kind # assume generic is single symbol. Will fail for longer!
-  of nnkSym, nnkIdent: result = n.strVal.len == 1#n.strVal notin DtypesAll
+  of nnkSym, nnkIdent:
+    ## the generic check for an ident / sym checks for `[` and `]` and / or single
+    ## generic type name. This is a bit brittle for user defined types with a single letter
+    ## of course, but for now...
+    let nStr = n.strVal
+    if "[" in nStr:
+      let idx = find(nStr, "[")
+      doAssert nStr.len > idx + 2
+      if nStr[idx + 2] == ']': result = true
+    elif nStr.len == 1:
+      result = true
   of nnkBracketExpr: result = n[1].strVal.len == 1 # notin DtypesAll
   of nnkEmpty: result = true # sort of generic...
   else: error("Invalid call to `isGeneric` for non-type like node " &
@@ -497,13 +507,22 @@ proc addColRef(n: NimNode, typeHint: FormulaTypes, asgnKind: AssignKind): seq[As
     var dtypeOverride = dtype
     var resTypeOverride = resType
     if n.len == 3:
-      #doAssert n[2].kind in {nnkSym, nnkIdent} and
-      #  n[2].strVal in DtypesAll, "Type to read as needs to " &
-      #  "be a supported type: " & $Dtypes & ", but is " & $n[2].repr
+      ## XXX: Since we now cannot base the valid types on the known valid types, instead we
+      ## should add this to something so that we can either:
+      ## - extend the required Column type (e.g. user wants to read `Foo`, then Column must be
+      ##   `ColumnFoo*`)
+      ## - error if the determined Column type does not allow for this.
+      ## Latter seems illogical to me right now, as the formula itself doesn't know anything about
+      ## types (that's why we have a DF argument to `compileFn` after all).
+      ## Could check for that DF type though!
+      ##
+      ## TODO: write test checking that we can hand a DF to compileFn with a type X and we try
+      ## to read a type Y. Should CT error iff a DF is handed. Else extend notion of required
+      ## type?
       dtypeOverride = n[2]
-      #if resTypeOverride.kind == nnkEmpty:
-      #  # use input type as return type as well
-      #  resTypeOverride = dtypeOverride
+      if resTypeOverride.kind == nnkEmpty:
+        # use input type as return type as well
+        resTypeOverride = dtypeOverride
     echo "=======+++++++++++++++++++++ A COL TYPE ", dtypeOverride.repr, " for ", n[1].repr
     result.add Assign(asgnKind: asgnKind,
                       node: n,
@@ -545,9 +564,10 @@ proc typeAcceptable(n: NimNode): bool =
   case n.kind
   of nnkIdent, nnkSym:
     let nStr = n.strVal
-    if not n.isGeneric: # in DtypesAll:
+    let typIsGeneric = n.isGeneric
+    if not typIsGeneric: # in DtypesAll:
       result = true
-    elif nStr.startsWith("Tensor"): # and
+    elif nStr.startsWith("Tensor") and not typIsGeneric: # and
       #   nStr.dup(removePrefix("Tensor["))[0 ..< ^1] in DtypesAll:
       ## XXX: DtypesAll not allowed here, otherwise might override explicit type hints!
       # stringified type `Tensor[int, float, ...]`. Check is a bit of a hack
@@ -1117,6 +1137,10 @@ macro compileFormulaImpl*(rawName: static string,
       arg.colType = fct.typeHint.inputType.get
     if fct.typeHint.resType.isSome:
       arg.resType = fct.typeHint.resType.get
+
+    ## XXX: extend to check whether we have an input DF for type information. If so and if
+    ## user has given explicit type hint for an idx/col call, check that the two pieces of
+    ## info match. Else CT error!
 
     # check if any is `Empty` or column type not acceptable, if so error out at CT
     if arg.colType.kind == nnkEmpty or arg.resType.kind == nnkEmpty:
