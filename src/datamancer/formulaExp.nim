@@ -47,7 +47,7 @@ type
     generateLoop*: bool # only of interest for `fkScalar`. Means instead of generating a
                         # single `res = %~ <user body>` statement, generate a for loop w/ accumulation
     df*: Option[NimNode] # the (optional) DataFrame from which to deduce the type of the closure argument DF
-    dfType*: NimNode # the extracted/default type of the `DataFrame` argument to the closure
+    dfType*: Option[NimNode] # the extracted/default type of the `DataFrame` argument to the closure
     colResType*: NimNode # the returned `Column` type of a `fkVektor` closure (usually `Column`)
   ## `Lift` stores a node which needs to be lifted out of a for loop, because it performs a
   ## reducing operation on a full DF column. It will be replaced by `liftedNode` in the loop
@@ -139,6 +139,21 @@ proc sortTypes*(s: seq[string]): seq[string] =
 
 proc sortTypes*(s: seq[NimNode]): seq[string] =
   result = s.filterIt(it.isValidType).mapIt(it.strVal).sortTypes()
+proc accumulateTypes*(p: Preface): seq[string] =
+  ## Returns a sorted sequence of all distinct types other than `DtypesAll` found in
+  ## the preface input and output types.
+  ##
+  ## This is used to determine the required `ColumnFoo|Bar|Baz` type of the formula
+  ## purely based on the used input / output types to not require the data frame
+  ## argument to formulas in many cases.
+  for a in p.args:
+    let aC = a.colType.strVal
+    if aC notin DtypesAll:
+      result.add aC
+    let aR = a.resType.strVal
+    if aR notin DtypesAll:
+      result.add aR
+  result = result.sortTypes()
 
 proc isColumnType*(n: NimNode): bool =
   case n.kind
