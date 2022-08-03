@@ -1748,17 +1748,7 @@ proc mutateInplace*[C: ColumnLike; U](df: var DataTable[C], fns: varargs[Formula
   else:
     df.mutateImpl(fns, dropCols = false)
 
-proc extractFormulaName(n: NimNode): string =
-  ## Only call from `investigateFormula`!
-  doAssert n.kind == nnkIdentDefs
-
-macro investigateFormula(f: typed): untyped =
-  echo "INVESTIGATE: ", f.treerepr
-  echo f.getTypeImpl.repr
-  echo f[0].getImpl.treerepr
-  echo f[0].getImpl.repr
-
-proc mutate*[C: ColumnLike](df: DataTable[C], fns: varargs[Formula[C]]): DataTable[C] =
+proc mutate*[C: ColumnLike; U: ColumnLike](df: DataTable[C], fns: varargs[Formula[U]]): DataTable[U] =
   ## Returns the data frame with additional mutated columns, described
   ## by the functions `fns`.
   ##
@@ -1797,11 +1787,10 @@ proc mutate*[C: ColumnLike](df: DataTable[C], fns: varargs[Formula[C]]): DataTab
       doAssert "(+ x y)" in dfRes
       doAssert dfRes["(+ x y)", int] == [11,13,15].toTensor
 
-  result = df.shallowCopy()
-  result.mutateInplace(fns)
-
-proc mutate*[C: ColumnLike; U: not C](df: DataTable[C], fns: varargs[Formula[U]]): DataTable[U] =
-  result = df.convertDataFrame(U)
+  when C is U:
+    result = df.shallowCopy()
+  else:
+    result = df.convertDataFrame(U)
   result.mutateInplace(fns)
 
 macro mutate2*(df, fn: untyped): untyped =
