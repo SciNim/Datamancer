@@ -271,7 +271,7 @@ proc genRecCase*(enumTyp: NimNode): NimNode =
       )
     )
 
-macro getColType*(types: varargs[typed]): untyped =
+macro colType*(types: varargs[typed]): untyped =
   let typs = bracketToSeq(types)
   let typName = "Column" & genCombinedTypeStr(typs)
   if typName in TypeNames:
