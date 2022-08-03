@@ -359,9 +359,9 @@ proc nativeColKind*(col: Column): ColKind =
   ## ``not`` equal to the `kind` field of the column!
   result = col.toValueKind.toColKind # a back and forth
 
-proc toNimType*(colKind: ColKind): string =
+proc toNimType*[C: ColumnLike](c: C): string =
   ## returns the string name of the underlying data type of the column kind
-  case colKind
+  case c.kind
   of colFloat: result = "float"
   of colInt: result = "int"
   of colString: result = "string"
@@ -369,7 +369,10 @@ proc toNimType*(colKind: ColKind): string =
   of colObject: result = "object"
   of colConstant: result = "constant"
   of colNone: result = "null"
-  of colGeneric: result = "generic" # XXX: replace by macro at callsite
+  of colGeneric:
+    var typ = $c.gkKind
+    typ.removePrefix("gk")
+    result = "generic[" & typ & "]"
 
 template withNativeTensor*[C: ColumnLike](c: C,
                                           valName: untyped,
@@ -1000,7 +1003,7 @@ liftScalarToColumn(max)
 
 proc pretty*(c: ColumnLike): string =
   ## pretty prints a Column
-  result = &"Column of type: {toNimType(c.kind)} with length: {c.len}"
+  result = &"Column of type: {toNimType(c)} with length: {c.len}"
   if c.kind != colNone:
     result.add "\n"
     withNativeTensor(c, t):
@@ -1053,7 +1056,7 @@ template map_inline*(c: Column, body: untyped): Column =
       ## Cannot raise a CT error unfortunately I think, because this branch will always be compiled
       ## for one of the column types
       raise newException(Exception, "Column is of invalid type for map body `" & $(astToStr(body)) &
-        "` for dtype of column: " & $(c.kind.toNimType))
+        "` for dtype of column: " & $(c.toNimType))
     res
 
 proc lag*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noinit.} =
