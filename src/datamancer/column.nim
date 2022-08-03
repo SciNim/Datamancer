@@ -120,30 +120,6 @@ proc getColumnImpl(n: NimNode): NimNode =
     echo n.treerepr
     error("invalid")
 
-macro getGenericFieldType(c: typed): untyped =
-  # returns the type of the generic field of the given column
-  let cTyp = c.getColumnImpl()#c.getType[1].getImpl # required to check that `dtype` matches this type
-  if cTyp.kind != nnkNilLit:
-    let genBranch = getGenericTypeBranch(cTyp)
-    echo genBranch.treerepr
-    let innerTyp = genBranch[1][1][1]
-    result = quote do:
-      `innerTyp`
-
-macro hasGenericField(c: typed): untyped =
-  # returns the type of the generic field of the given column
-  let cTyp = c.getColumnImpl()#c.getType[1].getImpl # required to check that `dtype` matches this type
-  #echo "CTYP ", cTyp.treerepr
-  if cTyp.kind != nnkNilLit:
-    let genBranch = getGenericTypeBranch(cTyp)
-    if genBranch[1].kind == nnkIdentDefs:
-      result = newLit true
-    else:
-      result = newLit false
-  else:
-    result = newLit false
-  echo result.treerepr
-
 template `%~`*(v: Value): Value = v
 proc pretty*(c: ColumnLike): string
 proc compatibleColumns*[C: ColumnLike](c1, c2: C): bool {.inline.}
@@ -154,18 +130,7 @@ func high*(c: Column): int = c.len - 1
 
 func isConstant*(c: Column): bool = c.kind == colConstant
 
-macro printType(t: typed): untyped =
-  echo t.getType.treerepr
-  echo t.getImpl.treerepr
-  echo t.getTypeImpl.treerepr
-  echo t.getTypeInst.treerepr
-
-#func len*[T](t: Tensor[T]): int = t.size.int
-
-#macro resolveAlias(t: typed):
-
 template makeColumn(s, T: typed): untyped =
-  #type retTyp = patchColumn(T)
   var result = patchColumn(T)(kind: colGeneric, len: s.len) #
   when typeof(s) is Tensor:
     assignField(result, s)
@@ -173,7 +138,6 @@ template makeColumn(s, T: typed): untyped =
     let t = s.toTensor
     assignField(result, t)
   result
-  #printType(result)
 
 proc assignData*[C: ColumnLike; U](c: var C, data: Tensor[U]) =
   ## Unsafe if `data` does not match `c's` kind!
@@ -218,7 +182,11 @@ proc toColumn*[T: SupportedTypes](t: Tensor[T]): Column =
   #elif T isnot seq and T isnot Tensor:
   #  ## generate a new type and return it
   #  result = makeColumn(t)
-  else: {.error: "The type " & $T & " is not supported!".}
+  else:
+    ## XXX: this needs to be a better message, but currently the real usage is still
+    ## a bit weird.
+    {.error: "The type " & $T & " is not supported in a `Column`. To store it " &
+      "in a DataFrame, generate a `Column` derived type using `genColumn(" & $T & ")".}
 
 proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
   when T is SomeInteger:
@@ -708,7 +676,6 @@ proc `[]`*[C: ColumnLike; T](c: C, idx: int, dtype: typedesc[T]): T =
     of colObject: result = c.oCol[idx]
     of colConstant: result = c.cCol
     of colGeneric:
-      echo "WARN: Accessed column is generic. Treating return value as Value of VString!"
       # get generic type of the given `ColumnLike`
       withCaseStmt(c, gk, C):
         let val {.inject.} = c.gk[idx]
