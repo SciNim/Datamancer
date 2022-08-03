@@ -1514,28 +1514,6 @@ proc relocate*[C: ColumnLike; T: string | Formula[C]](df: DataTable[C], cols: se
   ## Relocates the given columns (possibly renaming them) in the DataFrame
   result = df.select(cols)
 
-proc selectTensors[C: ColumnLike](df: DataTable[C], keys: seq[string]): seq[Tensor[Value]] =
-  ## Returns a subset of the `df` containing all given column of the `keys`
-  ## in a sequence of `Tensor[Value]`.
-  ##
-  ## Used as a workaround to issue #12.
-  result = newSeq[Tensor[Value]](keys.len)
-  for i, k in keys:
-    result[i] = df[k, Value]
-
-proc row(cols: seq[Tensor[Value]], idx: int): seq[Value] =
-  ## From the result of `selectTensors`, returns a single `seq[Value]` of the
-  ## "row" at index `idx`.
-  result = newSeq[Value](cols.len)
-  for i, col in cols:
-    result[i] = col[idx]
-
-proc assignRow(row: var seq[Value], cols: seq[Tensor[Value]], idx: int) =
-  ## From the result of `selectTensors`, assigns the mutable `seq[Value]` the values for
-  ## "row" at index `idx`.
-  for i, col in mpairs(row):
-    col = cols[i][idx]
-
 proc arrangeSortImpl[T](toSort: var seq[(int, T)], order: SortOrder) =
   ## sorts the given `(index, Value)` pair according to the `Value`
   toSort.sort(
@@ -1708,22 +1686,6 @@ proc calcNewConstColumnFromScalar*[C: ColumnLike; U](df: DataTable[C], fn: Formu
   ## This is not indented for the user facing API. It is used internally in `ggplotnim`.
   assert fn.kind == fkScalar
   result = (fn.valName, C.constantColumn(fn.fnS(df), df.len))
-
-proc assignFormulaCol[C: ColumnLike; T: string | Formula](df: var DataTable[C], frm: DataTable[C], key: T) =
-  ## Helper that assigns the given string or Formula column from `frm` to `df` taking care of
-  ## possibly renaming.
-  when type(T) is string:
-    df[key] = frm[key]
-  else:
-    case key.kind
-    of fkVariable:
-      let col = key.val.toStr
-      df[col] = frm[col]
-    of fkAssign:
-      df[key.lhs] = frm[key.rhs]
-    else:
-      raise newException(FormulaMismatchError, "Formula `" & $key & "` of kind `" & $key.kind & "` not allowed " &
-        "for selection.")
 
 proc mutateImpl[C: ColumnLike](df: var DataTable[C], fns: varargs[Formula[C]],
                                dropCols: static bool) =

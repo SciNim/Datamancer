@@ -52,7 +52,6 @@ proc getInnerType*(n: NimNode, last = newEmptyNode()): NimNode =
   of nnkSym:
     let nstr = n.strVal.normalize
     if nstr.len == 1 or "gensym" in nstr or "uniontype" in nstr: # generic or gensymm'd symbol, skip
-      #echo n.getTypeImpl.treerepr
       if last.kind != nnkEmpty and last.strVal == n.strVal:
         # use typeimpl
         result = n.getTypeImpl.getInnerType(last = n)
@@ -71,19 +70,10 @@ proc getInnerType*(n: NimNode, last = newEmptyNode()): NimNode =
     result = result.stripObject()
   of nnkHiddenDeref, nnkVarTy:
     result = n[0].getInnerType()
-  #of nnkHiddenStdConv:
-  #  doAssert n[0].kind == nnkBracket
-  #  result =
   else:
-    echo n.treerepr
     error("Invalid")
 
 proc resolveGenerics*(n: NimNode): NimNode =
-  #echo "RESOLVE ", n.typeKind, " is ", n.treerepr
-  #echo "RESOLVE ", n.getTypeImpl.treerepr, " is "
-  #echo "RESOLVE ", n.getTypeInst.treerepr, " is "
-  #echo "RESOLVE ", n.getType.treerepr, " is "
-  #echo "RESOLVE ", n.getImpl.treerepr, " is "
   if n.typeKind == ntyTypeDesc:
     # safe to call `getTypeImpl`
     result = n.getTypeInst[1].resolveGenerics
@@ -92,14 +82,13 @@ proc resolveGenerics*(n: NimNode): NimNode =
     doAssert typ.kind == nnkRefTy
     result = typ[0].stripObject
   else:
-    error("Invalid!! " & $n.treerepr)
-  echo "RESULT Resolve Generics ", result.repr
+    error("Invalid node kind " & $n.kind & " encountered when trying to " &
+      "resolve generic type for node: " & n.repr)
 
 proc bracketToSeq*(types: NimNode): seq[NimNode] =
   doAssert types.kind == nnkBracket
   result = newSeq[NimNode]()
   for typ in types:
-    echo typ.treerepr
     case typ.kind
     of nnkHiddenStdConv:
       doAssert typ[0].kind == nnkEmpty and typ[1].kind == nnkBracket
@@ -127,8 +116,6 @@ proc getEnumField*(typ: string): NimNode =
     let name = enumFieldName(typ)
     result = ident(name)
     EnumFieldNames[typ] = result
-  for f, v in EnumFieldNames:
-    echo "ENUM FIELD NAMES ", f, " from ", typ
 
 proc getEnumField*(typ: NimNode): NimNode = typ.nodeRepr.getEnumField()
 
@@ -141,13 +128,11 @@ proc resolveTypedesc(n: NimNode): NimNode =
 macro getEnumField*(typ: typed): untyped = typ.getTypeInst.resolveTypedesc.getEnumField()
 
 proc getGenericField*(typ: string): NimNode =
-  echo "type ", typ
   if typ in GenericFieldNames:
     result = GenericFieldNames[typ]
   else:
     # generate and add to tab
     let name = genericFieldName(typ)
-    echo "GENERATED ", name, " from ", typ
     result = ident(name)
     GenericFieldNames[typ] = result
 
@@ -165,7 +150,6 @@ macro genTypeEnum*(types: varargs[typed]): untyped =
 
   result = nnkTypeDef.newTree(enumSym, newEmptyNode())
   var body = nnkEnumTy.newTree(newEmptyNode())
-  echo "TYPS ", typs.repr
   for typ in typs:
     let enumField = getEnumField(typ)
     body.add enumField
@@ -173,7 +157,6 @@ macro genTypeEnum*(types: varargs[typed]): untyped =
 
   # wrap in type section
   result = nnkTypeSection.newTree(result)
-  echo result.repr
 
 macro getTypeEnum*(types: varargs[typed]): untyped =
   let typs = bracketToSeq(types)
@@ -213,28 +196,14 @@ proc genCaseStmt*(n, knd, enumTyp, body: NimNode): NimNode =
   result = nnkCaseStmt.newTree(nnkDotExpr.newTree(n, ident(EnumCaseFieldName)))
   for typ in typs:
     let enumF = EnumFieldNames[typ]
-    #echo "typ ", typ.repr
     let genericF = GenericFieldNames[typ]
     var bodyLoc = kindToField(body, knd, genericF)
-    #bodyLoc = quote do:
-    #  when
-    #echo "BODY LOC ", bodyLoc.treerepr
-
     result.add nnkOfBranch.newTree(enumF, bodyLoc)
-  #echo "CASE ", result.repr
 
 macro fieldToType*(field: untyped): untyped =
-  #echo c.treerepr
-  #echo c.getTypeInst.treerepr
-  #let typ = resolveGenerics(c)
-  #echo typ.repr
-  echo field.treerepr
   ## XXX: fix me, replace by proper logic that replaces the given field name
   ## by the correct type! e.g. `gKiloGram` -> `KiloGram`, `gMeasurement_float_` -> `Measurement[float]` etc
   result = ident(field.strVal[1 ..< field.strVal.len])
-  echo "RESULT ", result.repr
-  #echo field.treerepr
-  #if true: quit()
 
 proc isEnumType*(t: NimNode): bool =
   if t.typeKind == ntyTypeDesc:
@@ -246,7 +215,6 @@ macro withCaseStmt*(n, knd: untyped, typ: typed, body: untyped): untyped =
   ## extract types from enum name and
   # check if `typ` is an enum type already, if not extract it
   var typ = typ.resolveGenerics()
-  echo typ.treerepr
   if not typ.isEnumType:
     if typ.strVal notin TypeToEnumType:
       doAssert typ.strVal == "Column" # means we're looking at a column. In this case do nothing
@@ -254,7 +222,6 @@ macro withCaseStmt*(n, knd: untyped, typ: typed, body: untyped): untyped =
     typ = TypeToEnumType[typ.strVal]
   doAssert typ.kind == nnkSym
   result = genCaseStmt(n, knd, typ, body)
-  echo "=============== withCaseStmt ===============\n", result.repr
 
 proc invertType(s: string): NimNode =
   ## Given a type name that was converted to a string by possibly replacing
@@ -263,7 +230,6 @@ proc invertType(s: string): NimNode =
     result = ident(s)
   else:
     let spl = s.split("_")
-    echo spl
     var r = ""
     for i, el in spl:
       if el.len > 0:
@@ -293,7 +259,6 @@ proc genRecCase*(enumTyp: NimNode): NimNode =
         gField, nnkBracketExpr.newTree(ident"Tensor", invertType(typ)), newEmptyNode()
       )
     )
-  echo result.repr
 
 macro genType*(enumTyp: typed): untyped =
   let comb = genCombinedTypeStr(typesFromEnum(enumTyp))
@@ -312,8 +277,6 @@ macro genType*(enumTyp: typed): untyped =
   var obj = nnkObjectTy.newTree(newEmptyNode(), newEmptyNode(), rec)
   result.add obj
   result = nnkTypeSection.newTree(result)
-  echo result.treerepr
-  echo result.repr
 
 macro getColType*(types: varargs[typed]): untyped =
   let typs = bracketToSeq(types)
