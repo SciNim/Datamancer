@@ -63,10 +63,11 @@ when true:
   #let dfNM = dfN.mutate(f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`})
 
 
-  let dfN = extendDataFrame(df, "kg", @[1.kg, 2.kg, 3.kg])
+  let dfN = extendDataFrame(df, "kg", @[3.kg, 1.kg, 2.kg])
   echo dfN.pretty(precision = 10)
 
   echo dfN.arrange("kg", SortOrder.Descending).pretty(precision = 10)
+  echo dfN.arrange("kg", SortOrder.Ascending).pretty(precision = 10)
 
   genColumn(KiloGram, KiloGram²)
   let fn2 = dfFn(dfN, f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`})
