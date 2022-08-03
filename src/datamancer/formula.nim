@@ -14,7 +14,7 @@ export foreach
 type
   ## NOTE: type of formula must only be single generic and must always match the
   ## *output* type!
-  FormulaNode*[T; U] = object
+  Formula*[C: ColumnLike] = object
     name*: string # stringification of whole formula. Only for printing and
                   # debugging
     case kind*: FormulaKind
@@ -28,12 +28,14 @@ type
     of fkVector:
       colName*: string
       resType*: ColKind
-      fnV*: proc(df: DataFrame[T]): U
+      fnV*: proc(df: DataTable[C]): C
     of fkScalar:
       valName*: string
       valKind*: ValueKind
-      fnS*: proc(c: DataFrame[T]): Value
+      fnS*: proc(c: DataTable[C]): Value
     of fkNone: discard
+
+  FormulaNode* = Formula[Column]
 
   FormulaMismatchError* = object of CatchableError
 
@@ -59,7 +61,7 @@ type
     inputTypes: seq[NimNode] # types of all arguments
     resType: Option[NimNode]
 
-proc hash*(fn: FormulaNode): Hash =
+proc hash*[C: ColumnLike](fn: Formula[C]): Hash =
   result = hash(fn.kind.int)
   result = result !& hash(fn.name)
   case fn.kind
@@ -76,11 +78,11 @@ proc hash*(fn: FormulaNode): Hash =
     result = result !& hash(fn.fnS)
   of fkNone: discard
 
-proc raw*(node: FormulaNode): string =
+proc raw*[C: ColumnLike](node: Formula[C]): string =
   ## prints the raw stringification of `node`
   result = node.name
 
-proc toUgly*[T; U](result: var string, node: FormulaNode[T, U]) =
+proc toUgly*[C: ColumnLike](result: var string, node: Formula[C]) =
   ## This is the formula stringification, which can be used to access the corresponding
   ## column of in a DF that corresponds to the formula
   case node.kind:
@@ -96,7 +98,7 @@ proc toUgly*[T; U](result: var string, node: FormulaNode[T, U]) =
     result = $node.valName
   of fkNone: discard
 
-proc `$`*[T; U](node: FormulaNode[T, U]): string =
+proc `$`*[C: ColumnLike](node: Formula[C]): string =
   ## Converts `node` to its string representation
   result = newStringOfCap(1024)
   toUgly(result, node)
@@ -203,10 +205,10 @@ proc compileVectorFormula(fct: FormulaCT): NimNode =
   let dfTyp = fct.dfType
   let colResType = fct.colResType
   result = quote do:
-    FormulaNode[`colResType`, `colResType`](name: `rawName`,
-                                       colName: `colName`, kind: fkVector,
-                                       resType: toColKind(type(`dtype`)),
-                                       fnV: `fnClosure`)
+    Formula[`colResType`](name: `rawName`,
+                          colName: `colName`, kind: fkVector,
+                          resType: toColKind(type(`dtype`)),
+                          fnV: `fnClosure`)
   when defined(echoFormulas):
     echo result.repr
 
@@ -217,10 +219,10 @@ proc compileScalarFormula(fct: FormulaCT): NimNode =
   let dtype = fct.resType
   let C = ident(ColIdent)
   result = quote do:
-    FormulaNode[`C`, `C`](name: `rawName`,
-                valName: `valName`, kind: fkScalar,
-                valKind: toValKind(`dtype`),
-                fnS: `fnClosure`)
+    Formula[`C`](name: `rawName`,
+                 valName: `valName`, kind: fkScalar,
+                 valKind: toValKind(`dtype`),
+                 fnS: `fnClosure`)
   echo result.repr
   when defined(echoFormulas):
     echo result.repr
@@ -1038,7 +1040,7 @@ proc determineTypes(loop: NimNode, tab: Table[string, NimNode]): Preface =
 proc getGenericDataFrameType(n: NimNode): NimNode =
   case n.kind
   of nnkBracketExpr:
-    if n[0].strVal.normalize == "dataframe":
+    if n[0].strVal.normalize == "datatable":
       result = n[1]
     else:
       error("Invalid args : " & $n.treerepr)
@@ -1263,7 +1265,7 @@ proc compileFormula(n: NimNode, fullNode = false, df: NimNode = newEmptyNode()):
   var node = n
   ##
   ## If `df` is given, use the generic type of the DF to fill the closure argument's
-  ## type field. Otherwise default to `DataFrame[Column]`
+  ## type field. Otherwise default to `DataTable[Column]`
   echo n.treerepr
   echo df.treerepr
   var isAssignment = false
@@ -1325,17 +1327,17 @@ proc compileFormula(n: NimNode, fullNode = false, df: NimNode = newEmptyNode()):
       ## TODO: allow in formulaExp.nim
       let C = ident"Column"
       result = quote do:
-        FormulaNode[`C`, `C`](kind: fkVariable,
-                              name: `rawName`,
-                              val: %~ `formulaRhs`)
+        Formula[`C`](kind: fkVariable,
+                     name: `rawName`,
+                     val: %~ `formulaRhs`)
     else:
       ## TODO: allow in formulaExp.nim
       let C = ident"Column"
       result = quote do:
-        FormulaNode[`C`, `C`](kind: fkAssign,
-                              name: `rawName`,
-                              lhs: `formulaName`,
-                              rhs: %~ `formulaRhs`)
+        Formula[`C`](kind: fkAssign,
+                     name: `rawName`,
+                     lhs: `formulaName`,
+                     rhs: %~ `formulaRhs`)
   elif isAssignment:
     error("Assignment of unpure formulas (column reference in formula body) is " &
       "unsupported. Use a reducing `<<` or mapping `~` formula.")

@@ -7,7 +7,7 @@ type
 
   # where value is as usual
   # then
-  DataFrame*[T] = ref object
+  DataTable*[T] = ref object
     len*: int
     data*: OrderedTable[string, T] ## `T` is the column kind
     case kind*: DataFrameKind
@@ -16,6 +16,8 @@ type
       # a set of the categories
       groupMap*: OrderedTable[string, HashSet[Value]]
     else: discard
+
+  DataFrame* = DataTable[Column]
 
   DataFrameLike* = concept x
     x.len is int
