@@ -54,7 +54,6 @@ when true:
   defUnit(kg²)
   #genTypeEnum(KiloGram²)
   #type kg2Col = patchColumn(KiloGram²)
-  genColumn(KiloGram²)
   genColumn(Meter)
   #genTypeEnum(Meter)
   #type mCol = patchColumn(Meter)
@@ -94,6 +93,25 @@ when true:
   #  investigateFormula(f)
   #
   #foo(f{float -> KiloGram: "Kg" ~ `x`.kg})
+
+
+  type
+    Foo = object
+      x: string
+      val: float
+  proc `<`(f1, f2: Foo): bool = f1.val < f2.val
+  genColumn(Foo)
+  # accumulating types works to call mutate w/o df arg
+  var dFoo = colType(Foo).newDataTable()
+  dFoo["bar"] = @[Foo(x: "hello", val: 1.1), Foo(x: "world", val: 100.5)]
+  dFoo = dFoo.mutate(f{Foo -> float: "values" ~ `bar`.val})
+  echo dFoo.pretty(precision = 30)
+
+  # extend simply by accumulating types
+  ## WARNING: generating a column for a type that is an alias may cause problems!
+  genColumn(KiloGram²)
+  let df2 = df.mutate(f{int: "kg²" ~ `x`.kg²})
+  echo df2
 
 when false:
 
