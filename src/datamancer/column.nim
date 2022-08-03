@@ -218,11 +218,8 @@ proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
                gkKind: enumField(C, T))
     assignData(result, t)
 
-proc toColumn*[T: not SupportedTypes](t: openArray[T]): auto =
-  result = makeColumn(t, getTypeEnum(T))
-
-proc toColumn*[T: not SupportedTypes](t: Tensor[T]): auto =
-  result = makeColumn(t, getTypeEnum(T))
+proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: openArray[T]): C =
+  result = C.toColumn(t.toTensor())
 
 type
   ScalarLike = concept x
@@ -410,9 +407,6 @@ template withNativeTensor*[C: ColumnLike](c: C,
 proc toColumn*[C: ColumnLike; U: ColumnLike](_: typedesc[C], c: U): C =
   withNativeTensor(c, t):
     result = toColumn(C, t)
-
-proc toColumn*[C: ColumnLike; U: seq](_: typedesc[C], s: U): C =
-  result = toColumn(C, toTensor(s))
 
 proc combinedColKind*[C: ColumnLike](c: seq[C]): ColKind =
   if c.allIt(it == c[0]):

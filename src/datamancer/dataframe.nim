@@ -311,7 +311,7 @@ proc `[]=`*[C: ColumnLike; U: Tensor | seq | array](df: var DataTable[C], k: str
   ## If the length of the input `t` does not match the existing DF's length, a `ValueError`
   ## is raised.
   # XXX: assert `U` fits into `df`. Else raise CT error!
-  df[k] = toColumn t
+  df[k] = C.toColumn(t)
 
 proc `[]=`*[C: ColumnLike; T](df: var DataTable[C], k: string, idx: int, val: T) {.inline.} =
   ## A low-level helper to assign a value `val` of type `T` directly to column `k` in
