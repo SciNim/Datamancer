@@ -609,7 +609,7 @@ proc generateClosure*(fct: FormulaCT): NimNode =
   of fkVector:
     params = [fct.colResType,
               nnkIdentDefs.newTree(ident(DfIdent),
-                                   nnkBracketExpr.newTree(ident"DataFrame", dfTyp),
+                                   nnkBracketExpr.newTree(ident"DataTable", dfTyp),
                                    newEmptyNode())]
   of fkScalar:
     when (NimMajor, NimMinor, NimPatch) < (1, 5, 0):
@@ -619,7 +619,7 @@ proc generateClosure*(fct: FormulaCT): NimNode =
     # to avoid clashes with other `Value` objects, fully clarify we mean ours
     params = [valueId,
               nnkIdentDefs.newTree(ident(DfIdent),
-                                   nnkBracketExpr.newTree(ident"DataFrame", dfTyp),
+                                   nnkBracketExpr.newTree(ident"DataTable", dfTyp),
                                    newEmptyNode())]
   else:
     error("Invalid FormulaKind `" & $(fct.funcKind.repr) & "` in `convertLoop`. Already handled " &

@@ -410,7 +410,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
                       skipInitialSpace = true,
                       quote = '"',
                       maxGuesses = 20,
-                      lineBreak = '\n', eat = '\r'): DataFrame[Column] =
+                      lineBreak = '\n', eat = '\r'): DataFrame =
   ## Implementation of the CSV parser that works on a data array of chars.
   ##
   ## `maxGuesses` is the maximum number of rows to look at before we give up
@@ -558,7 +558,7 @@ proc parseCsvString*(csvData: string,
                      maxGuesses = 20,
                      lineBreak = '\n',
                      eat = '\r'
-                    ): DataFrame[Column] =
+                    ): DataFrame =
   ## Parses a `DataFrame` from a string containing CSV data.
   ##
   ## `toSkip` can be used to skip optional characters that may be present
@@ -599,7 +599,7 @@ proc readCsvFromUrl(url: string,
               colNames: seq[string] = @[],
               skipInitialSpace = true,
               quote = '"'
-             ): DataFrame[Column] =
+             ): DataFrame =
   ## Reads a DF from a web URL (which must contain a CSV file)
   var client = newHttpClient()
   return parseCsvString(client.getContent(url), sep, header, skipLines, toSkip, colNames,
@@ -616,7 +616,7 @@ proc readCsv*(fname: string,
               maxGuesses = 20,
               lineBreak = '\n',
               eat = '\r'
-             ): DataFrame[Column] =
+             ): DataFrame =
   ## Reads a DF from a CSV file or a web URL using the separator character `sep`.
   ##
   ## `fname` can be a local filename or a web URL. If `fname` starts with
@@ -693,7 +693,7 @@ proc readCsvAlt*(fname: string,
   result = s.readCsv(sep, header, skipLines, colNames, fname = fname)
   s.close()
 
-proc writeCsv*[T](df: DataFrame[T], filename: string, sep = ',', header = "",
+proc writeCsv*[C: ColumnLike](df: DataTable[C], filename: string, sep = ',', header = "",
                precision = 4) =
   ## writes a DataFrame to a "CSV" (separator can be changed) file.
   ## `sep` is the actual separator to be used. `header` indicates a potential
@@ -714,7 +714,7 @@ proc writeCsv*[T](df: DataFrame[T], filename: string, sep = ',', header = "",
     data.add "\n"
   writeFile(filename, data)
 
-proc showBrowser*[T](df: DataFrame[T], fname = "df.html", path = getTempDir(), toRemove = false) =
+proc showBrowser*[C: ColumnLike](df: DataTable[C], fname = "df.html", path = getTempDir(), toRemove = false) =
   ## Displays the given DataFrame as a table in the default browser.
   ##
   ## Note: the HTML generation is not written for speed at this time. For very large

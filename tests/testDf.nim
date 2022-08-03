@@ -297,7 +297,7 @@ suite "Column":
       check exp[2, string] == "" # default(string)
       check exp.toTensor(string) == ["2", "3", ""].toTensor
 
-suite "DataFrame parsing":
+suite "DataTable parsing":
   proc cmpElements[T](s1, s2: seq[T]): bool =
     # comparse the two seq, while properly handling `NaN`
     result = true
@@ -446,7 +446,7 @@ b,,foo
     check df["(Name) Additional name if exists"].kind == colObject
     check df["(Name) Additional name if exists", Value][0] == null()
 
-suite "DataFrame tests":
+suite "DataTable tests":
 
   test "`toDf` is no-op for DF":
     let df = toDf(toDf(readCsv("data/mpg.csv")))
@@ -1056,7 +1056,7 @@ suite "DataFrame tests":
 
   test "Pretty printing of DFs":
     var
-      # need the data as two sequences (well actually as a DataFrame, but that is
+      # need the data as two sequences (well actually as a DataTable, but that is
       # created most easily from two or more sequences).
       x: seq[float]
       y: seq[float]
@@ -1494,8 +1494,8 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     check almostEqual(reduce(f{float: 235 / mean(c"hwy")}, mpg).toFloat, 10.0255, 1e-3)
 
   test "Allow `add` if first argument is still uninitialized":
-    # uninitialized data frame (DataFrame is ref object)
-    var df: DataFrame[Column]
+    # uninitialized data frame (DataTable is ref object)
+    var df: DataTable[Column]
     check df.isNil
     let dfToAdd = toDf({ "x" : @[1, 2, 3],
                              "y" : @[4, 5, 6] })
