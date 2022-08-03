@@ -105,6 +105,20 @@ proc `%~`*[T: not Value](s: openArray[T]): seq[Value] =
 
 template `%~`*(s: openArray[Value]): seq[Value] = @s
 
+proc `%~`*[T: enum](x: T): Value = %~ ($x)
+
+proc `%~`*[T: object](x: T): Value =
+  ## Turns the given object into a VObject representation
+  result = newVObject()
+  for field, val in fieldPairs(x):
+    result[field] = %~ val
+
+proc `%~`*[T: ref object](x: T): Value =
+  if x.isNil:
+    result = null()
+  else:
+    result = %~(x[])
+
 proc toObject*(s: seq[(string, Value)]): Value =
   ## converts the given sequence to an object
   ## This is only used to store the result of the `groups` iterator as a
