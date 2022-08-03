@@ -70,42 +70,17 @@ proc getGenericTypeBranch(n: NimNode): NimNode =
   of nnkObjectTy: result = n.getRecList.getGenericTypeBranch()
   else: error("Invalid branch: " & $n.kind)
 
-#macro genType*(enumTyp: typed): untyped =
-#  let comb = genCombinedTypeStr(typesFromEnum(enumTyp))
-#  let typName = "Foo" & $comb
-#  let resTyp = genSym(nskType, typName)
-#  TypeNames[typName] = resTyp
-#  TypeToEnumType[typName] = enumTyp
-#  result = nnkTypeDef.newTree(resTyp, newEmptyNode())
-#  var rec = nnkRecList.newTree()
-#  # some common fields
-#  rec.add nnkIdentDefs.newTree(ident"name", ident"string", newEmptyNode())
-#
-#  # now add all enum fields
-#  rec.add genRecCase(enumTyp)
-#
-#  var obj = nnkObjectTy.newTree(newEmptyNode(), newEmptyNode(), rec)
-#  result.add obj
-#  result = nnkTypeSection.newTree(result)
-#  echo result.treerepr
-#  echo result.repr
-
 macro patchColumn*(enumTyp: typed): untyped =
   # get base `Column` type information
-  echo "ENUM TYPE ", enumTyp.repr
   var typImp = getTypeInst(Column).getImpl
-  echo typImp.repr # treerepr
   var refTy = getRefType(typImp)
-  #echo refTy.treerepr
   var body = getRecList(refTy)
-  #echo body.treerepr
   var rec = getGenericTypeBranch(body) # get the `colGeneric` branch of the `Column` object
 
   let comb = genCombinedTypeStr(typesFromEnum(enumTyp))
   let typName = "Column" & $comb
   if typName notin TypeNames:
     let colSym = genSym(nskType, typName)
-    echo "gen'd ", colSym.repr
     TypeNames[typName] = colSym
     TypeToEnumType[typName] = enumTyp
     rec[1] = nnkRecList.newTree(genRecCase(enumTyp))
@@ -116,33 +91,20 @@ macro patchColumn*(enumTyp: typed): untyped =
   else:
     result = TypeNames[typName]
   # else nothing to do, type exists
-  echo "RESULT patchColumn : ", result.repr
 
 macro genColumn*(types: varargs[typed]): untyped =
   result = quote do:
     genTypeEnum(`types`)
     patchColumn(getTypeEnum(`types`))
-  echo "GEN COLUMN\n", result.repr
 
 macro assignField(c, val: typed): untyped =
   # get the correct field name
-  #echo val.treerepr
-  #echo val.getType.treerepr
-  #echo val.getTypeImpl.treerepr
-  #echo val.getImpl.treerepr
-  #echo val.getTypeInst[1].getImpl.treerepr
-  echo "INNER START ", val.treerepr
-  echo val.getTypeInst.repr
-  let typ0 = val.getTypeInst.getInnerType() #c.getInnerType()
-  echo "INNER TYPE ", typ0.treerepr
-  let fn = getGenericField(typ0) #FieldNames[@[typ0.strVal]]
-  echo "FN ", fn.repr
+  let typ0 = val.getTypeInst.getInnerType()
+  let fn = getGenericField(typ0)
   result = quote do:
     `c`.`fn` = `val`
-  #echo fn.repr
 
 proc getColumnImpl(n: NimNode): NimNode =
-  #echo n.kind, " and ", n.repr
   case n.kind
   of nnkSym:
     if "column" in n.strVal.normalize:
@@ -161,22 +123,12 @@ proc getColumnImpl(n: NimNode): NimNode =
 macro getGenericFieldType(c: typed): untyped =
   # returns the type of the generic field of the given column
   let cTyp = c.getColumnImpl()#c.getType[1].getImpl # required to check that `dtype` matches this type
-  #echo "CTYP ", cTyp.treerepr
   if cTyp.kind != nnkNilLit:
     let genBranch = getGenericTypeBranch(cTyp)
     echo genBranch.treerepr
     let innerTyp = genBranch[1][1][1]
     result = quote do:
       `innerTyp`
-    echo "inner type ", innerTyp.repr
-  #let fn = genFieldName(typ0) # FieldNames[@[typ0.strVal]]
-  #let cTyp = c.getTypeInst # required to check that `dtype` matches this type
-  #
-  #if cTyp.hasFieldName(fn.strVal):
-  #  result = quote do:
-  #    `c`.`fn`
-  #else:
-  #  error("The given column of type " & $cTyp.strVal & " has no generic field of type " & $typ0.strVal)
 
 macro hasGenericField(c: typed): untyped =
   # returns the type of the generic field of the given column
