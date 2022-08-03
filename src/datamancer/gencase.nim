@@ -71,7 +71,7 @@ proc getInnerType*(n: NimNode, last = newEmptyNode()): NimNode =
   of nnkHiddenDeref, nnkVarTy:
     result = n[0].getInnerType()
   else:
-    error("Invalid")
+    error("Invalid node: " & n.treerepr)
 
 proc resolveGenerics*(n: NimNode): NimNode =
   if n.typeKind == ntyTypeDesc:
@@ -270,24 +270,6 @@ proc genRecCase*(enumTyp: NimNode): NimNode =
         gField, nnkBracketExpr.newTree(ident"Tensor", invertType(typ)), newEmptyNode()
       )
     )
-
-macro genType*(enumTyp: typed): untyped =
-  let comb = genCombinedTypeStr(typesFromEnum(enumTyp))
-  let typName = "Foo" & $comb
-  let resTyp = genSym(nskType, typName)
-  TypeNames[typName] = resTyp
-  TypeToEnumType[typName] = enumTyp
-  result = nnkTypeDef.newTree(resTyp, newEmptyNode())
-  var rec = nnkRecList.newTree()
-  # some common fields
-  rec.add nnkIdentDefs.newTree(ident"name", ident"string", newEmptyNode())
-
-  # now add all enum fields
-  rec.add genRecCase(enumTyp)
-
-  var obj = nnkObjectTy.newTree(newEmptyNode(), newEmptyNode(), rec)
-  result.add obj
-  result = nnkTypeSection.newTree(result)
 
 macro getColType*(types: varargs[typed]): untyped =
   let typs = bracketToSeq(types)
