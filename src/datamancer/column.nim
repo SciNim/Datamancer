@@ -117,7 +117,6 @@ proc getColumnImpl(n: NimNode): NimNode =
   of nnkCall: result = n.getType.getColumnImpl
   of nnkHiddenDeref: result = n[0].getColumnImpl
   else:
-    echo n.treerepr
     error("invalid")
 
 template `%~`*(v: Value): Value = v
