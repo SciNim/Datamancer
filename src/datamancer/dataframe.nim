@@ -521,7 +521,7 @@ proc convertDataFrame*[C: ColumnLike; U](df: DataTable[C], dtype: typedesc[U]): 
   when C is U: result = df
   else:
     #type unionType =
-    result = newDataFrameLike[unionType(C, U)]()
+    result = newDataFrameLike(unionType(C, U))
     echo "unionType ", unionType(C, U)
     for k in keys(df):
       result[k] = toColumn(unionType(C, U), df[k])
@@ -532,7 +532,7 @@ proc extendDataFrame*[C: ColumnLike; U](df: DataTable[C], key: string, arg: U): 
   ## join T + U to generate `df` return type
   #type retType = patchDataFrame(T)
   result = df.convertDataFrame(U)
-  result[key] = toColumn(unionType(T, U), arg) #convertToDfColType(toColumn(arg)
+  result[key] = toColumn(unionType(C, U), arg) #convertToDfColType(toColumn(arg)
 
 #proc extendDataFrame*[C: ColumnLike; U: not ColumnLike](df: DataTable[C], key: string, arg: U): auto =
 #  ## Given a type that is not a normal DF type, returns a new DF type that can store
@@ -1090,14 +1090,14 @@ proc assignStack*[C: ColumnLike](dfs: seq[DataTable[C]]): DataTable[C] =
   if dfs.len == 0: return C.newDataFrameLike()
   elif dfs.len == 1: return dfs[0]
   let df0 = dfs[0]
-  result = newDataFrame(df0.getKeys().len)
+  result = C.newDataFrameLike(df0.getKeys().len)
   # 1. determine required lengths of final columns
   var lengths = 0
   for df in dfs:
     inc lengths, df.len
   # 2. generate output columns of correct type and length
   for k in df0.getKeys():
-    result[k] = newColumn(df0[k].kind, lengths)
+    result[k] = C.newColumnLike(df0[k].kind, lengths)
     # 2a. if column is constant, already assign its value
     if df0[k].kind == colConstant:
       result[k].cCol = df0[k].cCol

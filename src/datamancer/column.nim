@@ -146,7 +146,7 @@ macro hasGenericField(c: typed): untyped =
 
 template `%~`*(v: Value): Value = v
 proc pretty*(c: ColumnLike): string
-proc compatibleColumns*(c1, c2: Column): bool {.inline.}
+proc compatibleColumns*[C: ColumnLike](c1, c2: C): bool {.inline.}
 # just a no-op
 template toColumn*[C: ColumnLike](c: C): C = c
 
@@ -235,8 +235,8 @@ proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
                     len: t.size)
   elif T is string or T is char:
     result = C(kind: colString,
-                    sCol: t.asType(string),
-                    len: t.size)
+               sCol: t.asType(string),
+               len: t.size)
   elif T is Value:
     result = C(kind: colObject,
                     oCol: t,
@@ -301,18 +301,18 @@ proc constantToFull*[C: ColumnLike](c: C): C =
 
 proc `[]`*[C: ColumnLike](c: C, slice: Slice[int]): C =
   case c.kind
-  of colInt: result = toColumn c.iCol[slice.a .. slice.b]
-  of colFloat: result = toColumn c.fCol[slice.a .. slice.b]
-  of colString: result = toColumn c.sCol[slice.a .. slice.b]
-  of colBool: result = toColumn c.bCol[slice.a .. slice.b]
-  of colObject: result = toColumn c.oCol[slice.a .. slice.b]
+  of colInt: result = C.toColumn c.iCol[slice.a .. slice.b]
+  of colFloat: result = C.toColumn c.fCol[slice.a .. slice.b]
+  of colString: result = C.toColumn c.sCol[slice.a .. slice.b]
+  of colBool: result = C.toColumn c.bCol[slice.a .. slice.b]
+  of colObject: result = C.toColumn c.oCol[slice.a .. slice.b]
   of colConstant:
     # for constant keep column, only adjust the length to the slice
     result = c
     result.len = slice.b - slice.a + 1
   of colGeneric:
     withCaseStmt(c, gk, C):
-      result = toColumn c.gk[slice.a .. slice.b]
+      result = C.toColumn c.gk[slice.a .. slice.b]
   of colNone: raise newException(IndexDefect, "Accessed column is empty!")
 
 proc newColumn*(kind = colNone, length = 0): Column =
@@ -574,7 +574,7 @@ proc valueTo*[T](t: Tensor[Value], dtype: typedesc[T],
       for i, idx in outputIdx:
         result[i] = t[idx]
 
-proc toTensor*[C: ColumnLike; T](c: C, dtype: typedesc[T],
+proc toTensor*[C: ColumnLike; T](c: C, _: typedesc[T],
                                  dropNulls: static bool = false): Tensor[T] =
   ## `dropNulls` only has an effect on `colObject` columns. It allows to
   ## drop Null values to get (hopefully) a valid raw Tensor
@@ -618,7 +618,7 @@ proc toTensor*[C: ColumnLike; T](c: C, dtype: typedesc[T],
   of colObject:
     result = c.oCol.valueTo(T, dropNulls = dropNulls)
   of colConstant:
-    result = c.constantToFull.toTensor(dtype, dropNulls)
+    result = c.constantToFull.toTensor(T, dropNulls)
   of colGeneric:
     result = getTensor(c, Tensor[T])
   of colNone: raise newException(ValueError, "Accessed column is empty!")
@@ -650,7 +650,7 @@ proc toTensor*[C: ColumnLike; T](c: C, slice: Slice[int], dtype: typedesc[T]): T
       when Tensor[T] is typeof(c.gk):
         result = c.gk[slice.a .. slice.b]
       else:
-        raise newException(ValueError, "Invalid types ! " & $U & " for " & $typeof(t.gk))
+        raise newException(ValueError, "Invalid types ! " & $T & " for " & $typeof(c.gk))
   of colNone: raise newException(ValueError, "Accessed column is empty!")
 
 proc `[]`*[C: ColumnLike; T](c: C, idx: int, dtype: typedesc[T]): T =
@@ -715,14 +715,14 @@ proc `[]`*[C: ColumnLike; T](c: C, idx: int, dtype: typedesc[T]): T =
         result = %~ val
     of colNone: raise newException(ValueError, "Accessed column is empty!")
 
-proc toObjectColumn*(c: Column): Column =
+proc toObjectColumn*[C: ColumnLike](c: C): C =
   ## returns `c` as an object column
   ## XXX: can't we somehow convert same slices of a tensor?
   var res = newTensor[Value](c.len)
   withNativeTensor(c, t):
     for idx in 0 ..< c.len:
       res[idx] = %~ (t[idx])
-  result = toColumn res
+  result = C.toColumn res
 
 proc `[]=`*[C: ColumnLike; T](c: var C, idx: int, val: T) =
   ## assign `val` to column `c` at index `idx`
@@ -828,14 +828,14 @@ proc `[]=`*[C: ColumnLike; T](c: var C, slice: Slice[int], t: Tensor[T]) =
       c.oCol[sa .. sb] = t.asValue()
   of colGeneric:
     withCaseStmt(c, gk, C):
-      when Tensor[T] is typof(c.gk):
+      when Tensor[T] is typeof(c.gk):
         c.gk[slice.a .. slice.b] = t
       else:
-        raise newException(ValueError, "Invalid types ! " & $U & " for " & $typeof(t.gk))
+        raise newException(ValueError, "Invalid types ! " & $T & " for " & $typeof(c.gk))
   of colNone:
     raise newException(ValueError, "Cannot assign a tensor to an empty column.")
 
-proc `[]=`*(c: var Column, slice: Slice[int], col: Column) =
+proc `[]=`*[C: ColumnLike](c: var C, slice: Slice[int], col: C) =
   let sa = slice.a.int
   let sb = slice.b.int
   if c.compatibleColumns(col):
@@ -881,7 +881,7 @@ template withNative2*(c1, c2: Column, idx1, idx2: int,
   of colConstant: raise newException(ValueError, "Accessed column is constant!")
   of colNone, colGeneric: raise newException(ValueError, "Accessed column is empty!")
 
-proc compatibleColumns*(c1, c2: Column): bool {.inline.} =
+proc compatibleColumns*[C: ColumnLike](c1, c2: C): bool {.inline.} =
   if c1.kind == c2.kind: result = true
   elif c1.kind in {colInt, colFloat} and
        c2.kind in {colInt, colFloat}:
@@ -1104,10 +1104,10 @@ proc lag*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noinit.} =
   result[n ..< t.size.int] = t[0 ..< hi]
   result[0 ..< n] = fill
 
-proc lag*(c: Column, n = 1): Column =
+proc lag*[C: ColumnLike](c: C, n = 1): C =
   ## Overload of the above for columns
   withNativeDtype(c):
-    result = toColumn lag(c.toTensor(dtype), n)
+    result = C.toColumn lag(c.toTensor(dtype), n)
 
 proc lead*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noinit.} =
   ## Leads the input tensor by `n`, i.e. returns a shifted tensor
@@ -1123,7 +1123,7 @@ proc lead*[T](t: Tensor[T], n = 1, fill: T = default(T)): Tensor[T] {.noinit.} =
   result[0 ..< hi] = t[n ..< t.size.int]
   result[hi ..< t.size.int] = fill
 
-proc lead*(c: Column, n = 1): Column =
+proc lead*[C: ColumnLike](c: C, n = 1): C =
   ## Overload of the above for columns
   withNativeDtype(c):
-    result = toColumn lead(c.toTensor(dtype), n)
+    result = C.toColumn lead(c.toTensor(dtype), n)
