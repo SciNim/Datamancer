@@ -1245,7 +1245,7 @@ proc filter[C: ColumnLike; T: seq[int] | Tensor[int]](col: C, filterIdx: T): C =
     result.len = filterIdx.len
   else:
     withNativeDtype(col):
-      filterImpl[C, T, dtype](result, col, filterIdx)
+      filterImpl[C, dtype, T](result, col, filterIdx)
 
 proc countTrue(t: Tensor[bool]): int {.inline.} =
   for el in t:
@@ -1342,7 +1342,7 @@ proc filterImpl[C: ColumnLike](df: DataFrame[C], conds: varargs[FormulaNode[C, C
     result = df
   else: doAssert false, "Invalid branch"
 
-proc filter*(df: DataFrame, conds: varargs[FormulaNode]): DataFrame =
+proc filter*[C: ColumnLike](df: DataFrame[C], conds: varargs[FormulaNode[C, C]]): DataFrame[C] =
   ## Returns the data frame filtered by the conditions given. Multiple conditions are
   ## evaluated successively and all only elements matching all conditions as true will
   ## remain. If the input data frame is grouped, the subgroups are evaluated individually.
@@ -1357,32 +1357,17 @@ proc filter*(df: DataFrame, conds: varargs[FormulaNode]): DataFrame =
   let df = df.shallowCopy # make a shallow copy, as otherwise we might modify the input
   case df.kind
   of dfGrouped:
-    var dfs = newSeq[DataFrame]()
+    var dfs = newSeq[DataFrame[C]]()
     var i = 0
     for (tup, subDf) in groups(df):
       var mdf = subDf.filterImpl(conds)
       for (str, val) in tup:
-        mdf[str] = constantColumn(val, mdf.len)
+        mdf[str] = C.constantColumn(val, mdf.len)
       dfs.add mdf
       inc i
     result = assignStack(dfs)
   else:
     result = df.filterImpl(conds)
-
-proc calcNewColumn*(df: DataFrame, fn: FormulaNode): (string, Column) =
-  ## Calculates a new column based on the `fn` given. Returns the name of the resulting
-  ## column (derived from the formula) as well as the column.
-  ##
-  ## This is not indented for the user facing API. It is used internally in `ggplotnim`.
-  result = (fn.colName, fn.fnV(df))
-
-proc calcNewConstColumnFromScalar*(df: DataFrame, fn: FormulaNode): (string, Column) =
-  ## Calculates a new constant column based on the scalar (reducing) `fn` given.
-  ## Returns the name of the resulting column (derived from the formula) as well as the column.
-  ##
-  ## This is not indented for the user facing API. It is used internally in `ggplotnim`.
-  assert fn.kind == fkScalar
-  result = (fn.valName, constantColumn(fn.fnS(df), df.len))
 
 proc assignFormulaCol[T: string | FormulaNode](df: var DataFrame, frm: DataFrame, key: T) =
   ## Helper that assigns the given string or Formula column from `frm` to `df` taking care of
@@ -1706,33 +1691,6 @@ proc arrange*[C: ColumnLike](df: DataFrame[C], by: varargs[string], order = Sort
         data = toColumn(C, res)
       result.asgn(k, data)
 
-proc filter*[C: ColumnLike](df: DataFrame[C], conds: varargs[FormulaNode[C, C]]): DataFrame[C] =
-  ## Returns the data frame filtered by the conditions given. Multiple conditions are
-  ## evaluated successively and all only elements matching all conditions as true will
-  ## remain. If the input data frame is grouped, the subgroups are evaluated individually.
-  ##
-  ## Both mapping and reducing formulas are supported, but each formula kind must return
-  ## a boolean value. In a case of a mismatch `FormulaMismatchError` is thrown.
-  runnableExamples:
-    let df = seqsToDf({ "x" : @[1, 2, 3, 4, 5], "y" : @["a", "b", "c", "d", "e"] })
-    let dfRes = df.filter(f{ `x` < 3 or `y` == "e" }) ## arbitrary boolean expressions supported
-    doAssert dfRes["x", int] == [1, 2, 5].toTensor
-    doAssert dfRes["y", string] == ["a", "b", "e"].toTensor
-
-  case df.kind
-  of dfGrouped:
-    var dfs = newSeq[DataFrame[C]]()
-    var i = 0
-    for (tup, subDf) in groups(df):
-      var mdf = subDf.filterImpl(conds)
-      for (str, val) in tup:
-        mdf[str] = C.constantColumn(val, mdf.len)
-      dfs.add mdf
-      inc i
-    result = assignStack(dfs)
-  else:
-    result = df.filterImpl(conds)
-
 proc calcNewColumn*[C: ColumnLike; U](df: DataFrame[C], fn: FormulaNode[U, U]): (string, U) =
   ## Calculates a new column based on the `fn` given. Returns the name of the resulting
   ## column (derived from the formula) as well as the column.
@@ -1918,11 +1876,11 @@ macro mutate2*(df, fn: untyped): untyped =
 #  result = df.convertDataFrame(U)
 #  result = result.mutate(fn)
 
-proc transmuteInplace*[T](df: var DataFrame[T], fns: varargs[FormulaNode[T, T]]) =
+proc transmuteInplace*[C: ColumnLike](df: var DataFrame[C], fns: varargs[FormulaNode[C, C]]) =
   ## Inplace variant of `transmute` below.
   case df.kind
   of dfGrouped:
-    var dfs = newSeq[DataFrame[T]]()
+    var dfs = newSeq[DataFrame[C]]()
     var i = 0
     for (tup, subDf) in groups(df):
       var mdf = subDf
@@ -1933,7 +1891,7 @@ proc transmuteInplace*[T](df: var DataFrame[T], fns: varargs[FormulaNode[T, T]])
   else:
     df.mutateImpl(fns, dropCols = true)
 
-proc transmute*[T](df: DataFrame[T], fns: varargs[FormulaNode[T, T]]): DataFrame[T] =
+proc transmute*[C: ColumnLike](df: DataFrame[C], fns: varargs[FormulaNode[C, C]]): DataFrame[C] =
   ## Returns the data frame cut to the columns created by `fns`, which
   ## should involve a calculation. To only cut to one or more columns
   ## use the `select` proc.
@@ -1959,7 +1917,7 @@ proc transmute*[T](df: DataFrame[T], fns: varargs[FormulaNode[T, T]]): DataFrame
   result = df.shallowCopy()
   result.transmuteInplace(fns)
 
-proc rename*[T](df: DataFrame[T], cols: varargs[FormulaNode[T, T]]): DataFrame[T] =
+proc rename*[C: ColumnLike](df: DataFrame[C], cols: varargs[FormulaNode[C, C]]): DataFrame[C] =
   ## Returns the data frame with the columns described by `cols` renamed to
   ## the names on the LHS of the given `FormulaNode`. All other columns will
   ## be left untouched.
@@ -1987,7 +1945,7 @@ proc rename*[T](df: DataFrame[T], cols: varargs[FormulaNode[T, T]]): DataFrame[T
         "of kind `fkAssign`, i.e. `\"foo\" <- \"bar\"`. Given formula " & $fn &
         "is of kind `" & $fn.kind & "`.")
 
-proc assign[T](df: var DataFrame[T], key: string, idx1: int, c2: T, idx2: int) =
+proc assign[C: ColumnLike](df: var DataFrame[C], key: string, idx1: int, c2: T, idx2: int) =
   ## Assigns the value in `df` in col `key` at index `idx1` to the value of
   ## index `idx2` of column `c2`
   ##
@@ -1995,7 +1953,7 @@ proc assign[T](df: var DataFrame[T], key: string, idx1: int, c2: T, idx2: int) =
   withNativeDtype(df[key]):
     df[key, idx1] = c2[idx2, dtype]
 
-proc innerJoin*[T](df1, df2: DataFrame[T], by: string): auto =
+proc innerJoin*[C: ColumnLike](df1, df2: DataFrame[C], by: string): auto =
   ## Returns a data frame joined by the given key `by` in such a way as to only keep
   ## rows found in both data frames.
   ##
@@ -2097,7 +2055,7 @@ proc toHashSet*[T](t: Tensor[T]): HashSet[T] =
   for el in t:
     result.incl el
 
-proc group_by*[T](df: DataFrame[T], by: varargs[string], add = false): auto =
+proc group_by*[C: ColumnLike](df: DataFrame[C], by: varargs[string], add = false): auto =
   ## Returns a grouped data frame grouped by all unique keys in `by`.
   ##
   ## Grouping a data frame is an ``almost`` lazy affair. It only calculates the groups
@@ -2121,7 +2079,7 @@ proc group_by*[T](df: DataFrame[T], by: varargs[string], add = false): auto =
   for key in by:
     result.groupMap[key] = toHashSet(result[key].toTensor(Value))
 
-proc summarize*[T](df: DataFrame[T], fns: varargs[FormulaNode[T, T]]): DataFrame[T] =
+proc summarize*[C: ColumnLike](df: DataFrame[C], fns: varargs[FormulaNode[C, C]]): DataFrame[C] =
   ## Returns a data frame with the summaries applied given by `fn`. They are applied
   ## in the order in which they are given.
   ##
@@ -2143,7 +2101,7 @@ proc summarize*[T](df: DataFrame[T], fns: varargs[FormulaNode[T, T]]): DataFrame
       doAssert dfRes.len == 1
       doAssert "mean(x)+sum(y)" in dfRes
 
-  result = newDataFrame(kind = dfNormal)
+  result = C.newDataFrameLike(kind = dfNormal)
   var lhsName = ""
   case df.kind
   of dfNormal:
@@ -2187,7 +2145,7 @@ proc summarize*[T](df: DataFrame[T], fns: varargs[FormulaNode[T, T]]): DataFrame
       result.asgn(k, toNativeColumn vals)
       result.len = vals.len
 
-proc count*[T](df: DataFrame[T], col: string, name = "n"): auto =
+proc count*[C: ColumnLike](df: DataFrame[C], col: string, name = "n"): DataFrame[C] =
   ## Counts the number of elements per type in `col` of the data frame.
   ##
   ## The counts are stored in a new column given by `name`.
@@ -2202,7 +2160,7 @@ proc count*[T](df: DataFrame[T], col: string, name = "n"): auto =
     doAssert dfRes["n", int] == [2, 2, 3].toTensor
 
   # TODO: handle already grouped dataframes.
-  result = DataFrame[T]()
+  result = C.newDataFrameLike()
   let grouped = df.group_by(col, add = true)
   var counts = newSeqOfCap[int](1000) # just start with decent size
   var keys = initOrderedTable[string, seq[Value]](grouped.groupMap.len)
@@ -2218,7 +2176,7 @@ proc count*[T](df: DataFrame[T], col: string, name = "n"): auto =
   result.asgn(name, toColumn counts)
   result.len = idx
 
-proc setDiff*[T](df1, df2: DataFrame[T], symmetric = false): auto =
+proc setDiff*[C: ColumnLike](df1, df2: DataFrame[C], symmetric = false): DataFrame[C] =
   ## Returns a `DataFrame` with all elements in `df1` that are ``not`` found in
   ## `df2`.
   ##
@@ -2226,7 +2184,7 @@ proc setDiff*[T](df1, df2: DataFrame[T], symmetric = false): auto =
   ##
   ## If `symmetric` is true, the symmetric difference of the dataset is
   ## returned instead, i.e. elements which are either not in `df1` ``or`` not in `df2`.
-  result = newDataFrame(df1.ncols)
+  result = C.newDataFrameLike(df1.ncols)
   #[
   Calculate custom hash for each row in each table.
   Keep var h1, h2 = seq[Hashes] where seq[Hashes] is hash of of row.
