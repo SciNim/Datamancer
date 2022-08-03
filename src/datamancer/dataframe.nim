@@ -1073,7 +1073,7 @@ proc add*[T](df: var DataFrame[T], dfToAdd: DataFrame[T]) =
        raise newException(ValueError, "All keys must match to add data frames!")
     df = bind_rows([("", df), ("", dfToAdd)])
 
-proc assignStack*[T](dfs: seq[DataFrame[T]]): auto =
+proc assignStack*[C: ColumnLike](dfs: seq[DataFrame[C]]): DataFrame[C] =
   ## Returns a data frame built as a stack of the data frames in the sequence.
   ##
   ## This is a somewhat unsafe procedure as it trades performance for safety. It's
@@ -1087,7 +1087,7 @@ proc assignStack*[T](dfs: seq[DataFrame[T]]): auto =
   ## All dataframes must have matching keys and column types. It should only
   ## be called from places where this is made sure as the point of the
   ## procedure is speeding up assignment for cases where we know this holds.
-  if dfs.len == 0: return newDataFrame()
+  if dfs.len == 0: return C.newDataFrameLike()
   elif dfs.len == 1: return dfs[0]
   let df0 = dfs[0]
   result = newDataFrame(df0.getKeys().len)
@@ -1135,7 +1135,7 @@ proc hashColumn(s: var seq[Hash], c: Column, finish: static bool = false) {.used
         else:
           s[idx] = !$(s[idx] !& hash(t[idx]))
 
-proc buildColHashes[T](df: DataFrame[T], keys: seq[string]): seq[seq[Value]] =
+proc buildColHashes[C: ColumnLike](df: DataFrame[C], keys: seq[string]): seq[seq[Value]] =
   ## Computes a sequence of `Value VObject` elements from the given
   ## columns. This is to avoid issue #12 (hash collisions if many input
   ## values present).
@@ -1158,7 +1158,7 @@ proc buildColHashes[T](df: DataFrame[T], keys: seq[string]): seq[seq[Value]] =
       row[j] = colCols[j][i]
     result[i] = row
 
-proc compareRows(cols: seq[Column], i, j: int): bool =
+proc compareRows[C: ColumnLike](cols: seq[C], i, j: int): bool =
   result = true
   for c in cols:
     withNativeDtype(c):
@@ -1222,6 +1222,8 @@ iterator groups*[C: ColumnLike](df: DataFrame[C], order = SortOrder.Ascending): 
     else:
       # should only happen for i == 0
       doAssert i == 0
+    if i > 0:
+      inc lastIdx
   # finally yield the last subgroup or the whole group, in case we only
   # have a single key
   yield (buildClassLabel(dfArranged, keys, dfArranged.high), dfArranged[startIdx .. dfArranged.high])
@@ -1238,14 +1240,14 @@ proc filterImpl[C: ColumnLike; T; U: seq[int] | Tensor[int]](resCol: var C, col:
       inc i
   resCol = toColumn(C, res)
 
-proc filter[C: ColumnLike; T: seq[int] | Tensor[int]](col: C, filterIdx: T): C =
+proc filter[C: ColumnLike; U: seq[int] | Tensor[int]](col: C, filterIdx: U): C =
   ## perform filterting of the given column `key`
   if col.kind == colConstant: # just return a "shortened" constant tensor
     result = col
     result.len = filterIdx.len
   else:
     withNativeDtype(col):
-      filterImpl[C, dtype, T](result, col, filterIdx)
+      filterImpl[C, dtype, U](result, col, filterIdx)
 
 proc countTrue(t: Tensor[bool]): int {.inline.} =
   for el in t:
@@ -1282,8 +1284,9 @@ proc applyFilterFormula[C: ColumnLike](df: DataFrame[C], fn: FormulaNode[C, C]):
     raise newException(FormulaMismatchError, "Given formula " & $fn.name & " is of unsupported kind " &
       $fn.kind & ". Only reducing `<<` and mapping `~` formulas are supported in `filter`.")
 
-proc filterToIdx*[T: seq[int] | Tensor[int]](df: DataFrame, indices: T,
-                                             keys: seq[string] = @[]): DataFrame =
+proc filterToIdx*[C: ColumnLike; T: seq[int] | Tensor[int]](
+  df: DataFrame[C], indices: T,
+  keys: seq[string] = @[]): DataFrame[C] =
   ## Filters the input dataframe to all rows matching the indices of `idx`.
   ##
   ## If the `keys` argument is empty, all columns are filtered.
@@ -1327,7 +1330,7 @@ proc filterImpl[C: ColumnLike](df: DataFrame[C], conds: varargs[FormulaNode[C, C
       # eval boolean scalar function on DF. Predicate decides to keep or drop full frame
       filterIdx = df.applyFilterFormula(c)
       if filterIdx.kind == colConstant and filterIdx.cCol == %~ false:
-        return newDataFrame()
+        return C.newDataFrameLike()
 
   case filterIdx.kind
   of colBool:
@@ -1706,28 +1709,23 @@ proc calcNewConstColumnFromScalar*[C: ColumnLike; U](df: DataFrame[C], fn: Formu
   assert fn.kind == fkScalar
   result = (fn.valName, C.constantColumn(fn.fnS(df), df.len))
 
-proc selectInplace*[T; U: string | FormulaNode](df: var DataFrame[T], cols: varargs[U]) =
-  ## Inplace variant of `select` below.
-  var toDrop = toHashSet(df.getKeys)
-  for fn in cols:
-    when type(U) is string:
-      toDrop.excl fn
+proc assignFormulaCol[C: ColumnLike; T: string | FormulaNode](df: var DataFrame[C], frm: DataFrame[C], key: T) =
+  ## Helper that assigns the given string or Formula column from `frm` to `df` taking care of
+  ## possibly renaming.
+  when type(T) is string:
+    df[key] = frm[key]
+  else:
+    case key.kind
+    of fkVariable:
+      let col = key.val.toStr
+      df[col] = frm[col]
+    of fkAssign:
+      df[key.lhs] = frm[key.rhs]
     else:
-      case fn.kind
-      of fkVariable: toDrop.excl fn.val.toStr
-      of fkAssign:
-        df.asgn(fn.lhs, df[fn.rhs])
-        toDrop.excl fn.lhs
-      else:
-        raise newException(FormulaMismatchError, "Formula `" & $fn & "` of kind `" & $fn.kind & "` not allowed " &
-          "for selection.")
-  # bind `items` for `HashSet` here to make it work in a module that does not import `sets`
-  when not defined(jit):
-    bind items
-  # now drop all required keys
-  for key in items(toDrop): df.drop(key)
+      raise newException(FormulaMismatchError, "Formula `" & $key & "` of kind `" & $key.kind & "` not allowed " &
+        "for selection.")
 
-proc select*[T; U: string | FormulaNode[T, T]](df: DataFrame[T], cols: varargs[U]): auto =
+proc select*[C: ColumnLike; T: string | FormulaNode[C, C]](df: DataFrame[C], cols: varargs[T]): DataFrame[C] =
   ## Returns the data frame cut to the names given as `cols`. The argument
   ## may either be the name of a column as a string, or a `FormulaNode`.
   ##
@@ -1738,10 +1736,12 @@ proc select*[T; U: string | FormulaNode[T, T]](df: DataFrame[T], cols: varargs[U
   ## The `FormulaNode` approach is mainly useful to select and rename a column at
   ## the same time using an assignment formula `<-`.
   ##
+  ## The column order of the resulting DF is the order of the input columns to `select`.
+  ##
   ## Note: string and formula node arguments ``cannot`` be mixed. If a rename is
   ## desired, all other arguments need to be given as `fkVariable` formulas.
   runnableExamples:
-    let df = seqsToDf({"Foo" : [1,2,3], "Bar" : [5,6,7], "Baz" : [1.2, 2.3, 3.4]})
+    let df = toDf({"Foo" : [1,2,3], "Bar" : [5,6,7], "Baz" : [1.2, 2.3, 3.4]})
     block:
       let dfRes = df.select(["Foo", "Bar"])
       doAssert dfRes.ncols == 2
@@ -1756,8 +1756,25 @@ proc select*[T; U: string | FormulaNode[T, T]](df: DataFrame[T], cols: varargs[U
       doAssert "Bar" notin dfRes
       doAssert "Baz" notin dfRes
 
-  result = df.shallowCopy()
-  result.selectInplace(cols)
+  result = C.newDataFrameLike(df.ncols, kind = df.kind)
+  for k in cols:
+    assignFormulaCol(result, df, k)
+  if df.kind == dfGrouped:
+    # check that groups are still in the DF, else raise
+    let grps = toSeq(keys(df.groupMap))
+    if not grps.allIt(it in result):
+      raise newException(ValueError, "Cannot select off (drop) a column the input data frame is grouped by!")
+
+  result.len = df.len
+
+proc selectInplace*[C: ColumnLike; T: string | FormulaNode](df: var DataFrame[C], cols: varargs[T]) =
+  ## Inplace variant of `select` above.
+  ##
+  ## Note: the implementation changed. Instead of implementing `select` based on
+  ## `selectInplace` by dropping columns, we now implement `selectInplace` based
+  ## on `select`. This is technically still shallow copy internally
+  ## of input `df`. This way the order is the order of the input keys.
+  df = df.select(cols)
 
 proc mutateImpl[T](df: var DataFrame[T], fns: varargs[FormulaNode[T, T]],
                       dropCols: static bool) =
@@ -1945,7 +1962,7 @@ proc rename*[C: ColumnLike](df: DataFrame[C], cols: varargs[FormulaNode[C, C]]):
         "of kind `fkAssign`, i.e. `\"foo\" <- \"bar\"`. Given formula " & $fn &
         "is of kind `" & $fn.kind & "`.")
 
-proc assign[C: ColumnLike](df: var DataFrame[C], key: string, idx1: int, c2: T, idx2: int) =
+proc assign[C: ColumnLike](df: var DataFrame[C], key: string, idx1: int, c2: C, idx2: int) =
   ## Assigns the value in `df` in col `key` at index `idx1` to the value of
   ## index `idx2` of column `c2`
   ##
@@ -1953,7 +1970,7 @@ proc assign[C: ColumnLike](df: var DataFrame[C], key: string, idx1: int, c2: T, 
   withNativeDtype(df[key]):
     df[key, idx1] = c2[idx2, dtype]
 
-proc innerJoin*[C: ColumnLike](df1, df2: DataFrame[C], by: string): auto =
+proc innerJoin*[C: ColumnLike](df1, df2: DataFrame[C], by: string): DataFrame[C] =
   ## Returns a data frame joined by the given key `by` in such a way as to only keep
   ## rows found in both data frames.
   ##
@@ -2216,7 +2233,7 @@ proc setDiff*[C: ColumnLike](df1, df2: DataFrame[C], symmetric = false): DataFra
         idxToKeep2.add idx
     # rebuild those from df1, then those from idx2
     result = df1.filterToIdx(idxToKeep1, keys)
-    var df2Res = newDataFrame()
+    var df2Res = C.newDataFrameLike()
     df2Res = df2.filterToIdx(idxToKeep2, keys)
     # stack the two data frames
     result.add df2Res
@@ -2385,12 +2402,11 @@ proc unique*[C: ColumnLike](c: C): C =
       hSet.excl cV[i]
       inc idx
   # apply idxToKeep as filter
-  echo "Indices to keep: ", idxToKeep
   result = c.filter(idxToKeep)
   result.len = idxToKeep.size
 
-proc unique*[T](df: DataFrame[T], cols: varargs[string],
-                keepAll = true): DataFrame[T] =
+proc unique*[C: ColumnLike](df: DataFrame[C], cols: varargs[string],
+                keepAll = true): DataFrame[C] =
   ## Returns a DF with only distinct rows. If one or more `cols` are given
   ## the uniqueness of a row is only determined based on those columns. By
   ## default all columns are considered.
@@ -2420,7 +2436,7 @@ proc unique*[T](df: DataFrame[T], cols: varargs[string],
       doAssert dfRes["y", float] == [5.0, 6.0, 8.0, 9.0].toTensor
       doAssert dfRes["z", string] == ["a", "b", "d", "e"].toTensor
 
-  result = newDataFrame(df.ncols)
+  result = C.newDataFrameLike(df.ncols)
   var mcols = @cols
   if mcols.len == 0:
     mcols = getKeys(df)
