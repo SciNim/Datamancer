@@ -2,7 +2,8 @@ import macros
 
 import algorithm, sugar, sequtils, strutils
 
-{.experimental: "overloadableEnums".}
+when (NimMajor, NimMinor) >= (1, 6):
+  {.experimental: "overloadableEnums".}
 
 import macrocache, ast_utils
 
