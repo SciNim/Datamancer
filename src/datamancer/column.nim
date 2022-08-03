@@ -334,9 +334,8 @@ proc newColumnLike*[C: ColumnLike](_: typedesc[C], kind = colNone, length = 0): 
   of colBool: result = toColumn(C, newTensor[bool](length))
   of colObject: result = toColumn(C, newTensor[Value](length))
   # XXX: fix constant
-  #of colConstant: result = constantColumn(Value(kind: VNull), length)
-  #of colGeneric: result = toColumn(C, newTensor[getGenericFieldType(C)](length))
-  of colNone, colConstant: result = C(kind: colNone, len: 0)
+  of colConstant: result = C.constantColumn(Value(kind: VNull), length)
+  of colNone: result = C(kind: colNone, len: 0)
   of colGeneric: doAssert false, "Constructing a generic column not supported, as it's not a specific type!"
 
 proc toColKind*[T](dtype: typedesc[T]): ColKind =
