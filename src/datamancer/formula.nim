@@ -1048,11 +1048,9 @@ proc getGenericDataFrameType(n: NimNode): NimNode =
       result = n.getTypeInst.getGenericDataFrameType()
   else: error("Invalid arg: " & $n.treerepr)
 
-proc extractDataFrameType(nOpt: Option[NimNode]): NimNode =
+proc extractDataFrameType(nOpt: Option[NimNode]): Option[NimNode] =
   if nOpt.isSome:
-    result = nOpt.get.getGenericDataFrameType()
-  else:
-    result = ident"Column" # default use the normal `Column` type
+    result = some(nOpt.get.getGenericDataFrameType())
 
 proc parseOptionValue(n: NimNode): Option[FormulaKind] {.used.} =
   ## parses the AST of a `FormulaKind` into an `Option[T]` at CT
@@ -1073,8 +1071,11 @@ proc parseOptionValue(n: NimNode): Option[FormulaKind] {.used.} =
     error("Bad input node " & $n.repr & " in `parseOptionValue`.")
 
 import macrocache # needed only here
-proc genClosureRetType(resType, dfType: NimNode): NimNode =
-  var typs = dfType.columnToTypes()
+proc genClosureRetType(preface: Preface, resType: NimNode, dfType: Option[NimNode]): NimNode =
+  let typs = if dfType.isSome:
+               dfType.get.columnToTypes()
+             else:
+               preface.accumulateTypes()
   ## replace mapIt!
   let name = genColNameStr(concat(typs.mapIt(ident(it)), @[resType]))
   if name != "Column" and name notin TypeNames:
@@ -1098,7 +1099,6 @@ macro compileFormulaImpl*(rawName: static string,
     typeTab = TypedSymbols[rawName]
   # extract df if any, (possibly) use it to determine `DataFrame` argument type
   fct.df = if InputDF in typeTab: some(typeTab[InputDF]) else: none[NimNode]()
-  fct.dfType = fct.df.extractDataFrameType()
   # generate the `preface`
   ## generating the preface is done by extracting all references to columns,
   ## using their names as `tensor` names (not element, since we in the general
@@ -1184,7 +1184,8 @@ macro compileFormulaImpl*(rawName: static string,
     fct.funcKind = if allScalar: fkScalar else: fkVector
 
   # set the column return type
-  fct.colResType = genClosureRetType(fct.resType, fct.dfType)
+  fct.dfType = fct.df.extractDataFrameType()
+  fct.colResType = genClosureRetType(fct.preface, fct.resType, fct.dfType)
   case fct.funcKind
   of fkVector: result = compileVectorFormula(fct)
   of fkScalar: result = compileScalarFormula(fct)
