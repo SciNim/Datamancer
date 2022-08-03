@@ -125,9 +125,12 @@ proc toStrType*(n: NimNode): NimNode =
   of nnkIdent, nnkSym:
     if n.strVal in ["true", "false"]: result = ident "bool"
     else: result = ident(n.repr)
+  of nnkBracketExpr:
+    if n.typeKind == ntyTypeDesc and n[0].strVal.normalize == "typedesc":
+      result = ident(n[1].repr)
+    else:
+      result = ident(n.repr)
   else: result = ident(n.repr)
-
-proc isValidType*(n: NimNode): bool =  n.strVal in DtypeOrderMapKeys
 
 proc sortTypes*(s: seq[string]): seq[string] =
   ## sorts the types according to our own "priority list"
@@ -135,10 +138,13 @@ proc sortTypes*(s: seq[string]): seq[string] =
   for i, el in s:
     if el in DtypeOrderMap:
       ids[i] = DtypeOrderMap[el]
+    else:
+      ids[i] = 0 # every other type has lower priority
   result = zip(s, ids).sortedByIt(it[1]).mapIt(it[0])
 
 proc sortTypes*(s: seq[NimNode]): seq[string] =
-  result = s.filterIt(it.isValidType).mapIt(it.strVal).sortTypes()
+  result = s.mapIt(it.strVal).sortTypes()
+
 proc accumulateTypes*(p: Preface): seq[string] =
   ## Returns a sorted sequence of all distinct types other than `DtypesAll` found in
   ## the preface input and output types.
