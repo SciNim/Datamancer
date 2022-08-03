@@ -202,9 +202,6 @@ suite "Formula":
     let f = f{"meanCty" ~ (c"hwy" + c"cty")}
     # manual parens still appear in `name`!
     check f.name == "(~ meanCty ((+ hwy cty)))"
-    when defined(defaultBackend):
-      let g = meanCty ~ hwy + cty
-      check $f == $g
     # TODO: Add more tests here...
     # create with `.` access
     let tup = (a: 5.5, b: "ok")
