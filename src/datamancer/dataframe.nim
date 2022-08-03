@@ -1528,13 +1528,16 @@ proc sortBySubset[C: ColumnLike](df: DataTable[C], by: string, idx: seq[int], or
   static:
     echo "===============INPUT TYPE FOR SROTBY SUBSET\n", typeof(C)
     #if true: quit()
-  let C = df[by]
-  if C.kind == colConstant: # nothing to sort
+  let col = df[by]
+  if col.kind == colConstant: # nothing to sort
     result = idx
   else:
-    withNativeDtype(C):
-      var res = newSeq[(int, dtype)](idx.len)
-      let t = toTensor(C, dtype)
+    withNativeDtype(col):
+      let t: Tensor[dtype] = toTensor(col, dtype)
+      ## XXX: Nim compiler messes up type deduction if we write `(int, dtype)`. In the second
+      ## branch of the `colGeneric` case statement the type will be the same as in the
+      ## first for the `res` variable (for `dtype`). But *only* for that variable!
+      var res: seq[(int, typeof(t[0]))] = newSeq[(int, typeof(t[0]))](idx.len)
       for i, val in idx:
         res[i] = (val, t[val])
       res.arrangeSortImpl(order = order)
@@ -1607,10 +1610,14 @@ proc sortRecurse[C: ColumnLike](df: DataTable[C], by: seq[string],
     sortRecurseImpl[dtype, C](result, df, by, startIdx, resIdx, order)
 
 proc sortBys[C: ColumnLike](df: DataTable[C], by: seq[string], order: SortOrder): seq[int] =
-  withNativeDtype(df[by[0]]):
-    var res = newSeq[(int, dtype)](df.len)
+  let C = df[by[0]]
+  withNativeDtype(C):
     var idx = 0
     let t = toTensor(df[by[0]], dtype)
+    ## XXX: Nim compiler messes up type deduction if we write `(int, dtype)`. In the second
+    ## branch of the `colGeneric` case statement the type will be the same as in the
+    ## first for the `res` variable (for `dtype`). But *only* for that variable!
+    var res = newSeq[(int, typeof(t[0]))](df.len)
     for i in 0 ..< t.size:
       let val = t[i]
       res[idx] = (idx, val)
@@ -1664,11 +1671,16 @@ proc arrange*[C: ColumnLike](df: DataTable[C], by: varargs[string], order = Sort
     result.len = df.len
     var data = C.newColumnLike()
     for k in keys(df):
-      withNativeDtype(df[k]):
+      let cl = df[k]
+      withNativeDtype(cl):
         let col = df[k].toTensor(dtype)
-        var res = newTensor[dtype](df.len)
+        ## XXX: Nim compiler messes up type deduction if we write `(int, dtype)`. In the second
+        ## branch of the `colGeneric` case statement the type will be the same as in the
+        ## first for the `res` variable (for `dtype`). But *only* for that variable!
+        var res = newTensor[typeof(col[0])](df.len)
         for i in 0 ..< df.len:
-          res[i] = col[idxCol[i]]
+          if idxCol.len > 0:
+            res[i] = col[idxCol[i]]
         data = toColumn(C, res)
       result.asgn(k, data)
 
