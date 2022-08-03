@@ -36,7 +36,6 @@ proc getDataIdentDefs(n: NimNode): NimNode =
 
 import macrocache
 proc getDataFrameImpl(n: NimNode): NimNode =
-  #echo n.kind, " and ", n.repr
   case n.kind
   of nnkSym:
     if "dataframe" in n.strVal.normalize:
@@ -50,45 +49,16 @@ proc getDataFrameImpl(n: NimNode): NimNode =
     echo n.treerepr
     error("invalid")
 
-macro getColumnType(typ: typed): untyped =
-  let typImp = getDataFrameImpl(typ) #typ.getImpl[1][1].getImpl
-  #echo typImp.treerepr
-  #var typImp = getTypeInst(DataFrame).getImpl
-  let dataBranch = typImp.getDataIdentDefs()
-  result = dataBranch[1][2]
-
-#macro patchDataFrame*(typ: typed): untyped =
-#  let typ0 = typ.getInnerType()
-#  #echo typ0.treerepr
-#  var typImp = getTypeInst(DataFrame).getImpl
-#  var refTy = getRefType(typImp)
-#  let dataBranch = refTy.getDataIdentDefs()
-#  ## XXX: add check if exists, else generate column from here!
-#  dataBranch[1][2] = TypeNames[genColNameStr(@[typ0])] #TypeNames[@[typ0.strVal]]
-#  #echo dataBranch.treerepr
-#  typImp[2][0][2][1] = dataBranch
-#  let dfId = genSym(nskType, "DataFrame")
-#  result = refTy
-#  result = quote do:
-#    type
-#      `dfId` = `result`
-#    `dfId`
-#  result = result.replaceSymsByIdents()
-#  #echo result.repr
-
 macro unionType*(t1, t2: typed): untyped =
   let t1I = t1.getInnerType()
   let t2I = t2.getInnerType()
   let ts = genColNameStr(@[t1I, t2I])
-  echo "ts ? ", ts
   if ts in TypeNames:
     result = TypeNames[ts]
   else:
     # generate?
     ## XXX: strip the `Column` from type names
     error("Please generate the type using `patchColumn(" & $t1I.repr & ", " & $t2I.repr & ")` before using it.")
-    #type resTyp = patchColumn(t1I, t2I)
-    #result = resTyp
 
 # ---------- Simple 1 line helper procs ----------
 template ncols*[C: ColumnLike](df: DataTable[C]): int =
@@ -120,7 +90,6 @@ proc newDataTable*[C: ColumnLike](_: typedesc[C], size = 8,
   ##
   ## The `kind` argument can be used to create a grouped `DataFrame` from the start.
   ## Be very careful with this and instead use `groub_by` to create a grouped DF!
-  #type colType = getColumnType(T)
   result = DataTable[C](kind: kind,
                         data: initOrderedTable[string, C](nextPowerOfTwo(size)),
                         len: 0)
@@ -517,12 +486,9 @@ proc convertDataFrame*[C: ColumnLike; U](df: DataTable[C], dtype: typedesc[U]): 
   ## Given a type that is not a normal DF type, returns a new DF type that can store
   ## it and puts it as `key`
   ## join T + U to generate `df` return type
-  #type retType = patchDataFrame(T)
   when C is U: result = df
   else:
-    #type unionType =
     result = newDataTable(unionType(C, U))
-    echo "unionType ", unionType(C, U)
     for k in keys(df):
       result[k] = toColumn(unionType(C, U), df[k])
 
@@ -530,19 +496,8 @@ proc extendDataFrame*[C: ColumnLike; U](df: DataTable[C], key: string, arg: U): 
   ## Given a type that is not a normal DF type, returns a new DF type that can store
   ## it and puts it as `key`
   ## join T + U to generate `df` return type
-  #type retType = patchDataFrame(T)
   result = df.convertDataFrame(U)
-  result[key] = toColumn(unionType(C, U), arg) #convertToDfColType(toColumn(arg)
-
-#proc extendDataFrame*[C: ColumnLike; U: not ColumnLike](df: DataTable[C], key: string, arg: U): auto =
-#  ## Given a type that is not a normal DF type, returns a new DF type that can store
-#  ## it and puts it as `key`
-#  ## join T + U to generate `df` return type
-#  #type retType = patchDataFrame(T)
-#  type V = patchColumn(U)
-#  result = result.extendDataFrame(key, arg)
-#  #result[key] = toColumn(arg)
-
+  result[key] = toColumn(unionType(C, U), arg)
 
 proc assignAdjust[T](df: var DataFrame, name: string, s: T) =
   ## If applicable, assigns `s` as a column to `df` and adjusts the length
