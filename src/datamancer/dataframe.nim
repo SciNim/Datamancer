@@ -84,7 +84,7 @@ proc newDataFrame*(size = 8,
                      len: 0)
 
 proc newDataTable*[C: ColumnLike](_: typedesc[C], size = 8,
-                                      kind = dfNormal): DataTable[C] =
+                                  kind = dfNormal): DataTable[C] =
   ## Initialize a generic `DataTable` of column type `C` by initializing the underlying
   ## table for `size` number of columns. The given size will be rounded up to the next power of 2!
   ##
@@ -1702,7 +1702,7 @@ proc mutateInplace*[C: ColumnLike; U](df: var DataTable[C], fns: varargs[Formula
       dfs.add mdf
       inc i
     df = assignStack(dfs)
-  else:
+  of dfNormal:
     df.mutateImpl(fns, dropCols = false)
 
 proc mutate*[C: ColumnLike; U: ColumnLike](df: DataTable[C], fns: varargs[Formula[U]]): DataTable[U] =
