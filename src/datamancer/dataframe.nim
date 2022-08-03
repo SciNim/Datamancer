@@ -794,25 +794,27 @@ proc pretty*[C: ColumnLike](df: DataTable[C], numLines = 20, precision = 4, head
   ## XXX: should columns of different types have different default widths? e.g. float being
   ## at least 9 chars, ints X, strings Y ?
   ## maybe can also look at data if DF not too long and/or we only print `numLines << 1e9` elements?
+  const idxAlign = 8
   var maxLen = 9 # default width for a column name
   for k in keys(df):
     maxLen = max(k.len, maxLen)
+    maxLen = max(toNimType(df[k]).len, maxLen)
   if header:
     result.add "DataFrame with " & $df.getKeys.len & " columns and " & $df.len & " rows:\n"
   let alignBy = max(maxLen + precision, 10)
   let num = if numLines > 0: min(df.len, numLines) else: df.len
   # write header
-  result.add align("Idx", alignBy)
+  result.add align("Idx", idxAlign)
   for k in keys(df):
     result.add align($k, alignBy)
   result.add "\n"
   # now add data types
-  result.add align("dtype:", alignBy)
+  result.add align("dtype:", idxAlign)
   for k in keys(df):
-    result.add align(toNimType(df[k].kind), alignBy)
+    result.add align(toNimType(df[k]), alignBy)
   result.add "\n"
   for i in 0 ..< num:
-    result.add align($i, alignBy)
+    result.add align($i, idxAlign)
     for k in keys(df):
       let element = pretty(df[k, i], precision = precision)
       if element.len < alignBy - 1:
