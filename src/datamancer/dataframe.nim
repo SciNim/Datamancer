@@ -113,10 +113,10 @@ proc newDataFrame*(size = 8,
                      data: initOrderedTable[string, Column](nextPowerOfTwo(size)),
                      len: 0)
 
-proc newDataFrameLike*[C: ColumnLike](_: typedesc[C], size = 8,
+proc newDataTable*[C: ColumnLike](_: typedesc[C], size = 8,
                                       kind = dfNormal): DataTable[C] =
-  ## Initialize a DataFrame by initializing the underlying table for `size` number
-  ## of columns. The given size will be rounded up to the next power of 2!
+  ## Initialize a generic `DataTable` of column type `C` by initializing the underlying
+  ## table for `size` number of columns. The given size will be rounded up to the next power of 2!
   ##
   ## The `kind` argument can be used to create a grouped `DataFrame` from the start.
   ## Be very careful with this and instead use `groub_by` to create a grouped DF!
@@ -135,7 +135,7 @@ proc clone*[C: ColumnLike](df: DataTable[C]): DataTable[C] =
   ## Returns a cloned version of `df`, which deep copies the tensors of the
   ## `DataFrame`. This makes sure there is *no* data sharing due to reference
   ## semantics between the input and output DF.
-  result = C.newDataFrameLike(kind = df.kind)
+  result = C.newDataTable(kind = df.kind)
   result.len = df.len
   result.data = df.data.clone
   case df.kind
@@ -150,7 +150,7 @@ proc shallowCopy*[C: ColumnLike](df: DataTable[C]): DataTable[C] =
   ## that exist in both. Only the `OrderedTable` object is cloned to not reference the
   ## same column keys. This is the default for all procedures that take and return
   ## a DF.
-  result = C.newDataFrameLike(kind = df.kind)
+  result = C.newDataTable(kind = df.kind)
   result.len = df.len
   # simply do a regular copy of the DF (no deep copy of the data, but a new
   # table)
@@ -255,7 +255,7 @@ proc `[]`*[C: ColumnLike; U, V](df: DataTable[C], rowSlice: HSlice[U, V]): DataT
   ## Returns a slice of the data frame given by `rowSlice`, which is simply a
   ## subset of the input data frame.
   let keys = getKeys(df)
-  result = C.newDataFrameLike(df.ncols)
+  result = C.newDataTable(df.ncols)
   let a = (df ^^ rowSlice.a)
   let b = (df ^^ rowSlice.b)
   for k in keys:
@@ -316,7 +316,7 @@ proc `[]=`*[C: ColumnLike](df: var DataTable[C], k: string, col: C) {.inline.} =
   ## If the length of the column does not match the existing DF length (unless
   ## it is 0), a `ValueError` is raised.
   if df.isNil:
-    df = C.newDataFrameLike()
+    df = C.newDataTable()
   df.data[k] = col
   if df.len == col.len or df.len == 0:
     df.len = col.len
@@ -521,7 +521,7 @@ proc convertDataFrame*[C: ColumnLike; U](df: DataTable[C], dtype: typedesc[U]): 
   when C is U: result = df
   else:
     #type unionType =
-    result = newDataFrameLike(unionType(C, U))
+    result = newDataTable(unionType(C, U))
     echo "unionType ", unionType(C, U)
     for k in keys(df):
       result[k] = toColumn(unionType(C, U), df[k])
@@ -961,7 +961,7 @@ proc bind_rows*[C: ColumnLike](dfs: varargs[(string, DataTable[C])], id: string 
       doAssert res["From", string] == concat(newSeqWith(3, "A"),
                                              newSeqWith(4, "B")).toTensor
 
-  result = C.newDataFrameLike() # XXX: using `len: 0` here breaks the compiler saying no generic params allowed! Instead of it understanding that it's just wrong syntax for a generic call
+  result = C.newDataTable() # XXX: using `len: 0` here breaks the compiler saying no generic params allowed! Instead of it understanding that it's just wrong syntax for a generic call
   var totLen = 0
   for (idVal, df) in dfs:
     totLen += df.len
@@ -1087,10 +1087,10 @@ proc assignStack*[C: ColumnLike](dfs: seq[DataTable[C]]): DataTable[C] =
   ## All dataframes must have matching keys and column types. It should only
   ## be called from places where this is made sure as the point of the
   ## procedure is speeding up assignment for cases where we know this holds.
-  if dfs.len == 0: return C.newDataFrameLike()
+  if dfs.len == 0: return C.newDataTable()
   elif dfs.len == 1: return dfs[0]
   let df0 = dfs[0]
-  result = C.newDataFrameLike(df0.getKeys().len)
+  result = C.newDataTable(df0.getKeys().len)
   # 1. determine required lengths of final columns
   var lengths = 0
   for df in dfs:
@@ -1310,14 +1310,14 @@ proc filterImpl[C: ColumnLike](df: DataTable[C], conds: varargs[Formula[C]]): Da
   ## Implements filtering of mapping and scalar formulas on a `DataFrame`.
   ## Does not differentiate between grouped and ungrouped inputs (done in
   ## exported `filter` below).
-  result = C.newDataFrameLike(df.ncols)
+  result = C.newDataTable(df.ncols)
   var filterIdx = newColumn(colBool)
   for c in conds:
     if filterIdx.kind == colBool and filterIdx.len > 0:
       # combine two tensors
       let newIdx = df.applyFilterFormula(c)
       if newIdx.kind == colConstant and newIdx.cCol == %~ false:
-        return C.newDataFrameLike()
+        return C.newDataTable()
       elif newIdx.kind == colConstant:
         # reducing formula evaluated true, do not have to combine anything
         continue
@@ -1330,7 +1330,7 @@ proc filterImpl[C: ColumnLike](df: DataTable[C], conds: varargs[Formula[C]]): Da
       # eval boolean scalar function on DF. Predicate decides to keep or drop full frame
       filterIdx = df.applyFilterFormula(c)
       if filterIdx.kind == colConstant and filterIdx.cCol == %~ false:
-        return C.newDataFrameLike()
+        return C.newDataTable()
 
   case filterIdx.kind
   of colBool:
@@ -1419,7 +1419,7 @@ proc select*[C: ColumnLike; T: string | Formula[C]](df: DataTable[C], cols: vara
       doAssert "Bar" notin dfRes
       doAssert "Baz" notin dfRes
 
-  result = C.newDataFrameLike(df.ncols, kind = df.kind)
+  result = C.newDataTable(df.ncols, kind = df.kind)
   for k in cols:
     assignFormulaCol(result, df, k)
   if df.kind == dfGrouped:
@@ -1666,7 +1666,7 @@ proc arrange*[C: ColumnLike](df: DataTable[C], by: varargs[string], order = Sort
   if by.len == 0:
     result = df
   else:
-    result = C.newDataFrameLike(df.ncols)
+    result = C.newDataTable(df.ncols)
     let idxCol = sortBys(df, by, order = order)
     result.len = df.len
     var data = C.newColumnLike()
@@ -1935,7 +1935,7 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
       allKeys = keys1 + keys2
       commonKeys = keys1 * keys2
       restKeys = allKeys - commonKeys
-    result = newDataFrame(allKeys.card)
+    result = C.newDataTable(allKeys.card)
     let resLen = (max(df1S.len, df2S.len))
     for k in allKeys:
       if k in df1S and k in df2S:
@@ -2013,7 +2013,7 @@ proc group_by*[C: ColumnLike](df: DataTable[C], by: varargs[string], add = false
   else:
     # copy over the data frame into new one of kind `dfGrouped` (cannot change
     # kind at runtime!)
-    result = newDataFrame(df.ncols, kind = dfGrouped)
+    result = C.newDataTable(df.ncols, kind = dfGrouped)
     result.data = df.data
     result.len = df.len
   for key in by:
@@ -2041,7 +2041,7 @@ proc summarize*[C: ColumnLike](df: DataTable[C], fns: varargs[Formula[C]]): Data
       doAssert dfRes.len == 1
       doAssert "mean(x)+sum(y)" in dfRes
 
-  result = C.newDataFrameLike(kind = dfNormal)
+  result = C.newDataTable(kind = dfNormal)
   var lhsName = ""
   case df.kind
   of dfNormal:
@@ -2100,7 +2100,7 @@ proc count*[C: ColumnLike](df: DataTable[C], col: string, name = "n"): DataTable
     doAssert dfRes["n", int] == [2, 2, 3].toTensor
 
   # TODO: handle already grouped dataframes.
-  result = C.newDataFrameLike()
+  result = C.newDataTable()
   let grouped = df.group_by(col, add = true)
   var counts = newSeqOfCap[int](1000) # just start with decent size
   var keys = initOrderedTable[string, seq[Value]](grouped.groupMap.len)
@@ -2124,7 +2124,7 @@ proc setDiff*[C: ColumnLike](df1, df2: DataTable[C], symmetric = false): DataTab
   ##
   ## If `symmetric` is true, the symmetric difference of the dataset is
   ## returned instead, i.e. elements which are either not in `df1` ``or`` not in `df2`.
-  result = C.newDataFrameLike(df1.ncols)
+  result = C.newDataTable(df1.ncols)
   #[
   Calculate custom hash for each row in each table.
   Keep var h1, h2 = seq[Hashes] where seq[Hashes] is hash of of row.
@@ -2156,7 +2156,7 @@ proc setDiff*[C: ColumnLike](df1, df2: DataTable[C], symmetric = false): DataTab
         idxToKeep2.add idx
     # rebuild those from df1, then those from idx2
     result = df1.filterToIdx(idxToKeep1, keys)
-    var df2Res = C.newDataFrameLike()
+    var df2Res = C.newDataTable()
     df2Res = df2.filterToIdx(idxToKeep2, keys)
     # stack the two data frames
     result.add df2Res
@@ -2205,7 +2205,7 @@ proc gather*[C: ColumnLike](df: DataTable[C], cols: varargs[string],
     doAssert dfRes["Class", string] == ["A", "A", "A", "B", "B", "B", "C", "C", "C"].toTensor
     doAssert dfRes["Num", int] == [1, 8, 0, 3, 4, 0, 5, 7, 2].toTensor
 
-  result = newDataFrame(df.ncols)
+  result = C.newDataTable(df.ncols)
   let remainCols = getKeys(df).toHashSet.difference(cols.toHashSet)
   let newLen = cols.len * df.len
   # assert all columns same type
@@ -2269,7 +2269,7 @@ proc spread*[C: ColumnLike; T](df: DataTable[C], namesFrom, valuesFrom: string,
       doAssert dfRes["B", int] == [3, 4, 0, 0].toTensor
       doAssert dfRes["C", int] == [0, 5, 7, 2].toTensor
 
-  result = C.newDataFrameLike()
+  result = C.newDataTable()
   # 1. determine new columns from all unique values in `namesFrom`
   let dfGrouped = df.group_by(namesFrom)
   # bind `items` here to make it available in calling scope without `import sets`
@@ -2359,7 +2359,7 @@ proc unique*[C: ColumnLike](df: DataTable[C], cols: varargs[string],
       doAssert dfRes["y", float] == [5.0, 6.0, 8.0, 9.0].toTensor
       doAssert dfRes["z", string] == ["a", "b", "d", "e"].toTensor
 
-  result = C.newDataFrameLike(df.ncols)
+  result = C.newDataTable(df.ncols)
   var mcols = @cols
   if mcols.len == 0:
     mcols = getKeys(df)
