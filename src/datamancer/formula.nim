@@ -1037,11 +1037,15 @@ proc determineTypes(loop: NimNode, tab: Table[string, NimNode]): Preface =
 proc getGenericDataFrameType(n: NimNode): NimNode =
   case n.kind
   of nnkBracketExpr:
-    if n[0].strVal.normalize == "datatable":
+    if n[0].strVal.normalize in ["datatable"]:
       result = n[1]
     else:
       error("Invalid args : " & $n.treerepr)
-  of nnkSym: result = n.getTypeInst.getGenericDataFrameType()
+  of nnkSym:
+    if n.strVal.normalize == "dataframe":
+      result = ident("Column")
+    else:
+      result = n.getTypeInst.getGenericDataFrameType()
   else: error("Invalid arg: " & $n.treerepr)
 
 proc extractDataFrameType(nOpt: Option[NimNode]): NimNode =
