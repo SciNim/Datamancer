@@ -1994,17 +1994,17 @@ suite "Formulas":
       check res["A", string][0] == "a"
       check res["(sum B)", int][0] == 1225
 
-    #block:
-    #  # now works:
-    #  let res = df.group_by("A").filter(f{ sum(`B`) < 2000})
-    #  check res.len == 50
-    #  check res["B", int] == toSeq(0 ..< 50).toTensor
-    #  check res["C", int] == concat(newSeqWith(25, 5), newSeqWith(25, 15)).toTensor
-    #
-    #block:
-    #  # runtime error: TODO write test! This *could* becoma a CT error in the future.
-    #  expect(FormulaMismatchError):
-    #    discard df.group_by("A").filter(f{ sum(`B`) * 2000})
+    block:
+      # now works:
+      let res = df.group_by("A").filter(f{ sum(`B`) < 2000})
+      check res.len == 50
+      check res["B", int] == toSeq(0 ..< 50).toTensor
+      check res["C", int] == concat(newSeqWith(25, 5), newSeqWith(25, 15)).toTensor
+
+    block:
+      # runtime error: TODO write test! This *could* becoma a CT error in the future.
+      expect(FormulaMismatchError):
+        discard df.group_by("A").filter(f{ sum(`B`) * 2000})
 
     block:
       let res = df.group_by(["A", "C"])
