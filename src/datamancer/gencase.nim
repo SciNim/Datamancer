@@ -286,23 +286,23 @@ macro getColType*(types: varargs[typed]): untyped =
   else:
     error("The type of name " & $typName & " is not known yet. Create it using `genType`")
 
-proc getTensor*[T; U](t: T, dtype: typedesc[U]): U {.inline.} =
-  withCaseStmt(t, gk, T):
-    when U is typeof(t.gk):
-      result = t.gk
+proc getTensor*[C; U](c: C, dtype: typedesc[U]): U {.inline.} =
+  withCaseStmt(c, gk, C):
+    when U is typeof(c.gk):
+      result = c.gk
     else:
-      raise newException(ValueError, "Invalid types ! " & $U & " for " & $typeof(t.gk))
+      raise newException(ValueError, "Invalid types ! " & $U & " for " & $typeof(c.gk))
 
-proc setVal*[T; U](t: var T, idx: int, val: U) {.inline.} =
-  withCaseStmt(t, gk, T):
-    when Tensor[U] is typeof(t.gk):
-      t.gk[idx] = val
+proc setVal*[C; U](c: var C, idx: int, val: U) {.inline.} =
+  withCaseStmt(c, gk, C):
+    when Tensor[U] is typeof(c.gk):
+      c.gk[idx] = val
     else:
-      raise newException(ValueError, "Invalid types ! " & $U & " for " & $typeof(t.gk))
+      raise newException(ValueError, "Invalid types ! " & $U & " for " & $typeof(c.gk))
 
-proc setTensor*[T; U](t: var T, toSet: U) {.inline.} =
-  withCaseStmt(t, gk, T):
-    when U is typeof(t.gk):
-      t.gk = toSet
+proc setTensor*[C; U](c: var C, toSet: U) {.inline.} =
+  withCaseStmt(c, gk, C):
+    when U is typeof(c.gk):
+      c.gk = toSet
     else:
-      raise newException(ValueError, "Invalid types ! " & $U & " for " & $typeof(t.gk))
+      raise newException(ValueError, "Invalid types ! " & $U & " for " & $typeof(c.gk))
