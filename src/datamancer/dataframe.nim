@@ -1793,17 +1793,14 @@ proc mutate*[C: ColumnLike; U: ColumnLike](df: DataTable[C], fns: varargs[Formul
     result = df.convertDataFrame(U)
   result.mutateInplace(fns)
 
-macro mutate2*(df, fn: untyped): untyped =
+macro mutate2*(df: untyped, fns: varargs[untyped]): untyped =
   echo "========================================MUTATE ", df.treerepr
+  let fnsConverted = nnkBracket.newTree()
+  for fn in fns:
+    fnsConverted.add quote do:
+      dfFn(`df`, `fn`)
   result = quote do:
-    `df`.mutate(dfFn(`df`, `fn`))
-
-#proc mutate*[T; U: not T](df: DataTable[C], fn: Formula[U]): auto = #DataFrame[U] =
-#  ## Return type is `auto` for the case that `U` is actually a "lesser" type than `T`.
-#  ## I.e. `T = ColumnKiloGram` and `U = Column`
-#  # we know the types are different (hence this overload), convert and call mutate
-#  result = df.convertDataFrame(U)
-#  result = result.mutate(fn)
+    `df`.mutate(`fnsConverted`)
 
 proc transmuteInplace*[C: ColumnLike](df: var DataTable[C], fns: varargs[Formula[C]]) =
   ## Inplace variant of `transmute` below.
@@ -1820,7 +1817,7 @@ proc transmuteInplace*[C: ColumnLike](df: var DataTable[C], fns: varargs[Formula
   else:
     df.mutateImpl(fns, dropCols = true)
 
-proc transmute*[C: ColumnLike](df: DataTable[C], fns: varargs[Formula[C]]): DataTable[C] =
+proc transmute*[C: ColumnLike; U: ColumnLike](df: DataTable[C], fns: varargs[Formula[U]]): DataTable[U] =
   ## Returns the data frame cut to the columns created by `fns`, which
   ## should involve a calculation. To only cut to one or more columns
   ## use the `select` proc.
@@ -1843,7 +1840,10 @@ proc transmute*[C: ColumnLike](df: DataTable[C], fns: varargs[Formula[C]]): Data
     doAssert "y" notin dfRes
     doAssert "z" notin dfRes
 
-  result = df.shallowCopy()
+  when C is U:
+    result = df.shallowCopy()
+  else:
+    result = df.convertDataFrame(U)
   result.transmuteInplace(fns)
 
 proc rename*[C: ColumnLike](df: DataTable[C], cols: varargs[Formula[C]]): DataTable[C] =
