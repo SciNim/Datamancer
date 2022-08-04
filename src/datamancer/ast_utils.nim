@@ -32,3 +32,14 @@ import macrocache
 proc contains*(t: CacheTable, key: string): bool =
   for k, val in pairs(t):
     if k == key: return true
+
+from sequtils import deduplicate
+proc combinations*(s: seq[NimNode]): seq[seq[NimNode]] =
+  ## inefficient combinatorics calculator. Used to generate all type combinations
+  if s.len > 0:
+    result.add s
+  for x in s:
+    var sNoX = s
+    sNoX.delete(s.find(x))
+    result.add combinations(sNoX)
+  result = result.deduplicate()
