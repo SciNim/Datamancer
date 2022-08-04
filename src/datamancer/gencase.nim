@@ -23,13 +23,25 @@ proc nodeRepr*(n: NimNode): string =
   else: result = n.toStrLit.strVal.multiReplace([("[", "_"), ("]", "_")])
 
 from formulaExp import DtypesAll
+
+proc columnToTypes*(s: string): seq[string] =
+  var s = s
+  s.removePrefix("Column")
+  result = s.split("|").filterIt(it.len > 0 and it notin DtypesAll)
+
+proc columnToTypes*(n: NimNode): seq[string] =
+  doAssert n.kind in {nnkSym, nnkIdent}
+  var r = n.strVal
+  result = columnToTypes(r)
+
 proc genCombinedTypeStr*(types: seq[string]): string =
-  let typClean = types.filterIt(it != "Column" and it notin DtypesAll).deduplicate
-  ## FIX UP LOGIC
-  result = $(typClean.mapIt(it.dup(removePrefix("Column"))) #.capitalizeAscii)
-             .sorted
-             .filterIt(it.normalize() notin DtypesAll)
-             .join("|"))
+  var typs = newSeq[string]()
+  for typ in types:
+    if typ.startsWith("Column"):
+      typs.add columnToTypes(typ)
+    elif typ notin DtypesAll:
+      typs.add typ
+  result = $(typs.deduplicate.sorted.join("|"))
 
 proc genCombinedTypeStr*(types: seq[NimNode]): string =
   let typStrs = types.mapIt(it.nodeRepr)
@@ -44,12 +56,6 @@ proc stripObject(n: NimNode): NimNode =
     var tmp = n.strVal
     tmp.removeSuffix(":ObjectType")
     result = ident(tmp)
-
-proc columnToTypes*(n: NimNode): seq[string] =
-  doAssert n.kind in {nnkSym, nnkIdent}
-  var r = n.strVal
-  r.removePrefix("Column")
-  result = r.split("|").filterIt(it.len > 0)
 
 proc getInnerType*(n: NimNode, last = newEmptyNode()): NimNode =
   case n.kind

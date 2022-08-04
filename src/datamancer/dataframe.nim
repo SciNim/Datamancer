@@ -38,15 +38,15 @@ import macrocache
 const TypeNames = CacheTable"ColTypeNames"
 
 macro unionType*(t1, t2: typed): untyped =
-  let t1I = t1.getInnerType()
-  let t2I = t2.getInnerType()
-  let ts = genColNameStr(@[t1I, t2I])
+  let t1I = t1.getInnerType().columnToTypes()
+  let t2I = t2.getInnerType().columnToTypes()
+  let ts = genColNameStr(concat(t1I, t2I))
   if ts in TypeNames:
     result = TypeNames[ts]
   else:
     # generate?
-    ## XXX: strip the `Column` from type names
-    error("Please generate the type using `patchColumn(" & $t1I.repr & ", " & $t2I.repr & ")` before using it.")
+    error("The type " & $ts & " does not exist yet. Please generate it using `defColumn(" &
+      $t1I.repr & ", " & $t2I.repr & ")` before using it.")
 
 # ---------- Simple 1 line helper procs ----------
 template ncols*[C: ColumnLike](df: DataTable[C]): int =
