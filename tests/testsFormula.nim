@@ -336,6 +336,16 @@ suite "Formulas":
     check exp.len == 1
     check exp["cycleStart", string][0] == "1970-01-01"
 
+  test "Regression from ggplotnim recipe formula":
+    # should deduce to float
+    let fn = f{c"spikes" - c"lineSize" / 2.0}
+    check $fn == "(- spikes (/ lineSize 2.0))"
+    check fn.kind == fkVector
+    let df = toDf({"spikes" : @[1, 2], "lineSize" : @[2, 4]})
+    let res = fn.evaluate(df)
+    check res.kind == colFloat
+    check res.toTensor(int) == @[0, 0].toTensor # compare as int for simplicity
+
 suite "Formulas using the full `formula` macro":
   ## compute the number of cycles & integrated "time on" time
   ## This is still rather basic, but works now.
