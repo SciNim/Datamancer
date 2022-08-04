@@ -1,3 +1,11 @@
+* v0.3.3
+- define =ScalarLike= concept to match types that can be converted to
+  =float= via =.float= for e.g. units to have a =%~= Value conversion
+  for them
+- minor cleanup of macro logic
+- rename =genColumn= to =defColumn=
+- =toDf= now supports assignment of generic arguments as well, as long
+  as the column type required has been generated already.      
 * v0.3.2
 - fix regression in =ggplotnim= formula due to badly determined result
   type. Only use resulting type of =Preface= if type acceptable
