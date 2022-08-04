@@ -16,6 +16,50 @@ suite "Column":
     for i in 0 ..< c.len:
       check c[i, int] == 12
 
+  test "Column form a scalar":
+    block Int:
+      let x = 1
+      let c = toColumn x
+      check c.kind == colInt
+      check c.toTensor(int) == [1].toTensor
+    block Float:
+      let x = 1.0
+      let c = toColumn x
+      check c.kind == colFloat
+      check c.toTensor(float) == [1.0].toTensor
+    block String:
+      let x = "1"
+      let c = toColumn x
+      check c.kind == colString
+      check c.toTensor(string) == ["1"].toTensor
+    block Bool:
+      let x = true
+      let c = toColumn x
+      check c.kind == colBool
+      check c.toTensor(bool) == [true].toTensor
+
+  test "Column from scalar Value yields native":
+    block Int:
+      let x = %~ 1
+      let c = toColumn x
+      check c.kind == colInt
+      check c.toTensor(int) == [1].toTensor
+    block Float:
+      let x = %~ 1.0
+      let c = toColumn x
+      check c.kind == colFloat
+      check c.toTensor(float) == [1.0].toTensor
+    block String:
+      let x = %~ "1"
+      let c = toColumn x
+      check c.kind == colString
+      check c.toTensor(string) == ["1"].toTensor
+    block Bool:
+      let x = %~ true
+      let c = toColumn x
+      check c.kind == colBool
+      check c.toTensor(bool) == [true].toTensor
+
   test "Adding two equal constant columns":
     let c1 = constantColumn(12, 40)
     let c2 = constantColumn(12, 60)
