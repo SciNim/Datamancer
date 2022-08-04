@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.3.1"
+version       = "0.3.2"
 author        = "Vindaar"
 description   = "A dataframe library with a dplyr like API"
 license       = "MIT"
