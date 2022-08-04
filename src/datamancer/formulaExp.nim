@@ -36,6 +36,8 @@ type
     transformed*: NimNode # an (optional) user defined transformation. Wraps the `df[<col>, <dtype>]` call
   Preface* = object
     args*: seq[Assign]
+    resType*: NimNode # likely combined return type. May be empty.
+                      ## XXX: do we need this? or repurpose `FormulaCT` field instead?
   FormulaCT* = object
     funcKind*: FormulaKind
     preface*: Preface
@@ -102,18 +104,18 @@ const DtypeOrderMap* = {
   "Tensor[Value]" : 2,
   "Tensor[T]" : 3,
   "T" : 4,
-  "Tensor[string]" : 5,
-  "string" : 6,
-  "Tensor[int]" : 7,
-  "int" : 8,
-  "Tensor[int64]" : 9,
-  "int64" : 10,
-  "Tensor[float]" : 11,
-  "float" : 12,
-  "Tensor[float64]" : 13,
-  "float64" : 14,
-  "Tensor[bool]" : 15,
-  "bool" : 16 # if something  can be done with `bool`, take that
+  "Tensor[string]" : 100,
+  "string" : 110,
+  "Tensor[int]" : 120,
+  "int" : 130,
+  "Tensor[int64]" : 140,
+  "int64" : 150,
+  "Tensor[float]" : 160,
+  "float" : 170,
+  "Tensor[float64]" : 180,
+  "float64" : 190,
+  "Tensor[bool]" : 1000,
+  "bool" : 1100 # if something  can be done with `bool`, take that
 }.toTable()
 const DtypeOrderMapKeys = toSeq(DtypeOrderMap.keys())
 
@@ -134,16 +136,57 @@ proc toStrType*(n: NimNode): NimNode =
 
 proc sortTypes*(s: seq[string]): seq[string] =
   ## sorts the types according to our own "priority list"
-  var ids = newSeq[int](s.len)
+  var ids = newSeq[float](s.len)
   for i, el in s:
     if el in DtypeOrderMap:
-      ids[i] = DtypeOrderMap[el]
+      ids[i] = DtypeOrderMap[el].float
     else:
-      ids[i] = 0 # every other type has lower priority
+      # Note: here the priority of other types is the absolute lowest. That is because
+      # this `sortTypes` is called in the `assignType` calls during `determineTypesImpl`.
+      # There we just want to use other types than known if they are not ambiguous.
+      # In the `sortTypes` below though we compare possible different output types and
+      # want to keep the possible return type of a not supported type
+      ids[i] = 0.0 # every other type has lower priority
   result = zip(s, ids).sortedByIt(it[1]).mapIt(it[0])
+
+proc sortTypes*(heuristic, deduced: seq[string]): seq[string] =
+  ## sorts the types according to our own "priority list"
+  ##
+  ## This version takes a heuristic and a deduced type sequence. The idea is
+  ## that a heuristic may still contain useful information. But not all heuristic
+  ## information shall be allowed to override the deduced information. Where the
+  ## heuristics makes lossy assumptions (math operations are float and not int)
+  ## the deduced one should have preference. Therefore the type order map contains
+  ## staggered values, such that taking `div 10` of them still provides overriding
+  ## power for some types (against Value and not predefined ones), but float div 10
+  ## yields something smaller than int for example.
+  ##
+  ## The exact values are not fully thought out yet!
+  var ids = newSeq[float]()
+  for i, el in heuristic:
+    if el in DtypeOrderMap:
+      ids.add DtypeOrderMap[el].float / 10.0
+    else:
+      ids.add 20.0 # every other type has lower priority
+  for i, el in deduced:
+    if el in DtypeOrderMap:
+      ids.add DtypeOrderMap[el].float
+    else:
+      ids.add 20.0 # every other type has lower priority
+  result = zip(concat(heuristic, deduced), ids).sortedByIt(it[1]).mapIt(it[0])
 
 proc sortTypes*(s: seq[NimNode]): seq[string] =
   result = s.mapIt(it.strVal).sortTypes()
+
+proc toStr(n: seq[NimNode]): seq[string] =
+  for ch in n:
+    if ch.kind != nnkEmpty:
+      result.add ch.repr
+
+proc sortTypes*(heuristic, deduced: seq[NimNode]): seq[string] =
+  ## sorts the types according to our own "priority list"
+  result = sortTypes(heuristic.toStr,
+                     deduced.toStr)
 
 proc accumulateTypes*(p: Preface): seq[string] =
   ## Returns a sorted sequence of all distinct types other than `DtypesAll` found in
@@ -156,9 +199,19 @@ proc accumulateTypes*(p: Preface): seq[string] =
     let aC = a.colType.strVal
     if aC notin DtypesAll:
       result.add aC
-    let aR = a.resType.strVal
-    if aR notin DtypesAll:
-      result.add aR
+    ## XXX: we should *not* accumulate the result type of each individual column, as those
+    ## may be intermediate. Only the read types & the resulting type of the formula. Consider
+    ## the following formula:
+    ##
+    ## `f{ idx("a").int8 in {1'i8, 3, 5, 7} }`
+    ##
+    ## here `int8` will be the `resType` of `"a"`, but it's not relevant for a `Column`!
+    ##
+    ## Instead of combining all `resType` we now accumulate the hopefully correct last type
+    ## using `heuristicType` as a second return value in `determineTypesImpl`.
+    #let aR = a.resType.strVal
+    #if aR notin DtypesAll:
+    #  result.add aR
   result = result.sortTypes()
 
 proc isColumnType*(n: NimNode): bool =
