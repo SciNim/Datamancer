@@ -65,7 +65,9 @@ proc getInnerType*(n: NimNode, last = newEmptyNode()): NimNode =
       result = n
   of nnkBracketExpr:
     let n0s = n[0].strVal.normalize
-    if n0s notin ["tensor", "seq", "typedesc", "openarray"]:
+    if n0s == "array": # for arrays the type is the last child node
+      result = n[^1]
+    elif n0s notin ["tensor", "seq", "typedesc", "openarray"]:
       result = n
     else:
       result = n[1].getInnerType
