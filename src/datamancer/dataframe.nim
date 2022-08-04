@@ -46,7 +46,6 @@ proc getDataFrameImpl(n: NimNode): NimNode =
   of nnkTypeDef: result = n[2]
   of nnkObjectTy: result = n
   else:
-    echo n.treerepr
     error("invalid")
 
 macro unionType*(t1, t2: typed): untyped =
@@ -368,18 +367,6 @@ proc `[]=`*[C: ColumnLike; T](df: var DataTable[C], fn: Formula[C], key: string,
     if bTensor[idx]: # if condition true
       col[idx] = val
   df[key] = col
-
-proc printall(n: NimNode) =
-  echo "--------------------------------------------------------------------------------"
-  echo n.getType.treerepr
-  #echo n.getImpl.treerepr
-  echo n.getTypeImpl.treerepr
-  echo n.getTypeInst.treerepr
-
-macro printTypes(arg1, arg2: typed): untyped =
-  printall(arg1)
-  printall(arg2)
-
 
 proc asgn*[C: ColumnLike; U](df: var DataTable[C], k: string, col: U) {.inline.} =
   ## Low-level assign, which does not care about sizes of column. If used with a given
@@ -1482,9 +1469,6 @@ proc arrangeSortImpl[T](toSort: var seq[(int, T)], order: SortOrder) =
     )
 
 proc sortBySubset[C: ColumnLike](df: DataTable[C], by: string, idx: seq[int], order: SortOrder): seq[int] =
-  static:
-    echo "===============INPUT TYPE FOR SROTBY SUBSET\n", typeof(C)
-    #if true: quit()
   let col = df[by]
   if col.kind == colConstant: # nothing to sort
     result = idx
@@ -1751,7 +1735,6 @@ proc mutate*[C: ColumnLike; U: ColumnLike](df: DataTable[C], fns: varargs[Formul
   result.mutateInplace(fns)
 
 macro mutate2*(df: untyped, fns: varargs[untyped]): untyped =
-  echo "========================================MUTATE ", df.treerepr
   let fnsConverted = nnkBracket.newTree()
   for fn in fns:
     fnsConverted.add quote do:
@@ -2261,7 +2244,6 @@ proc unique*[C: ColumnLike](c: C): C =
     doAssert x.unique.toTensor(int) == [1, 2, 4, 5].toTensor
   let cV = c.toTensor(Value)
   var hSet = toHashSet(cV)
-  echo "hash set ", hSet
   var idxToKeep = newTensor[int](hSet.card)
   var idx = 0
   for i in 0 ..< c.len:
