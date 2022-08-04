@@ -1085,6 +1085,7 @@ proc parseOptionValue(n: NimNode): Option[FormulaKind] {.used.} =
     error("Bad input node " & $n.repr & " in `parseOptionValue`.")
 
 import macrocache # needed only here
+const TypeNames = CacheTable"ColTypeNames"
 proc genClosureRetType(preface: Preface, resType: NimNode, dfType: Option[NimNode]): NimNode =
   let typs = if dfType.isSome:
                dfType.get.columnToTypes()
@@ -1096,7 +1097,6 @@ proc genClosureRetType(preface: Preface, resType: NimNode, dfType: Option[NimNod
     error("The column type `" & $name & "` has not been generated yet. If you haven't added " &
       "a column using this type to a DF yet, call `patchColumn` with the type.")
   result = TypeNames[name]
-
 
 macro compileFormulaImpl*(rawName: static string,
                           funcKind: static FormulaKind): untyped =
