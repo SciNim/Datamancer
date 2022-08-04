@@ -30,7 +30,8 @@ type
     x.len is int
     x.kind is ColKind
 
-  SupportedTypes = float | char | int | bool | string | Value
+  BuiltInTypes = float | char | int | bool | string | Value
+  SupportedTypes = SomeNumber | BuiltInTypes
 
 
 import gencase
