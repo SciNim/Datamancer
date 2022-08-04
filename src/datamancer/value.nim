@@ -119,6 +119,14 @@ proc `%~`*[T: ref object](x: T): Value =
   else:
     result = %~(x[])
 
+type
+  ScalarLike* = concept x
+    x.float is float
+
+proc `%~`*[T: ScalarLike](x: T): Value =
+  result = newVObject()
+  result[$T] = %~ x.float
+
 proc toObject*(s: seq[(string, Value)]): Value =
   ## converts the given sequence to an object
   ## This is only used to store the result of the `groups` iterator as a
