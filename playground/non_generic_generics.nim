@@ -9,17 +9,13 @@ import tables, sets # not needed if not called from here `patchDataFrame`
 
 {.experimental: "overloadableEnums".}
 
-proc `%~`[T: SomeUnit](m: T): Value =
-  result = newVObject()
-  result[$T] = (%~ m.float)
-
 proc makeCol[T](s: seq[T]) =
   var c = toColumn(s.toTensor)
   echo pretty(c)
 
 #var t = toTensor(@[2.kg])
-genColumn(KiloGram)
-genColumn(Measurement[float])
+defColumn(KiloGram)
+defColumn(Measurement[float])
 block:
   let ti = @[1.kg, 2.kg].toTensor
   var c = toColumn(ti)
@@ -51,7 +47,7 @@ echo typeof(fn)
 defUnit(kg²)
 #genTypeEnum(KiloGram²)
 #type kg2Col = patchColumn(KiloGram²)
-genColumn(Meter)
+defColumn(Meter)
 #genTypeEnum(Meter)
 #type mCol = patchColumn(Meter)
 
@@ -65,11 +61,11 @@ echo dfN.pretty(precision = 10)
 echo dfN.arrange("kg", SortOrder.Descending).pretty(precision = 10)
 echo dfN.arrange("kg", SortOrder.Ascending).pretty(precision = 10)
 
-genColumn(KiloGram, KiloGram²)
+defColumn(KiloGram, KiloGram²)
 let fn2 = dfFn(dfN, f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`})
 echo typeof(fn2)
 #
-genColumn(KiloGram, Meter)
+defColumn(KiloGram, Meter)
 ##genTypeEnum(KiloGram, Meter)
 ##type ttCol = patchColumn(KiloGram, Meter)
 let dfNM = extendDataFrame(dfN, "meter", @[1.m, 2.m, 3.m])
@@ -87,7 +83,7 @@ type
     x: string
     val: float
 proc `<`(f1, f2: Foo): bool = f1.val < f2.val
-genColumn(Foo)
+defColumn(Foo)
 # accumulating types works to call mutate w/o df arg
 var dFoo = colType(Foo).newDataTable()
 dFoo["bar"] = @[Foo(x: "hello", val: 1.1), Foo(x: "world", val: 100.5)]
@@ -96,6 +92,6 @@ echo dFoo.pretty(precision = 30)
 
 # extend simply by accumulating types
 ## WARNING: generating a column for a type that is an alias may cause problems!
-genColumn(KiloGram²)
+defColumn(KiloGram²)
 let df2 = df.mutate(f{int: "kg²" ~ `x`.kg²})
 echo df2
