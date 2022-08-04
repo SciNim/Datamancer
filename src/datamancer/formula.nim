@@ -1170,7 +1170,9 @@ macro compileFormulaImpl*(rawName: static string,
 
   fct.resType = if fct.typeHint.resType.isSome:
                   fct.typeHint.resType.get
-                elif resTypeFromSymbols.kind != nnkEmpty and allAgree and typ.resType.isSome:
+                elif resTypeFromSymbols.kind != nnkEmpty and allAgree and
+                     typ.resType.isSome and
+                     fct.preface.resType.typeAcceptable: # the determined type must be acceptable (i.e. not generic)
                   # Take the highest priority type between symbol deduced one and
                   # heuristic one
                   let typOrdered = sortTypes(
