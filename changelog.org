@@ -1,3 +1,6 @@
+* v0.3.1
+- keep conversions from other number types to =int= and =float= after
+  all in the context of =toDf= and =toColumn=.
 * v0.3.0 
 *MAJOR, POSSIBLY BREAKING*: Add experimental support for "non-generic generic
 =Columns=".
