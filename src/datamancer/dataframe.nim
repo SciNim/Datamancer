@@ -35,18 +35,7 @@ proc getDataIdentDefs(n: NimNode): NimNode =
   else: error("invalid")
 
 import macrocache
-proc getDataFrameImpl(n: NimNode): NimNode =
-  case n.kind
-  of nnkSym:
-    if "dataframe" in n.strVal.normalize:
-      result = getDataFrameImpl(n.getTypeImpl)
-    else:
-      result = getDataFrameImpl(n.getType)
-  of nnkBracketExpr: result = n[1].getDataFrameImpl
-  of nnkTypeDef: result = n[2]
-  of nnkObjectTy: result = n
-  else:
-    error("invalid")
+const TypeNames = CacheTable"ColTypeNames"
 
 macro unionType*(t1, t2: typed): untyped =
   let t1I = t1.getInnerType()
@@ -393,7 +382,7 @@ proc extendShortColumns*[C: ColumnLike](df: var DataTable[C]) =
       df[k] = C.constantColumn(df[k][0, Value], df.len)
     elif df[k].len < df.len:
       let nFill = df.len - df[k].len
-      df[k] = df[k].add nullColumn(nFill)
+      df[k] = df[k].add C.nullColumn(nFill)
 
 proc strTabToDf*(t: OrderedTable[string, seq[string]]): DataFrame =
   ## Creates a data frame from a table of seq[string].
@@ -493,6 +482,14 @@ proc assignAdjust[T](df: var DataFrame, name: string, s: T) =
   asgn(df, name, col)
   df.len = max(df.len, col.len)
 
+proc assignAdjustDataTable[C: ColumnLike; T](df: DataTable[C], name: string, s: T): auto =
+  ## If applicable, assigns `s` as a column to `df` and adjusts the length
+  ## Might error at CT if type is not storable
+  let col = unionType(C, T).toColumn s
+  result = convertDataFrame(df, unionType(C, T))
+  asgn(result, name, col)
+  df.len = max(result.len, col.len)
+
 proc maybeToDf[T](s: T, name = ""): DataFrame =
   ## Attempts to convert the given typed argument to a valid `DataFrame`.
   ## If one of a few known types are found, dispatches to the correct procedure.
@@ -544,29 +541,33 @@ macro toTab*(args: varargs[untyped]): untyped =
         "but " & $args[0].repr & " is of kind: " & $args[0].kind)
   let data = genSym(nskVar, "columns")
   result = newStmtList()
+
+  var lastTmp = genSym(nskLet, "data")
   result.add quote do:
-    var `data` = newDataFrame()
+    let `lastTmp` = newDataFrame()
   for a in s:
     # let's just let the compiler deal with it. It should fail on `toColumn` if we
     # cannot support it after all
-    let asgnSym = bindSym("assignAdjust")
+    let asgnSym = bindSym("assignAdjustDataTable")
+    let tmp = genSym(nskVar, "data")
     case a.kind
     of nnkExprColonExpr:
       let nameCh = a[0]
       let valCh = a[1]
       result.add quote do:
-        `asgnSym`(`data`, `nameCh`, `valCh`)
+        var `tmp` = `asgnSym`(`lastTmp`, `nameCh`, `valCh`)
     else:
       let aName = a.toStrLit
       result.add quote do:
-        `asgnSym`(`data`, `aName`, `a`)
+        var `tmp` = `asgnSym`(`lastTmp`, `aName`, `a`)
+    lastTmp = tmp
   result = quote do:
     block:
       mixin extendShortColumns
       `result`
       # finally fill up possible columns shorter than df.len
-      `data`.extendShortColumns()
-      `data`
+      `lastTmp`.extendShortColumns()
+      `lastTmp`
 
 template seqsToDf*(s: varargs[untyped]): untyped =
   ## convertsb an arbitrary number of sequences to a `DataFrame` or any
@@ -919,7 +920,7 @@ proc bind_rows*[C: ColumnLike](dfs: varargs[(string, DataTable[C])], id: string 
       if k notin result:
         # create this new column consisting of `VNull` up to current size
         if result.len > 0:
-          result.asgn(k, nullColumn(result.len))
+          result.asgn(k, C.nullColumn(result.len))
         else:
           result.asgn(k, newColumn(df[k].kind))
       # now add the current vector
@@ -934,7 +935,7 @@ proc bind_rows*[C: ColumnLike](dfs: varargs[(string, DataTable[C])], id: string 
   for k in keys(result):
     if result[k].len < result.len:
       # extend this by `VNull`
-      result.asgn(k, result[k].add nullColumn(result.len - result[k].len))
+      result.asgn(k, result[k].add C.nullColumn(result.len - result[k].len))
   doAssert totLen == result.len, " totLen was: " & $totLen & " and result.len " & $result.len
 
 template bind_rows*[C: ColumnLike](dfs: varargs[DataTable[C]], id: string = ""): auto =
