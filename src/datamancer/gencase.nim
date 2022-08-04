@@ -9,6 +9,7 @@ import macrocache, ast_utils
 
 const EnumNames = CacheTable"EnumNameTab"
 const TypeNames = CacheTable"ColTypeNames"
+const TypeImpls = CacheTable"ColTypeImpls"
 # add default Column
 static: TypeNames["Column"] = ident"Column"
 const EnumFieldNames = CacheTable"EnumFieldTab"
@@ -33,6 +34,9 @@ proc genCombinedTypeStr*(types: seq[string]): string =
 proc genCombinedTypeStr*(types: seq[NimNode]): string =
   let typStrs = types.mapIt(it.nodeRepr)
   result = genCombinedTypeStr(typStrs)
+
+proc genColumnTypeStr*(types: seq[NimNode]): string =
+  result = "Column" & types.genCombinedTypeStr()
 
 proc stripObject(n: NimNode): NimNode =
   result = n
@@ -145,8 +149,7 @@ proc getGenericField*(typ: string): NimNode =
 
 proc getGenericField*(typ: NimNode): NimNode = typ.nodeRepr.getGenericField()
 
-macro genTypeEnum*(types: varargs[typed]): untyped =
-  let typs = bracketToSeq(types)
+proc genTypeEnum*(typs: seq[NimNode]): NimNode =
   let enumName = "Generic" & genCombinedTypeStr(typs) & "Kind"
   var enumSym: NimNode
   if enumName in EnumNames:
@@ -165,24 +168,30 @@ macro genTypeEnum*(types: varargs[typed]): untyped =
   # wrap in type section
   result = nnkTypeSection.newTree(result)
 
-proc getTypeEnumImpl*(types: seq[string]): NimNode =
+proc getTypeEnum*(types: seq[string]): NimNode =
   let enumName = "Generic" & genCombinedTypeStr(types) & "Kind"
   if enumName in EnumNames:
     result = EnumNames[enumName]
   else:
     error("The enum of name " & $enumName & " is not known yet. Create it using `genTypeEnum`")
 
-macro getTypeEnum*(types: varargs[typed]): untyped =
-  let typs = bracketToSeq(types).mapIt(it.nodeRepr)
-  result = getTypeEnumImpl(typs)
-
 proc columnToEnum*(t: NimNode): NimNode =
   ## Turns the given type into the name of the generic enum kind
-  result = t.getTypeInst.resolveTypedesc().columnToTypes().getTypeEnumImpl()
+  result = t.getTypeInst.resolveTypedesc().columnToTypes().getTypeEnum()
+
+proc getEnumName*(n: NimNode): NimNode =
+  case n.kind
+  of nnkTypeSection:
+    doAssert n[0].kind == nnkTypeDef
+    result = n[0][0].getEnumName()
+  of nnkIdent, nnkSym:
+    result = n
+  else:
+    error("Invalid node: " & $n.repr)
 
 proc typesFromEnum*(typ: NimNode): seq[string] =
   ## Turns the given enum name `GenericFoo|BarKind` into a seq of type names
-  result = typ.strVal.dup(removePrefix("Generic")).dup(removeSuffix("Kind")).split("|")
+  result = typ.getEnumName.strVal().dup(removePrefix("Generic")).dup(removeSuffix("Kind")).split("|")
 
 proc kindToField*(n: NimNode, toReplace, replace: NimNode): NimNode =
   ## Replaces the usage of `toReplace` by `replace` in the node `n`.
@@ -234,40 +243,22 @@ macro withCaseStmt*(n, knd: untyped, typ: typed, body: untyped): untyped =
   doAssert typ.kind == nnkSym
   result = genCaseStmt(n, knd, typ, body)
 
-proc invertType(s: string): NimNode =
-  ## Given a type name that was converted to a string by possibly replacing
-  ## `[, ]` with `_`, performs the inverse replacement
-  if "_" notin s:
-    result = ident(s)
-  else:
-    let spl = s.split("_")
-    var r = ""
-    for i, el in spl:
-      if el.len > 0:
-        r.add el
-        if i mod 2 == 0: # opening bracket
-          result = nnkBracketExpr.newTree(ident(el))
-          r.add "["
-        else:
-          result.add ident(el)
-          r.add "]"
-    #result = (r)
-
-proc genRecCase*(enumTyp: NimNode): NimNode =
-  ## extract types from enum name and
+proc genRecCase*(enumTyp: NimNode, typs: seq[NimNode]): NimNode =
+  ## Generate the `nnkRecCase` part of the resulting type using the given
+  ## name for the generic enum kind that serves as the discriminator field and
+  ## all corresponding types.
   doAssert enumTyp.kind == nnkSym
   let gkKind = ident(EnumCaseFieldName)
   result = nnkRecCase.newTree()
   result.add nnkIdentDefs.newTree(gkKind, enumTyp, newEmptyNode())
   # now all of branches
-  let typs = typesFromEnum(enumTyp)
   for typ in typs:
     let eField = getEnumField(typ)
     let gField = getGenericField(typ)
     result.add nnkOfBranch.newTree(
       eField,
       nnkIdentDefs.newTree(
-        gField, nnkBracketExpr.newTree(ident"Tensor", invertType(typ)), newEmptyNode()
+        gField, nnkBracketExpr.newTree(ident"Tensor", typ), newEmptyNode()
       )
     )
 
@@ -277,7 +268,7 @@ macro colType*(types: varargs[typed]): untyped =
   if typName in TypeNames:
     result = TypeNames[typName]
   else:
-    error("The type of name " & $typName & " is not known yet. Create it using `genType`")
+    error("The type of name " & $typName & " is not known yet. Create it using `defColumn`")
 
 proc getTensor*[C; U](c: C, dtype: typedesc[U]): U {.inline.} =
   withCaseStmt(c, gk, C):
