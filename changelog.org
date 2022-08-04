@@ -5,7 +5,10 @@
 - minor cleanup of macro logic
 - rename =genColumn= to =defColumn=
 - =toDf= now supports assignment of generic arguments as well, as long
-  as the column type required has been generated already.      
+  as the column types required have been generated already.
+- =defColumn= now generates all combinations of the given types
+- fixes some issues with =unionType= getting confused
+- makes =toColumn= work correctly with =array=  
 * v0.3.2
 - fix regression in =ggplotnim= formula due to badly determined result
   type. Only use resulting type of =Preface= if type acceptable
