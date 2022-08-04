@@ -119,6 +119,7 @@ proc add(p: var PossibleTypes, p2: PossibleTypes) {.used.} =
 proc add(p: var Preface, p2: Preface) =
   ## Adds the Assign fields of `p2` to `p`
   p.args.add p2.args
+  p.resType = p2.resType
 
 func isColIdxCall(n: NimNode): bool =
   (n.kind == nnkCall and n[0].kind == nnkIdent and n[0].strVal in ["idx", "col"])
@@ -903,7 +904,7 @@ proc determineChildTypesAndImpure(n: NimNode, tab: Table[string, NimNode]): (seq
       impureIdxs.add i - 1
   result = (impureIdxs, chTyps)
 
-proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: FormulaTypes): seq[Assign] =
+proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: var FormulaTypes): seq[Assign] =
   ## This procedure tries to determine type information from the typed symbols stored in `TypedSymbols`,
   ## so that we can override the `heuristicType`, which was determined in a first pass. This is to then
   ## create `Assign` objects, which store the column / index references and give them the type information
@@ -916,6 +917,9 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
   ##
   ## will automatically determine that column `a` needs to be read as an integer due to the placement
   ## as first argument of the procedure `max`. `max` is chosen because it is a common overload.
+  # `localTypes` stores the local deduced type so that we can keep track of the last
+  # type encountered in the AST
+  var localTypes = heuristicType
   if n.isPureTree:
     return
   case n.kind
@@ -949,12 +953,12 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
         cmdTyp.filterValidProcs(n, chTyps)
         # can use the type for the impure argument
         for idx in impureIdxs:
+          localTypes = assignType(heuristicType, cmdTyp, arg = idx)
+          heuristicType = localTypes
           result.add determineTypesImpl(
             # idx + 1 because we shift it down by 1 when adding to `impureIdxs`
             n[idx + 1], tab,
-            assignType(heuristicType,
-                       cmdTyp,
-                       arg = idx))
+            heuristicType)
   of nnkAccQuoted, nnkCallStrLit, nnkBracketExpr:
     if n.nodeIsDf or n.nodeIsDfIdx:
       if n.nodeIsDf and not n.nodeIsDfIdx:
@@ -982,12 +986,12 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
       infixType.filterValidProcs(n, chTyps)
       # can use the type for the impure argument
       for idx in impureIdxs:
+        localTypes = assignType(heuristicType, infixType, arg = idx)
+        heuristicType = localTypes
         result.add determineTypesImpl(
           # idx + 1 because we shift it down by 1 when adding to `impureIdxs`
           n[idx + 1], tab,
-          assignType(heuristicType,
-                     infixType,
-                     arg = idx))
+          heuristicType)
     of tkExpression, tkNone:
       ## TODO: we can remove this, right? There can never be a result here I think
       let typ1 = tab.getTypeIfPureTree(n[1], detNumArgs(n))
@@ -995,10 +999,15 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
       let matching1 = matchingTypes(typ1, infixType)
       let matching2 = matchingTypes(typ2, infixType)
       doAssert matching1.len == 0 and matching2.len == 0, " this is not useless ??"
+      localTypes = assignType(heuristicType, matching2)
+      heuristicType = localTypes
       result.add determineTypesImpl(n[1], tab,
-                                    assignType(heuristicType, matching2))
+                                    heuristicType)
+      localTypes = assignType(heuristicType, matching1)
+      heuristicType = localTypes
       result.add determineTypesImpl(n[2], tab,
-                                    assignType(heuristicType, matching1))
+                                    heuristicType)
+
   of nnkDotExpr:
     ## dot expression is similar to infix, but only has "one argument".
     ## index 0 is our "operator" and index 1 our "argument"
@@ -1011,9 +1020,10 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
     doAssert n[1].isPureTree, "Impure tree as second child to `nnkDotExpr` does not make sense"
     # extract types from `typ1`. Since `typ1` receives `n[0]` as its input, we can use
     # it's type or input (argument 0 technically only!) as the type for the impure branch
+    localTypes = assignType(heuristicType, typ1)
+    heuristicType = localTypes
     result.add determineTypesImpl(n[0], tab,
-                                  assignType(heuristicType,
-                                             typ1))
+                                  heuristicType)
   of nnkIfStmt:
     # Could add `ifExpr` because there we know that result type is type of argument. But better to rely on
     # type hints here (at least for now).
@@ -1024,14 +1034,19 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
     for ch in n:
       result.add determineTypesImpl(ch, tab, heuristicType)
 
+  # if we are not looking at a StmtList assign the heuristic the current localTypes. It
+  # acts as a secondary return type
+  if n.kind != nnkStmtList:
+    heuristicType = localTypes
 
 proc determineTypes(loop: NimNode, tab: Table[string, NimNode]): Preface =
   ## we give an empty node as return to fill it in a top down way. Result is
   ## determined at top level. We go down until we find a result type, if any.
   ## otherwise we will use the heuristics in the main code below.
-  let args = determineTypesImpl(loop, tab, FormulaTypes(inputType: newEmptyNode(),
-                                                        resType: newEmptyNode()))
-  result = Preface(args: args)
+  var heuristicType = FormulaTypes(inputType: newEmptyNode(),
+                                   resType: newEmptyNode())
+  let args = determineTypesImpl(loop, tab, heuristicType)
+  result = Preface(args: args, resType: heuristicType.resType)
 
 proc getGenericDataFrameType(n: NimNode): NimNode =
   case n.kind
@@ -1082,6 +1097,7 @@ proc genClosureRetType(preface: Preface, resType: NimNode, dfType: Option[NimNod
       "a column using this type to a DF yet, call `patchColumn` with the type.")
   result = TypeNames[name]
 
+
 macro compileFormulaImpl*(rawName: static string,
                           funcKind: static FormulaKind): untyped =
   ## Second stage of formula macro. The typed stage of the macro. It's important that the macro
@@ -1105,9 +1121,8 @@ macro compileFormulaImpl*(rawName: static string,
   ## Explicit `df` usage (`df["col"][idx]` needs to be put into a temp variable,
   ## `genSym("col", nskVar)`)
   fct.preface.add determineTypes(fct.loop, typeTab)
-  # compute the `resType`
-  # use heuristics to determine a possible input / output type
-  ## TODO: the type hint isn't really needed here anymore, is it?
+  # use heuristics to determine a possible input / output type. Input type hint used to
+  # possibly set return type if heuristics don't provide anything
   var typ = determineHeuristicTypes(fct.loop, typeHint = fct.typeHint,
                                     name = fct.rawName)
 
@@ -1117,7 +1132,6 @@ macro compileFormulaImpl*(rawName: static string,
   ## Modify the result type in case all Assigns agree on one type
   ## TODO: need to think the assignment of `resTypeFromSymbols` over again. Idea is simply to
   ## use the `Assign` result types in case they all agree. Make sure this is correct.
-
   for arg in mitems(fct.preface.args):
     if typ.inputType.isSome and not arg.colType.typeAcceptable:
       arg.colType = typ.inputType.get
@@ -1156,6 +1170,13 @@ macro compileFormulaImpl*(rawName: static string,
 
   fct.resType = if fct.typeHint.resType.isSome:
                   fct.typeHint.resType.get
+                elif resTypeFromSymbols.kind != nnkEmpty and allAgree and typ.resType.isSome:
+                  # Take the highest priority type between symbol deduced one and
+                  # heuristic one
+                  let typOrdered = sortTypes(
+                    heuristic = @[typ.resType.get],
+                    deduced = @[fct.preface.resType])
+                  ident(typOrdered[^1])
                 elif resTypeFromSymbols.kind != nnkEmpty and allAgree:
                   resTypeFromSymbols
                 else: typ.resType.get
