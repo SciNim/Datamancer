@@ -37,9 +37,9 @@ type
 import gencase
 export gencase
 import macrocache
-const TypeNames* = CacheTable"ColTypeNames"
+const TypeNames = CacheTable"ColTypeNames"
+const TypeImpls = CacheTable"ColTypeImpls"
 const TypeToEnumType = CacheTable"TypeToEnumType"
-var FieldNames* {.compileTime.} = initTable[string, seq[string]]()
 
 import algorithm, sugar, sequtils
 
@@ -71,32 +71,38 @@ proc getGenericTypeBranch(n: NimNode): NimNode =
   of nnkObjectTy: result = n.getRecList.getGenericTypeBranch()
   else: error("Invalid branch: " & $n.kind)
 
-macro patchColumn*(enumTyp: typed): untyped =
+proc patchColumn*(enumTyp: NimNode, typs: seq[NimNode]): NimNode =
   # get base `Column` type information
-  var typImp = getTypeInst(Column).getImpl
-  var refTy = getRefType(typImp)
+  let colImpl = getTypeInst(Column).getImpl
+  var refTy = getRefType(colImpl)
   var body = getRecList(refTy)
   var rec = getGenericTypeBranch(body) # get the `colGeneric` branch of the `Column` object
 
-  let comb = genCombinedTypeStr(typesFromEnum(enumTyp))
-  let typName = "Column" & $comb
+  let enumName = getEnumName(enumTyp)
+
+  let typName = genColumnTypeStr(typs)
   if typName notin TypeNames:
     let colSym = genSym(nskType, typName)
     TypeNames[typName] = colSym
-    TypeToEnumType[typName] = enumTyp
-    rec[1] = nnkRecList.newTree(genRecCase(enumTyp))
+    TypeToEnumType[typName] = enumName
+    rec[1] = nnkRecList.newTree(genRecCase(enumName, typs))
     body[7] = rec
     result = nnkTypeDef.newTree(colSym, newEmptyNode(), refTy)
     result = nnkTypeSection.newTree(result)
     result = result.replaceSymsByIdents()
+    TypeImpls[typName] = result
   else:
-    result = TypeNames[typName]
-  # else nothing to do, type exists
+    result = TypeImpls[typName]
 
-macro genColumn*(types: varargs[typed]): untyped =
-  result = quote do:
-    genTypeEnum(`types`)
-    patchColumn(getTypeEnum(`types`))
+proc defColumn*(t: seq[NimNode]): NimNode =
+  result = newStmtList()
+  let enumTyp = genTypeEnum(t)
+  result.add enumTyp
+  result.add patchColumn(enumTyp, t)
+
+macro defColumn*(types: varargs[typed]): untyped =
+  let typs = bracketToSeq(types)
+  result = defColumn(typs)
 
 macro assignField(c, val: typed): untyped =
   # get the correct field name
