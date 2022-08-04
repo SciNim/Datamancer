@@ -64,8 +64,8 @@ By default the =DataFrame= type supports these types as builtins:
 - =Value= (a variant object that can store either of the above)
 
 As of version =v0.3.0= very experimental support to extend the
-supported types has landed. See the [[./changelog]] for an explanation or
-the [[./playground/non_generic_generics.nim]] example to get an idea.
+supported types has landed. See the [[changelog.org]] for an explanation or
+the [[playground/non_generic_generics.nim]] example to get an idea.
 
 Essentially any arbitrary type can be used in a DF by extending the
 =Column= type using some macro magic.
