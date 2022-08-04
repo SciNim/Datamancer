@@ -30,8 +30,8 @@ type
     x.len is int
     x.kind is ColKind
 
-  BuiltInTypes = float | char | int | bool | string | Value
-  SupportedTypes = SomeNumber | BuiltInTypes
+  BuiltInTypes* = float | char | int | bool | string | Value
+  SupportedTypes* = SomeNumber | BuiltInTypes
 
 
 import gencase
@@ -228,11 +228,6 @@ proc toColumn*[T: not SupportedTypes](t: openArray[T] | Tensor[T]): auto =
 proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: openArray[T]): C =
   result = C.toColumn(t.toTensor())
 
-type
-  ScalarLike = concept x
-    (x.float is float) or (x is SupportedTypes)
-    #(%~ x) is Value
-
 proc constantColumn*[T](val: T, len: int): Column =
   ## creates a constant column based on `val` and its type
   result = Column(len: len, kind: colConstant, cCol: %~ val)
@@ -247,14 +242,18 @@ proc toColumn*(s: string): Column =
   ## explicit string overload so that it doesn't match the above `openArray[T]` call
   result = constantColumn(s, 1)
 
-## XXX: We need a way to declare the following is only allowed for scalar data types. For some reason
-## `T: not seq | not array | not Tensor` does not work
-proc toColumn*[T: ScalarLike](x: T): Column =
+proc toColumn*[T: SupportedTypes](x: T): Column =
+  ## Turn a single scalar element of the supported types into a regular `Column`.
+  ## If a single `Value` is handed, we convert to the native underlying type.
   # also possible to create single row column, but inefficient
   # for `summarize` though there's no way around
-  let vals = newTensorWith[T](1, x)
-  result = toColumn(vals)
-  #result = constantColumn(x, len = 1)
+  when T is Value:
+    withNative(x, val):
+      let vals = newTensorWith[typeof(val)](1, val)
+      result = toColumn(vals)
+  else:
+    let vals = newTensorWith[T](1, x)
+    result = toColumn(vals)
 
 proc constantColumn*[C: ColumnLike; T](_: typedesc[C], val: T, len: int): C =
   ## creates a constant column based on `val` and its type
