@@ -758,7 +758,7 @@ tr:nth-child(even) {
   header = "<thead>\n<tr>"
   header.add &"<th> Index </th>"
   for k in df.getKeys:
-    header.add &"<th> {k} <br><br> {df[k].kind.toNimType} </th>"
+    header.add &"<th> {k} <br><br> {df[k].toNimType} </th>"
   header.add "</tr>\n</thead>"
   body = "<tbody>"
   var idx = 0
