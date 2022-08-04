@@ -238,10 +238,6 @@ proc toColumn*[T: SupportedTypes](s: openArray[T]): Column =
     vals[i] = x
   result = toColumn(vals)
 
-proc toColumn*(s: string): Column =
-  ## explicit string overload so that it doesn't match the above `openArray[T]` call
-  result = constantColumn(s, 1)
-
 proc toColumn*[T: SupportedTypes](x: T): Column =
   ## Turn a single scalar element of the supported types into a regular `Column`.
   ## If a single `Value` is handed, we convert to the native underlying type.
