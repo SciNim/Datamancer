@@ -1,20 +1,132 @@
-* +v0.3.0 (To be finalized...)+ (ON ICE)
-- *MAJOR, BREAKING*: Add experimental support for "non-generic generic
-  =Columns=". Essentially, from many procedures it is now possible to
-  assign data types that are normally not supported to be stored
-  inside of a =DataFrame=. With a lot of macro magic however, we
-  generate a new =Column= type that is able to store such a data
-  type. Then we return a new =DataFrame= for the user that uses the
-  new =Column= type. For that reason =DataFrame= is now a generic type
-  (generic over the =Column= type) and the notion of the =Column= has
-  become a =ColumnLike= concept. This was the easiest way to add
-  support for things like:
-  - =DateTime=
-  - arbitrary =unchained= units in a DF
-  - =Measurement= objects =Measuremancer=
-  - ... whatever else you can think of. As long as it fits into a
-    =Tensor[T]=, you can now place it into a DF!
-  See XXX for a short introduction on the feature.
+* v0.3.0 
+*MAJOR, POSSIBLY BREAKING*: Add experimental support for "non-generic generic
+=Columns=".
+
+*See the bottom for a list of known breaking changes*.
+
+What does that mean?
+
+First of all the =DataFrame= type is now an alias to
+=DataTable[Column]=. =DataTable= is a new name for a generic version
+of =DataFrame= to avoid breaking changes when making =DataFrame=
+generic. Current code should just continue to work fine.
+
+The existing =ColumnKind= enum now has an additional member called
+=colGeneric=. This value is used in other variants of a =Column= like
+type, defined by a =ColumnLike= concept. Essentially, these types are
+equivalent to =Column=, but contain additional fields in the
+=colGeneric= branch. For example consider an extended =ColumnLike=
+type that can also store =KiloGram= and =Meter= units (from =unchained=):
+#+begin_src nim
+type
+  ColumnKiloGram|Meter = ref object
+    len*: int
+    case kind*: ColKind
+    of colFloat:
+      fCol*: Tensor[float]
+    of colInt:
+      iCol*: Tensor[int]
+    of colBool:
+      bCol*: Tensor[bool]
+    of colString:
+      sCol*: Tensor[string]
+    of colObject:
+      oCol*: Tensor[Value]
+    of colConstant:
+      cCol*: Value
+    of colNone:
+      nil
+    # up to here the same type as `Column`
+    of colGeneric:
+      # depending on the instance it the generic stores `KiloGram` or `Meter` data
+      case gkKind: GenericKiloGram|MeterKind # an auto generated enum for gen eric types
+      of gkKiloGram:
+        gKiloGram: Tensor[KiloGram] 
+      of gkMeter:
+        gMeter: Tensor[Meter]
+#+end_src
+This generalizes to any number of generics.
+
+Such a new =Column= type is generated using the =genColumn= macro:
+#+begin_src nim
+genColumn(KiloGram, Meter)
+#+end_src
+to generate the above.
+
+After generating the new type, it can be accessed using:
+#+begin_src nim
+colType(KiloGram, Meter) # <- returns the type 
+#+end_src
+
+To construct a =DataTable= of this type, you can do:
+#+begin_src nim
+let df = colType(KiloGram, Meter).newDataTable() # or `newDataTable(colType(KiloGram, Meter))` of course
+#+end_src
+
+Further an existing =DataTable= can be extended by a new type column
+using:
+#+begin_src nim
+let df = newDataFrame() # construct an old school data frame
+# ... put in some data
+let dfKg = df.extendDataFrame("foo" # <- column name
+                              @[1.kg, 2.kg]) # <- fill with kilo gram data
+#+end_src
+if the =ColumnKiloGram= type has been generated before using
+=genColumn(KiloGram)= this will return a =DataTable[KiloGram]=
+containing the old data of =df= as well as a new column called ="foo"=
+of type =KiloGram=.
+
+=mutate= also works with formulas that access generic types or
+generate columns of new generic types. There *are* certain limitations
+currently though. In some cases the formula may need to be aware of
+the type of the =DataTable= it acts on. For this there is a new macro,
+=dfFn=, which wraps around a regular =f{}= macro and receives the
+=DataTable= it should act on:
+#+begin_src nim
+genColumn(KiloGram, KiloGram²)
+let dfKg2 = dfKg.mutate(dfFn(dfKg, f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`}))
+#+end_src
+as this is a bit annoying, there is a =mutate2= (the name is
+consciously stupid, as a proper name still hasn't been chosen) that
+does this automatically:
+#+begin_src nim
+genColumn(KiloGram, KiloGram²)
+let dfKg2 = dfKg.mutate2(f{KiloGram -> KiloGram²: "kg2" ~ `kg` * `kg`})
+#+end_src
+
+Columns of course only have to be generated once.
+
+Note: one thing when dealing with multiple columns of different types
+to keep in mind (as this surely will come up more now): The =idx= and
+=col= helpers in formulas, support explicit type annotations for
+individual columns:
+#+begin_src nim
+f{float -> Meter: "foo" ~ `x` * idx(`y`, Meter)}
+# where `x` will be read as `float` and `y` as `Meter`!
+#+end_src
+
+Many things are likely to break... :)
+
+See the [[playground/non_generic_generics.nim]] for a few examples for
+usage.
+
+The release is a bit less refined than I would have liked, but as the
+code is (as far as I can tell), not breaking existing code and mostly
+working, I want to merge it now, to test it properly in real usage and
+fix things along the way. Otherwise it will be on ice forever.
+
+The commit that contains the added code is squashed as the development
+code is ultra messy. Check out the =nonGenericGenerics= branch (or PR)
+or the =cleanUpCommitsForRebase= branch (or PR) for the full history.
+
+Known *breaking changes* and issues:
+- assigning data of types that can be converted to =int= or =float=
+  (e.g. =int8=) to a DF does *not* auto convert them anymore. This was
+  always a helper to store them, but in the future once this feature
+  is more refined, it'll be better to store them as is
+- =colGeneric= is a new enum field for =ColumnKind= and thus has to be
+  handled in code dealing with the enum manually  
+
 * v0.2.10
 - remove outdated warning about failed type deduction in formulas
 * v0.2.9

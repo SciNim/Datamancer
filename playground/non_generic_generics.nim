@@ -7,7 +7,6 @@ import datamancer # / [column, value]
 #patchColumn(Tensor[Measurement[float]])
 import tables, sets # not needed if not called from here `patchDataFrame`
 
-
 {.experimental: "overloadableEnums".}
 
 proc `%~`[T: SomeUnit](m: T): Value =
