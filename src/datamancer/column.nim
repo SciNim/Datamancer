@@ -1,6 +1,7 @@
 import arraymancer/tensor
 import std / [sugar, math, strformat, tables, macros, strutils]
 import value
+
 from sequtils import allIt, mapIt
 
 import ast_utils
@@ -43,9 +44,11 @@ const TypeToEnumType = CacheTable"TypeToEnumType"
 
 import algorithm, sugar, sequtils
 
+proc genColNameStr*(types: seq[string]): string =
+  result = "Column" & genCombinedTypeStr(types)
+
 proc genColNameStr*(types: seq[NimNode]): string =
   result = "Column" & genCombinedTypeStr(types)
-  #result = "Column" & types.mapIt(it.nodeRepr.capitalizeAscii).join()
 
 proc genColName*(types: seq[NimNode]): NimNode =
   let name = genColNameStr(types)
@@ -100,9 +103,37 @@ proc defColumn*(t: seq[NimNode]): NimNode =
   result.add enumTyp
   result.add patchColumn(enumTyp, t)
 
+proc defColumnImpl(typs: seq[NimNode], single: bool): NimNode =
+  # first generate separate types of all `types`, then
+  # the combined one. Mixed and matches are *not* generated, as it
+  # could cause a complexity explosion
+  if single:
+    result = defColumn(typs)
+  else:
+    let typComb = combinations(typs)
+    result = newStmtList()
+    for comb in typComb:
+      result.add defColumn(comb)
+
 macro defColumn*(types: varargs[typed]): untyped =
+  ## Generates a `Column*` type that can hold all given types in its `colGeneric` branch
+  ## as well as every combination of the types.
+  ##
+  ## *Warning*: If you call this with more than very few types it will cause a complexity
+  ## explosion! If you really need many different types in a `DataTable`, call `defSingleColumn`!
+  ##
+  ## Notes: in the future likely the macro logic will be changed such that the "largest
+  ## possible type" will be looked up instead of the simplest based on a given type.
   let typs = bracketToSeq(types)
-  result = defColumn(typs)
+  result = defColumnImpl(typs, single = false)
+
+macro defSingleColumn*(types: varargs[typed]): untyped =
+  ## Equivalent to the above macro `defColumn`, but only generates the exact type that
+  ## can hold *all* types at the same time and no intermediares. Call this if you need
+  ## a `Column` type that can hold many types
+  let typs = bracketToSeq(types)
+  result = defColumnImpl(typs, single = true)
+
 
 macro assignField(c, val: typed): untyped =
   # get the correct field name
