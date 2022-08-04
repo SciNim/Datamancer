@@ -52,7 +52,23 @@ The data frame provides the "5 verbs" of [[https://dplyr.tidyverse.org/][dplyr]]
 - =unique=,
 which are all based on the =FormulaNode= object. Basically they all
 receive =varargs[FormulaNode]=, which is evaluated in context of the
-given dataframe.  
+given dataframe.
+
+** Supported types
+
+By default the =DataFrame= type supports these types as builtins:
+- =float=
+- =int=
+- =string=
+- =bool=
+- =Value= (a variant object that can store either of the above)
+
+As of version =v0.3.0= very experimental support to extend the
+supported types has landed. See the [[./changelog]] for an explanation or
+the [[./playground/non_generic_generics.nim]] example to get an idea.
+
+Essentially any arbitrary type can be used in a DF by extending the
+=Column= type using some macro magic.
 
 ** A few words on the =f{}= macro to create formulas
 
@@ -105,7 +121,9 @@ occured. In the old formula system, a literal string was attempted to
 be resolved as a DF column dynamically. Since the new formulas are
 compiled to closures, this would involve overhead and is thus avoided
 for clearer separation between columns and real strings. This also
-helps readers of a formula. This means:
+helps readers of a formula.
+
+This means:
 - =`columnName`=: accented quotes refer to a DF column. Be careful to
   only use this for simple letters (no non letter characters or spaces).
 - =c"columnName"= : call string literals (by convention use a =c=
@@ -153,7 +171,30 @@ types are inferred automatically to be:
 - read tensor =colName= as a =string=
 - result type is =float=
 
+*** Type information for columns
+
+When accessing columns sometimes it may be necessary or desired to
+specify the type with which a column should be read. To achieve this,
+the =idx= and =col= helpers mentioned in the previous section can be
+given an explicit type:
+#+begin_src nim
+idx("foo", int) # <- reads "foo" as a `Tensor[int]`
+col("bar", float) # <- read "baz" as a `Tensor[float]`)
+#+end_src
+
+These can be mixed and matched to read differently typed columns in
+the same formula:
+#+begin_src nim
+f{"foo" ~ idx("x", int) + idx("yStr", string).parseInt}
+#+end_src
+for an example.
+
 *** Type hints
+
+To avoid specifying the types of every input column (as mentioned above
+using =idx= and =col=) and to force a specific return type, type hints
+can be used.
+
 Type hints are required if the formula macro cannot determine the type
 required, either input or output. This is usually the case for
 ambiguous operations (overloaded procedures, only a single column
@@ -168,19 +209,10 @@ For example:
 #+begin_src nim
 f{int -> int: `x` * `y`}
 # ^--- type of the tensors involved on the RHS. Will be read as integers
-#           ^--- type of the resulting tensor
+#        ^--- type of the resulting tensor
 #+end_src
 In this case the type would be determined to be float by the macro, so
 type hints are required in case we need them to be integers.
-
-*NOTE:* it is not possible to include tensors of different data types
-in a single formula using type hints. However, if they appear in
-different branches of the formula AST and the types are determined
-automatically, this is possible. All input tensors of a computation will be read
-either by the automatically deduced data type or the =<type>= argument
-mentioned here. If an underlying tensor is not actually of the given
-data type, it will be converted via =T(val)=, where =T= is the type or
-if the conversion is not possible a runtime exception will be thrown.
 
 In addition to looking at symbols in the scope, there is a step
 involving some simple heuristic rules, e.g. if =*=, =/= is involved, it's
