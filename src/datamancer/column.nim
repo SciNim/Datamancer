@@ -218,6 +218,12 @@ proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
                gkKind: enumField(C, T))
     assignData(result, t)
 
+proc toColumn*[T: not SupportedTypes](t: openArray[T] | Tensor[T]): auto =
+  when typeof(t) is Tensor:
+    result = colType(T).toColumn(t)
+  else:
+    result = colType(T).toColumn(t.toTensor())
+
 proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: openArray[T]): C =
   result = C.toColumn(t.toTensor())
 
