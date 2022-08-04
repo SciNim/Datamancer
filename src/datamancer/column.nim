@@ -226,17 +226,16 @@ proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
     assignData(result, t)
 
 proc toColumn*[T: not SupportedTypes](t: openArray[T] | Tensor[T]): auto =
+  ## Tries to convert the given input data to a matching generic `Column*`
+  ## type. Errors at CT if there is no matching `Column*` defined so far.
   when typeof(t) is Tensor:
-    result = colType(T).toColumn(t)
+    let x = t
   else:
-    result = colType(T).toColumn(t.toTensor())
+    let x = t.toTensor()
+  result = colType(T).toColumn(t)
 
 proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: openArray[T]): C =
   result = C.toColumn(t.toTensor())
-
-proc constantColumn*[T](val: T, len: int): Column =
-  ## creates a constant column based on `val` and its type
-  result = Column(len: len, kind: colConstant, cCol: %~ val)
 
 proc toColumn*[T: SupportedTypes](s: openArray[T]): Column =
   var vals = newTensor[T](s.len)
@@ -257,13 +256,18 @@ proc toColumn*[T: SupportedTypes](x: T): Column =
     let vals = newTensorWith[T](1, x)
     result = toColumn(vals)
 
+proc toColumn*[C: ColumnLike; T: SupportedTypes](_: typedesc[C], x: T): C =
+  ## Turn a single scalar element of the supported types into a regular `Column`.
+  ## If a single `Value` is handed, we convert to the native underlying type.
+  result = C.toColumn( toColumn(x) )
+
+proc constantColumn*[T](val: T, len: int): Column =
+  ## creates a constant column based on `val` and its type
+  result = Column(len: len, kind: colConstant, cCol: %~ val)
+
 proc constantColumn*[C: ColumnLike; T](_: typedesc[C], val: T, len: int): C =
   ## creates a constant column based on `val` and its type
   result = C(len: len, kind: colConstant, cCol: %~ val)
-  #else:
-  #  var tmp: Tensor[T]
-  #  type retType = patchColumn(typeof(T))
-  #  result = retType(len: len, kind: colConstant, cCol: %~ val)
 
 proc constantToFull*[C: ColumnLike](c: C): C =
   ## creates a real constant full tensor column based on a constant column
@@ -887,14 +891,14 @@ proc equal*(c1: Column, idx1: int, c2: Column, idx2: int): bool =
 proc toObject*[C: ColumnLike](c: C): C {.inline.} =
   case c.kind
   of colObject: result = c
-  of colInt: result = toColumn c.iCol.asValue
-  of colFloat: result = toColumn c.fCol.asValue
-  of colString: result = toColumn c.sCol.asValue
-  of colBool: result = toColumn c.bCol.asValue
+  of colInt: result = C.toColumn c.iCol.asValue
+  of colFloat: result = C.toColumn c.fCol.asValue
+  of colString: result = C.toColumn c.sCol.asValue
+  of colBool: result = C.toColumn c.bCol.asValue
   of colConstant: raise newException(ValueError, "Accessed column is constant!")
   of colGeneric:
     withCaseStmt(c, gk, C):
-      result = toColumn c.gk.asValue
+      result = C.toColumn c.gk.asValue
   of colNone: raise newException(ValueError, "Accessed column is empty!")
 
 proc add*[C: ColumnLike](c1, c2: C): C =
@@ -908,17 +912,17 @@ proc add*[C: ColumnLike](c1, c2: C): C =
   if c1.kind == c2.kind:
     # just concat directly
     case c1.kind
-    of colInt: result = toColumn concat(c1.iCol, c2.iCol, axis = 0)
-    of colFloat: result = toColumn concat(c1.fCol, c2.fCol, axis = 0)
-    of colBool: result = toColumn concat(c1.bCol, c2.bCol, axis = 0)
-    of colString: result = toColumn concat(c1.sCol, c2.sCol, axis = 0)
-    of colObject: result = toColumn concat(c1.oCol, c2.oCol, axis = 0)
+    of colInt: result = C.toColumn concat(c1.iCol, c2.iCol, axis = 0)
+    of colFloat: result = C.toColumn concat(c1.fCol, c2.fCol, axis = 0)
+    of colBool: result = C.toColumn concat(c1.bCol, c2.bCol, axis = 0)
+    of colString: result = C.toColumn concat(c1.sCol, c2.sCol, axis = 0)
+    of colObject: result = C.toColumn concat(c1.oCol, c2.oCol, axis = 0)
     of colConstant:
       if c1.cCol == c2.cCol: result = c1 # does not matter which to return
       else: result = add(c1.constantToFull, c2.constantToFull)
     of colGeneric:
       withCaseStmt(c1, gk, C):
-        result = toColumn concat(c1.gk, c2.gk, axis = 0)
+        result = C.toColumn concat(c1.gk, c2.gk, axis = 0)
     of colNone: doAssert false, "Both columns are empty!"
   elif compatibleColumns(c1, c2):
     # convert both to float
@@ -926,11 +930,11 @@ proc add*[C: ColumnLike](c1, c2: C): C =
     of colInt:
       # c1 is int, c2 is float
       let c2T = c2.constantToFull().toTensor(float)
-      result = toColumn concat(c1.iCol.astype(float), c2T, axis = 0)
+      result = C.toColumn concat(c1.iCol.astype(float), c2T, axis = 0)
     of colFloat:
       # c1 is float, c2 is int
       let c2T = c2.constantToFull().toTensor(float)
-      result = toColumn concat(c1.fCol, c2T, axis = 0)
+      result = C.toColumn concat(c1.fCol, c2T, axis = 0)
     else:
       # one of the two is constant and same type as the other
       # `constantToFull` is a no-op for the non-constant column
@@ -939,7 +943,7 @@ proc add*[C: ColumnLike](c1, c2: C): C =
     result = add(c1.constantToFull, c2.constantToFull)
   else:
     # convert both columns to Value
-    result = toColumn concat(c1.toObject.oCol, c2.toObject.oCol, axis = 0)
+    result = C.toColumn concat(c1.toObject.oCol, c2.toObject.oCol, axis = 0)
   result.len = c1.len + c2.len
 
 proc toNativeColumn*(s: openArray[Value]): Column =
@@ -984,13 +988,13 @@ proc toNativeColumn*(c: Column, failIfImpossible: static bool = true): Column =
       data[i] = get cValue[i]
     result = toColumn data
 
-proc nullColumn*(num: int): Column =
+proc nullColumn*[C: ColumnLike](_: typedesc[C], num: int): C =
   ## returns an object `Column` with `N` values, which are
   ## all `VNull`
   var nullseq = newTensor[Value](num)
   for i in 0 ..< num:
     nullseq[i] = Value(kind: VNull)
-  result = toColumn(nullseq)
+  result = C.toColumn(nullseq)
 
 #proc `*`[T: SomeNumber]*(c: Column, x: T)
 proc contains*[T: float | string | int | bool | Value](c: Column, val: T): bool =
