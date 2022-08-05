@@ -482,13 +482,21 @@ proc assignAdjust[T](df: var DataFrame, name: string, s: T) =
   asgn(df, name, col)
   df.len = max(df.len, col.len)
 
-proc assignAdjustDataTable[C: ColumnLike; T](df: DataTable[C], name: string, s: T): auto =
+proc assignAdjustDataTable[C: ColumnLike; T: not (seq | openArray | Tensor)](df: DataTable[C], name: string, s: T): auto =
   ## If applicable, assigns `s` as a column to `df` and adjusts the length
   ## Might error at CT if type is not storable
   let col = unionType(C, T).toColumn s
   result = convertDataFrame(df, unionType(C, T))
   asgn(result, name, col)
-  df.len = max(result.len, col.len)
+  result.len = max(result.len, col.len)
+
+proc assignAdjustDataTable[C: ColumnLike; T](df: DataTable[C], name: string, s: seq[T] | openArray[T] | Tensor[T]): auto =
+  ## If applicable, assigns `s` as a column to `df` and adjusts the length
+  ## Might error at CT if type is not storable
+  let col = unionType(C, T).toColumn s
+  result = convertDataFrame(df, unionType(C, T))
+  asgn(result, name, col)
+  result.len = max(result.len, col.len)
 
 proc maybeToDf[T](s: T, name = ""): DataFrame =
   ## Attempts to convert the given typed argument to a valid `DataFrame`.
