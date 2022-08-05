@@ -1,3 +1,8 @@
+* v0.3.4
+- fix issues with =toDf= if only single argument given (with and
+  without string names) not setting DF length / raising CT error
+- add =to= option to convert type of data frame
+- some more internal macro logic cleanup  
 * v0.3.3
 - define =ScalarLike= concept to match types that can be converted to
   =float= via =.float= for e.g. units to have a =%~= Value conversion
