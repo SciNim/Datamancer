@@ -56,33 +56,100 @@ proc stripObject(n: NimNode): NimNode =
     tmp.removeSuffix(":ObjectType")
     result = ident(tmp)
 
-proc getInnerType*(n: NimNode, last = newEmptyNode()): NimNode =
+
+proc getInnerType*(n: NimNode, stop = false): NimNode
+proc resolveTypeDescNode(n: NimNode): NimNode =
   case n.kind
-  of nnkSym:
-    let nstr = n.strVal.normalize
-    if nstr.len == 1 or "gensym" in nstr or "uniontype" in nstr: # generic or gensymm'd symbol, skip
-      if last.kind != nnkEmpty and last.strVal == n.strVal:
-        # use typeimpl
-        result = n.getTypeImpl.getInnerType(last = n)
-      else:
-        result = n.getTypeInst.getInnerType(last = n)
-    else:
-      result = n
+  of nnkSym: result = n.getTypeInst.getInnerType()
   of nnkBracketExpr:
-    let n0s = n[0].strVal.normalize
-    if n0s == "array": # for arrays the type is the last child node
-      result = n[^1]
-    elif n0s notin ["tensor", "seq", "typedesc", "openarray"]:
+    if n[0].kind in {nnkIdent, nnkSym} and n[0].strVal.normalize == "typedesc":
+      # still a typedesc, one further
+      result = n[1].getInnerType(stop = true)
+    else:
+      # the type we want
+      result = n
+  else:
+    error("Invalid " & $n.treerepr)
+
+proc resolveRef(n: NimNode): NimNode =
+  case n.kind
+  of nnkSym: result = n # if it's a refty and a symbol, done
+  of nnkRefTy:
+    doAssert n[0].kind in {nnkIdent, nnkSym} and n[0].strVal.normalize == "ref", "was " & $n.treerepr
+    result = n[1].getInnerType()
+  else:
+    error("Invalid " & $n.treerepr)
+
+proc resolveSeq(n: NimNode): NimNode =
+  case n.kind
+  of nnkSym: result = n.getTypeImpl.getInnerType() # if it's a refty and a symbol, done
+  of nnkBracketExpr:
+    doAssert n[0].kind in {nnkIdent, nnkSym} and n[0].strVal.normalize == "seq", "was " & $n.treerepr
+    result = n[1] # inner type of `seq` is what we want
+  else:
+    error("Invalid " & $n.treerepr)
+
+proc resolveGenericInst(n: NimNode, stop: bool): NimNode =
+  case n.kind
+  of nnkSym: result = n.getType.getInnerType() # if it's a refty and a symbol, done
+  of nnkBracketExpr:
+    if stop: #
+      # want this type. We came here from `resolveTypeDesc` and already took inner type
       result = n
     else:
-      result = n[1].getInnerType
-  of nnkRefTy:
-    result = n[0]
-    result = result.stripObject()
-  of nnkHiddenDeref, nnkVarTy:
-    result = n[0].getInnerType()
+      doAssert n[0].kind in {nnkIdent, nnkSym}, "was " & $n.treerepr
+      result = n[1] # this is what we want
   else:
-    error("Invalid node: " & n.treerepr)
+    error("Invalid " & $n.treerepr)
+
+# for simple types make sure to call `getType` if it's a `const` of some distinct version
+proc resolveInt(n: NimNode): NimNode =
+  result = n.getType
+
+proc resolveFloat(n: NimNode): NimNode =
+  result = n.getType
+
+proc resolveString(n: NimNode): NimNode =
+  result = n.getType
+
+proc resolveObject(n: NimNode): NimNode =
+  result = n # just the type
+
+proc resolveDistinct(n: NimNode): NimNode =
+  result = n # just the type
+
+proc resolveAlias(n: NimNode): NimNode =
+  result = n # just the type
+
+proc resolveArray(n: NimNode): NimNode =
+  ## nnkBracketExpr
+  ##   Sym "array"
+  ##   Infix
+  ##     Ident ".."
+  ##     IntLit 0
+  ##     IntLit 2
+  ##   Sym "int"
+  result = n[^1] # array has type as last child
+
+proc getInnerType*(n: NimNode, stop = false): NimNode =
+  case n.typeKind
+  of ntyTypeDesc: result = n.resolveTypeDescNode()
+  of ntyRef: result = n.resolveRef()
+  of ntySequence: result = n.resolveSeq()
+  of ntyGenericInst: result = n.resolveGenericInst(stop)
+  of ntyInt .. ntyInt64, ntyUint .. ntyUint64: result = n.resolveInt()
+  of ntyFloat: result = n.resolveFloat()
+  of ntyString: result = n.resolveString()
+  of ntyObject: result = n.resolveObject()
+  of ntyDistinct: result = n.resolveDistinct()
+  of ntyAlias: result = n.resolveAlias()
+  of ntyArray: result = n.resolveArray()
+  else: error("Invalid: " & $n.typeKind & " for: " & $n.treerepr)
+
+macro innerType*(t: typed): untyped =
+  ## Returns the inner type of the typed symbol from a proc or the
+  ## symbol of the column type
+  result = t.getInnerType()
 
 proc resolveGenerics*(n: NimNode): NimNode =
   if n.typeKind == ntyTypeDesc:
