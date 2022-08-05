@@ -30,8 +30,7 @@ proc columnToTypes*(s: string): seq[string] =
   result = s.split("|").filterIt(it.len > 0 and it notin DtypesAll)
 
 proc columnToTypes*(n: NimNode): seq[string] =
-  doAssert n.kind in {nnkSym, nnkIdent}
-  var r = n.strVal
+  var r = n.nodeRepr
   result = columnToTypes(r)
 
 proc genCombinedTypeStr*(types: seq[string]): string =
