@@ -468,6 +468,14 @@ proc convertDataFrame*[C: ColumnLike; U](df: DataTable[C], dtype: typedesc[U]): 
     for k in keys(df):
       result[k] = toColumn(unionType(C, U), df[k])
 
+proc to*[C: ColumnLike; U: ColumnLike](df: DataTable[C], _: typedesc[U]): DataTable[U] =
+  ## Converts the given input DF from column type `C` to `U`
+  result = df.convertDataFrame(U)
+
+proc to*[C: ColumnLike; U: ColumnLike](df: DataTable[C], _: typedesc[DataTable[U]]): DataTable[U] =
+  ## Converts the given input DF from column type `C` to `U`
+  result = df.convertDataFrame(U)
+
 proc extendDataFrame*[C: ColumnLike; U](df: DataTable[C], key: string, arg: U): auto =
   ## Given a type that is not a normal DF type, returns a new DF type that can store
   ## it and puts it as `key`
