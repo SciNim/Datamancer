@@ -498,7 +498,7 @@ proc assignAdjustDataTable[C: ColumnLike; T](df: DataTable[C], name: string, s: 
   asgn(result, name, col)
   result.len = max(result.len, col.len)
 
-proc maybeToDf[T](s: T, name = ""): DataFrame =
+proc maybeToDf[T](s: T, name = ""): auto =
   ## Attempts to convert the given typed argument to a valid `DataFrame`.
   ## If one of a few known types are found, dispatches to the correct procedure.
   ## Else attempts to generate a new `DataFrame` using `assignAdjust`, which may
@@ -512,8 +512,7 @@ proc maybeToDf[T](s: T, name = ""): DataFrame =
   elif T is OrderedTable[string, seq[Value]]:
     result = valTabToDf(s)
   else:
-    result = newDataFrame()
-    assignAdjust(result, name, s)
+    result = assignAdjustDataTable(newDataFrame(), name, s)
 
 macro toTab*(args: varargs[untyped]): untyped =
   ## Performs conversion of the untyped arguments to a `DataFrame`.
