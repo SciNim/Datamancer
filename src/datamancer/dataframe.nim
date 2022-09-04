@@ -1203,7 +1203,8 @@ proc filterImpl[C: ColumnLike; T; U: seq[int] | Tensor[int]](resCol: var C, col:
 proc filter[C: ColumnLike; U: seq[int] | Tensor[int]](col: C, filterIdx: U): C =
   ## perform filterting of the given column `key`
   if col.kind == colConstant: # just return a "shortened" constant tensor
-    result = col
+    result = col.clone() # cloning a constant column is cheap. Otherwise we modify `col` via
+                         # reference semantics!
     result.len = filterIdx.len
   else:
     withNativeDtype(col):
@@ -1692,6 +1693,7 @@ proc mutateImpl[C: ColumnLike](df: var DataTable[C], fns: varargs[Formula[C]],
 
 proc mutateInplace*[C: ColumnLike; U](df: var DataTable[C], fns: varargs[Formula[U]]) =
   ## Inplace variasnt of `mutate` below.
+
   case df.kind
   of dfGrouped:
     var dfs = newSeq[DataTable[C]]()
