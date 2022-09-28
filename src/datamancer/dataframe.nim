@@ -2152,6 +2152,9 @@ proc gather*[C: ColumnLike](df: DataTable[C], cols: varargs[string],
     doAssert dfRes["Class", string] == ["A", "A", "A", "B", "B", "B", "C", "C", "C"].toTensor
     doAssert dfRes["Num", int] == [1, 8, 0, 3, 4, 0, 5, 7, 2].toTensor
 
+  # bind `sets.items` so we do not need to export `sets`
+  bind sets.items
+
   result = C.newDataTable(df.ncols)
   let remainCols = getKeys(df).toHashSet.difference(cols.toHashSet)
   let newLen = cols.len * df.len
@@ -2170,7 +2173,8 @@ proc gather*[C: ColumnLike](df: DataTable[C], cols: varargs[string],
     result.asgn(key, toColumn keyTensor)
     result.asgn(value, toColumn valTensor)
   # For remainder of columns, just use something like `repeat`!, `stack`, `concat`
-  for rem in remainCols:
+  # Note: explicit `items` call necessary, otherwise our `bind` does not work
+  for rem in items(remainCols):
     withNativeDtype(df[rem]): ## XXX: this might convert to colObject?
       let col = df[rem].toTensor(dtype)
       var fullCol = newTensorUninit[dtype](newLen)
