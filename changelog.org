@@ -1,3 +1,7 @@
+* v0.3.5
+- fix reference semantics bugs for constant columns for =filter= calls
+- fix issue with =gather= in files that do not import =sets= by
+  binding the =items= iterator in the scope  
 * v0.3.4
 - fix issues with =toDf= if only single argument given (with and
   without string names) not setting DF length / raising CT error
