@@ -1,3 +1,6 @@
+* v0.3.6
+- fix similar issue to =gather= with =innerJoin= by also binding
+  =items= for sets & calling =items= directly
 * v0.3.5
 - fix reference semantics bugs for constant columns for =filter= calls
 - fix issue with =gather= in files that do not import =sets= by
