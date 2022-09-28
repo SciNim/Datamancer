@@ -1857,6 +1857,8 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
     doAssert dfRes["Num", int] == [1, 5, 3, 4, 6].toTensor
     doAssert dfRes["Ids", int] == [125, 124, 127, 126, 123].toTensor
 
+  bind sets.items
+
   # build sets from both columns and seqs of their corresponding indices
   let
     df1S = df1.arrange(by)
@@ -1884,7 +1886,7 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
       restKeys = allKeys - commonKeys
     result = C.newDataTable(allKeys.card)
     let resLen = (max(df1S.len, df2S.len))
-    for k in allKeys:
+    for k in items(allKeys):
       if k in df1S and k in df2S:
         doAssert compatibleColumns(df1S[k], df2S[k]), " Key: " & $k & ", df1: " & $df1S[k].kind & ", df2: " & $df2S[k].kind
         result.asgn(k, newColumn(kind = combinedColKind(@[df1S[k], df2S[k]]),
@@ -1903,12 +1905,12 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
       let jl = idxDf2[j]
       # indices point to same row, merge row
       if df1By[il] == df2By[jl]:
-        for k in commonKeys:
+        for k in items(commonKeys):
           if not equal(df1S[k], il, df2S[k], jl):
             # skip this element
             break
           result.assign(k, count, df1S[k], il)
-        for k in restKeys:
+        for k in items(restKeys):
           if k in keys1:
             result.assign(k, count, df1S[k], il)
           elif k in keys2:
