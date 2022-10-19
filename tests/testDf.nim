@@ -645,6 +645,17 @@ suite "DataTable tests":
   #  tensorB[df.high] = 1e6
   #  check df["a"].toTensor(float) == bMod2.toTensor.asType(float)
 
+  test "toDf with a `bool` column":
+    # broke ggplotnim CI due to `rPointInPolygon` noticed in https://github.com/Vindaar/ggplotnim/pull/151
+    # It was a regression due to the non-generic generics changes
+    let a = [1, 2, 3]
+    let b = [true, false, true]
+    let c = @[false, true, false]
+    let df = toDf(a, b, c)
+    check df["a", int].toSeq1D == a
+    check df["b", bool].toSeq1D == @b
+    check df["c", bool].toSeq1D == @c
+
   test "Extending a DF by a column":
     let a = [1, 2, 3]
     let b = [3, 4, 5]
