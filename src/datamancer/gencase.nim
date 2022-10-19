@@ -144,6 +144,7 @@ proc getInnerType*(n: NimNode, stop = false): NimNode =
   of ntyDistinct: result = n.resolveDistinct()
   of ntyAlias: result = n.resolveAlias()
   of ntyArray: result = n.resolveArray()
+  of ntyBool: result = ident"bool"
   else: error("Invalid: " & $n.typeKind & " for: " & $n.treerepr)
 
 macro innerType*(t: typed): untyped =
