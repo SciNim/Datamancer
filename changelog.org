@@ -1,3 +1,6 @@
+* v0.3.7
+- fix regression for =bool= columns, by handling =ntyBool= in
+  =gencase=. Fixes the ggplotnim CI, as noticed by https://github.com/Vindaar/ggplotnim/pull/151.
 * v0.3.6
 - fix similar issue to =gather= with =innerJoin= by also binding
   =items= for sets & calling =items= directly
