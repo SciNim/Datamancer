@@ -490,6 +490,22 @@ b,,foo
     check df["(Name) Additional name if exists"].kind == colObject
     check df["(Name) Additional name if exists", Value][0] == null()
 
+  test "`toHtml`":
+    let a = [1, 2, 3]
+    let b = [3, 4, 5]
+    let c = [4, 5, 6]
+    let df = toDf(a, b, c)
+    check df.toHtml == """<table>
+  <tbody><tr>
+<td>0</td><td>1</td><td>3</td><td>4</td>
+</tr><tr>
+<td>1</td><td>2</td><td>4</td><td>5</td>
+</tr><tr>
+<td>2</td><td>3</td><td>5</td><td>6</td>
+</tr></tbody>
+</table>
+"""
+
 suite "DataTable tests":
 
   test "`toDf` is no-op for DF":
