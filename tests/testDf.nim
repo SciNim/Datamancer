@@ -496,7 +496,9 @@ b,,foo
     let c = [4, 5, 6]
     let df = toDf(a, b, c)
     check df.toHtml == """<table>
-  <tbody><tr>
+  <thead>
+<tr><th> Index </th><th> a <br><br> int </th><th> b <br><br> int </th><th> c <br><br> int </th></tr>
+</thead><tbody><tr>
 <td>0</td><td>1</td><td>3</td><td>4</td>
 </tr><tr>
 <td>1</td><td>2</td><td>4</td><td>5</td>

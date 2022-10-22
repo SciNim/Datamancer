@@ -778,7 +778,7 @@ proc toHtml*[C: ColumnLike](df: DataTable[C], tmpl = ""): string =
     body.add "\n</tr>"
     inc idx
   body.add "</tbody>"
-  result = tmpl % body
+  result = tmpl % (header & body)
 
 proc showBrowser*[C: ColumnLike](
   df: DataTable[C], fname = "df.html", path = getTempDir(), toRemove = false,
@@ -792,8 +792,8 @@ proc showBrowser*[C: ColumnLike](
   ## Note: the HTML generation is not written for speed at this time. For very large
   ## dataframes expect bad performance.
   let tmpl = if htmlTmpl.len > 0: htmlTmpl else: HtmlTmpl
-  let page = tmpl % [fname, df.toHtml()]
   let fname = path / fname
+  let page = tmpl % [fname, df.toHtml()]
   writeFile(fname, page)
   openDefaultBrowser(fname)
   if toRemove:
