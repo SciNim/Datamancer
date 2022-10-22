@@ -714,12 +714,7 @@ proc writeCsv*[C: ColumnLike](df: DataTable[C], filename: string, sep = ',', hea
     data.add "\n"
   writeFile(filename, data)
 
-proc showBrowser*[C: ColumnLike](df: DataTable[C], fname = "df.html", path = getTempDir(), toRemove = false) =
-  ## Displays the given DataFrame as a table in the default browser.
-  ##
-  ## Note: the HTML generation is not written for speed at this time. For very large
-  ## dataframes expect bad performance.
-  const tmpl = """
+const HtmlTmpl* = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -745,13 +740,25 @@ tr:nth-child(even) {
 
 <h2> $# </h2>
 
-<table>
-  $#
-</table>
+$#
 
 </body>
 </html>
 """
+
+const TableTmpl* = """
+<table>
+  $#
+</table>
+"""
+
+proc toHtml*[C: ColumnLike](df: DataTable[C], tmpl = ""): string =
+  ## Converts the given DataFrame to an HTML table.
+  ##
+  ## The `tmpl` argument can be used to provide an HTML template in which the
+  ## table will be inserted. It requires a `$#` field, in which the table
+  ## will be inserted.
+  let tmpl = if tmpl.len > 0: tmpl else: TableTmpl
   var
     header: string
     body: string
@@ -771,8 +778,23 @@ tr:nth-child(even) {
     body.add "\n</tr>"
     inc idx
   body.add "</tbody>"
+  result = tmpl % body
+
+proc showBrowser*[C: ColumnLike](
+  df: DataTable[C], fname = "df.html", path = getTempDir(), toRemove = false,
+  htmlTmpl = "") =
+  ## Displays the given DataFrame as a table in the default browser.
+  ##
+  ## `htmlTmpl` can be used as the HTML template of the page on which to print the
+  ## data frame. It requires two `$#` fields, one for the header of the page and the
+  ## second for the actual `<table>` body.
+  ##
+  ## Note: the HTML generation is not written for speed at this time. For very large
+  ## dataframes expect bad performance.
+  let tmpl = if htmlTmpl.len > 0: htmlTmpl else: HtmlTmpl
+  let page = tmpl % [fname, df.toHtml()]
   let fname = path / fname
-  writeFile(fname, tmpl % [fname, header & body])
+  writeFile(fname, page)
   openDefaultBrowser(fname)
   if toRemove:
     # opening browsers may be slow, so wait a long time before we delete (file still needs to
