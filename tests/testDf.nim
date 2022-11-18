@@ -596,6 +596,17 @@ suite "DataTable tests":
     check "y" in df
     check df["y", string] == ["a", "b", "c"].toTensor
 
+  test "`toDf` works in template":
+    template foo() =
+      let x = @[1, 2, 3]
+      let y = @[1, 2, 3]
+      let df = toDf(x)
+      check "x" in df
+      let df2 = toDf(x, y)
+      check "x" in df2
+      check "y" in df2
+    foo()
+
   test "Creation of DFs from seqs":
     let a = [1, 2, 3]
     let b = [3, 4, 5]
