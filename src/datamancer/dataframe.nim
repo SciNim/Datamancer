@@ -549,7 +549,7 @@ macro toTab*(args: varargs[untyped]): untyped =
       # Dispatch to `maybeToDf`
       return nnkBlockStmt.newTree(
         newEmptyNode(),
-        nnkCall.newTree(bindSym("maybeToDf"), arg, arg.toStrLit)
+        nnkCall.newTree(bindSym("maybeToDf"), arg, degensymTree(arg).toStrLit)
       )
     else:
       error("If only single argument it has to be an ident, symbol, call or command, " &
