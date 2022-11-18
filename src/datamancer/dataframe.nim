@@ -572,7 +572,7 @@ macro toTab*(args: varargs[untyped]): untyped =
       result.add quote do:
         var `tmp` = `asgnSym`(`lastTmp`, `nameCh`, `valCh`)
     else:
-      let aName = a.toStrLit
+      let aName = degensymTree(a).toStrLit
       result.add quote do:
         var `tmp` = `asgnSym`(`lastTmp`, `aName`, `a`)
     lastTmp = tmp

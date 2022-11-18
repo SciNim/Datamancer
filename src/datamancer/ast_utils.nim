@@ -43,3 +43,12 @@ proc combinations*(s: seq[NimNode]): seq[seq[NimNode]] =
     sNoX.delete(s.find(x))
     result.add combinations(sNoX)
   result = result.deduplicate()
+
+proc degensymTree*(n: NimNode): NimNode =
+  case n.kind
+  of nnkIdent, nnkSym:
+    result = ident(n.strVal.split("`gensym")[0])
+  else:
+    result = n.copy()
+    for i in 0 ..< n.len:
+      result[i] = degensymTree(n[i])

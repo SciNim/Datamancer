@@ -1,3 +1,5 @@
+* v0.3.9
+- =toDf= now degensyms identifiers so the name of the column is the same as the variable name also in templates.
 * v0.3.8
 - refactor =toHtml= out of =showBrowser= to access raw generated HTML table
 * v0.3.7
