@@ -2047,3 +2047,87 @@ suite "Formulas with object columns using convenience operators":
     check df.filter(f{`x` in ["foo", "bar"]})["x", string] == ["foo", "bar"].toTensor
     echo df.filter(f{`x` notin ["foo", "bar"]})["x", string]
     check df.filter(f{`x` notin ["foo", "bar"]})["x", string] == ["baz"].toTensor
+
+suite "Formulas with nodes lifted out of body":
+  ## Ref'd by: `FWLN` in code
+  ## How do we test this at CT? -> define a procedure that modifies a global counter
+  ## check only called once
+  test "Lifting out column operation":
+    let x = @[1, 2, 3]
+    let y = @[4, 5, 6]
+
+    # compute new column `z` that uses sum
+    var counter = 0
+    proc mySum(c: Tensor[int]): int =
+      inc counter
+      result = c.sum()
+
+    block A:
+      var df = toDf({"x" : x, "y" : y})
+      df = df.mutate(f{int: "z" ~ `x` + mySum(col("y"))})
+      check "z" in df
+      check df["z", int] == @[16, 17, 18].toTensor()
+      check counter == 1 # and *not* 3 as it was before
+
+    proc mySum2(c: Tensor[int], el: int): int =
+      inc counter
+      result = c.sum() + el
+
+    block B:
+      ## XXX: Add Note that constructs like this one *cannot* be lifted for
+      ## obvious reasons!
+      counter = 0
+      var df = toDf({"x" : x, "y" : y})
+      df = df.mutate(f{int: "z" ~ `x` + mySum2(col("y"), `x`)})
+      check "z" in df
+      check df["z", int] == @[17, 19, 21].toTensor()
+      check counter == 3 # no lift!
+
+    block C:
+      ## This can
+      counter = 0
+      var df = toDf({"x" : x, "y" : y})
+      df = df.mutate(f{int -> int: "z" ~ `x` + col("y").mySum()})
+      check "z" in df
+      check df["z", int] == @[16, 17, 18].toTensor()
+      check counter == 1 # and *not* 3 as it was before
+
+    block D:
+      ## But this cannot, same reason as block B
+      counter = 0
+      var df = toDf({"x" : x, "y" : y})
+      df = df.mutate(f{int -> int: "z" ~ `x` + col("y").mySum2(idx("x"))})
+      check "z" in df
+      check df["z", int] == @[17, 19, 21].toTensor()
+      check counter == 3
+
+    block E:
+      ## Do *not* lift a `nnkDotExpr` as first chiled of call containing
+      ## an `idx(bar)` argument!
+      type
+        Foo = object
+      counter = 0
+      proc attenuationCoefficient(x: Foo, el: int): int =
+        inc counter
+        result = 1
+      let el = Foo()
+      var df = toDf(x, y)
+        .mutate(f{int: "μ" ~ el.attenuationCoefficient(idx("x"))})
+      check "μ" in df
+      check counter == 3
+      check df["μ", int] == @[1, 1, 1].toTensor()
+    block F:
+      ## *Do* lift a `nnkDotExpr` as first chiled of call containing
+      ## a `col(bar)` argument!
+      type
+        Foo = object
+      counter = 0
+      proc attenuationCoefficient(x: Foo, el: Tensor[int]): int =
+        inc counter
+        result = sum(el)
+      let el = Foo()
+      var df = toDf(x, y)
+        .mutate(f{int: "μ" ~ el.attenuationCoefficient(col("x"))})
+      check "μ" in df
+      check counter == 1
+      check df["μ", int] == @[6, 6, 6].toTensor()
