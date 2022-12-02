@@ -51,6 +51,8 @@ type
     df*: Option[NimNode] # the (optional) DataFrame from which to deduce the type of the closure argument DF
     dfType*: Option[NimNode] # the extracted/default type of the `DataFrame` argument to the closure
     colResType*: NimNode # the returned `Column` type of a `fkVektor` closure (usually `Column`)
+    fullFormula*: bool # indicates if this wan generated from a full formula. In this case we do not
+                       # perform lifting of nodes
   ## `Lift` stores a node which needs to be lifted out of a for loop, because it performs a
   ## reducing operation on a full DF column. It will be replaced by `liftedNode` in the loop
   ## body.
@@ -376,23 +378,25 @@ proc isPureTree*(n: NimNode): bool =
     if not result:
       return
 
-proc isPureTreeCol*(n: NimNode): bool =
+proc isPureTreeCol*(n: NimNode, dirtyNodes: seq[NimNode]): bool =
   ## checks if this node tree is a "pure" tree in the sense that it does ``not``
   ## contain any references to ``indices``. (pure + `col`)
   result = true
   if n.nodeIsDfIdx:
     return false
+  elif n in dirtyNodes:
+    return false
   for ch in n:
-    result = isPureTreeCol(ch)
+    result = isPureTreeCol(ch, dirtyNodes)
     if not result:
       return
 
-proc isPureOrColAccess*(n: NimNode): LiftTreeKind =
+proc isPureOrColAccess*(n: NimNode, dirtyNodes: var seq[NimNode]): LiftTreeKind =
   ## Checks if the given node is either a pure tree or only contains full
   ## column accesses. If that is the case, we can lift it out of the
   ## loop body.
   # The test cases are refering to the test `"Lifting out column operation"`
-  if n.nodeIsDfIdx: # relevant test case `FWLN block B` after a `lkDeeper`
+  if n.nodeIsDfIdx or n in dirtyNodes: # relevant test case `FWLN block B` after a `lkDeeper`
     result = lkBreak
   elif n.kind == nnkCall and n[0].kind == nnkDotExpr:
     if n[0][0].nodeIsDf: # is a `col(foo)` node
@@ -408,10 +412,18 @@ proc isPureOrColAccess*(n: NimNode): LiftTreeKind =
         if n[i].nodeIsDfIdx: return lkBreak # can't be lifted, test case `FWLN block D`
     else:
       result = lkSkipChild0 # test case: `FWLN block E`
-  elif n.isPureTreeCol:
+  elif n.kind in {nnkIdentDefs, nnkAsgn}:
+    let idx = if n.kind == nnkIdentDefs: 2 else: 1
+    if not n[idx].isPureTreeCol(dirtyNodes): # corresponds to e.g. `let x = idx("B")` or `x = idx("B")`
+      # mark new node as dirty
+      dirtyNodes.add n[0]
+      result = lkBreak
+    else:
+      result = lkLift
+  elif n.isPureTreeCol(dirtyNodes):
     ## we break if an ident, as we don't need to lift out individual idents.
     ## In fact this would also lift things like `<`, `notin` etc.
-    if n.kind in {nnkIdent} + nnkLiterals: result = lkBreak
+    if n.kind in {nnkNone, nnkEmpty, nnkIdent, nnkSym, nnkType} + nnkLiterals: result = lkBreak
     else: result = lkLift # test case `FWLN block A, block F`
   else:
     result = lkDeeper
@@ -432,8 +444,8 @@ proc liftConstants(fct: var FormulaCT): NimNode =
   # Note: Have to be careful with one particular case:
   # `nnkCall` can contain a `nnkDotExpr` as first child, in which case it means
   # a call of dotExpr child 1 with first arg dot expr child 0
-  proc liftFrom(n: NimNode): (NimNode, seq[Lift]) =
-    let lKind = n.isPureOrColAccess()
+  proc liftFrom(n: NimNode, dirtyNodes: var seq[NimNode]): (NimNode, seq[Lift]) =
+    let lKind = n.isPureOrColAccess(dirtyNodes)
     case lKind
     of lkLift:
       let rep = genSym(nskLet, "tmp")
@@ -447,10 +459,14 @@ proc liftConstants(fct: var FormulaCT): NimNode =
         if lKind == lkSkipChild0 and i == 0:
           result[0].add ch
           continue # skip this dot expression
-        let (body, lifted) = liftFrom(ch)
+        let (body, lifted) = liftFrom(ch, dirtyNodes)
         result[0].add body
         result[1].add lifted
-  let (body, nodes) = liftFrom(fct.loop)
+  # Note: `dirtyNodes` are those defined in line referencing an `idx` node,
+  # e.g. `let x = idx("bla")` to know in further steps that anything containing
+  # `x` should not be lifted out
+  var dirtyNodes = newSeq[NimNode]()
+  let (body, nodes) = liftFrom(fct.loop, dirtyNodes)
   fct.loop = body
   var repl = newStmtList()
   for l in nodes:
@@ -771,14 +787,16 @@ proc parseFormulaCT(stmts: NimNode): FormulaCT =
   result = FormulaCT(preface: preface,
                      resType: dtype,
                      name: name,
-                     loop: loop)
+                     loop: loop,
+                     fullFormula: true)
 
 proc generateClosure*(fct: sink FormulaCT): NimNode =
   var fct = fct # need a mutable copy, to lift out nodes. `fct` is not used after
   var procBody = newStmtList()
   procBody.add getAst(convenienceValueComparisons()) # add convenience comparison ops Value ⇔ T
   procBody.add convertPreface(fct.preface)
-  procBody.add liftConstants(fct)
+  if not fct.fullFormula: # we do *not* lift if it was a full formula, for complexity reasons
+    procBody.add liftConstants(fct)
   if fct.funcKind == fkVector:
     procBody.add convertDtype(fct.resType)
   procBody.add convertLoop(fct.preface, fct.resType, fct.colResType, fct.loop, fct.funcKind, fct.generateLoop)
