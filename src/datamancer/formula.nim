@@ -599,7 +599,13 @@ proc determineTypeFromProc(n: NimNode, numArgs: int): Option[ProcType] =
       var typ: NimNode
       case pArg[numP].kind
       of nnkEmpty:
-        typ = pArg[pArg.len - 1].getType # use the default values type
+        let lastCh = pArg[pArg.len - 1]
+        case lastCh.kind
+        of nnkIdent:
+          if lastCh.strVal in ["false", "true"]: typ = ident"bool"
+          else: error("Node " & $(lastCh.repr) & " is an identifier for which we don't understand the type.")
+        else:
+          typ = lastCh.getType # use the default values type
       else: # else param has a specific type
         typ = pArg[pArg.len - 2].toStrType # use the arguments type as a type
       for j in 0 ..< numP: # now add a type for *each* of the possible N arguments of the same type
