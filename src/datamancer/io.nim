@@ -350,11 +350,14 @@ template advanceToNextRow() {.dirty.} =
   colStart = idx + 1
   rowStart = idx + 1
   lastWasSep = false
+  if maxLines > 0 and row >= maxLines:
+    break
 
 template parseLine(data: ptr UncheckedArray[char], buf: var string,
                    sep, quote, lineBreak, eat: char,
                    col, idx, colStart, row, rowStart: var int,
                    lastWasSep, inQuote: var bool,
+                   maxLines: int,
                    toBreak: static bool,
                    fnToCall: untyped): untyped =
   if unlikely(data[idx] == quote):
@@ -405,6 +408,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
                       sep: char = ',',
                       header: string = "",
                       skipLines = 0,
+                      maxLines = 0, # this many lines to read at most
                       toSkip: set[char] = {},
                       colNamesIn: seq[string] = @[],
                       skipInitialSpace = true,
@@ -430,7 +434,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   var colNames = colNamesIn
   if colNames.len == 0:
     while idx < size:
-      parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
+      parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, maxLines, toBreak = true):
         parseHeaderCol(data, buf, colNames, header, sep, quote, idx, colStart)
 
   if colNamesIn.len > 0 and colNamesIn.len != colNames.len:
@@ -446,7 +450,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   # 1a. if `header` is set, skip all additional lines starting with header
   if header.len > 0:
     while idx < size:
-      parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
+      parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, maxLines, toBreak = false):
         if col == 0 and data[colStart] != header[0]:
           break
 
@@ -455,7 +459,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   let rowDataStart = row
   if skipLines > 0:
     while idx < size:
-      parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
+      parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, maxLines, toBreak = false):
         if row - rowDataStart == skipLines:
           break
   # compute the number of skipped lines in total
@@ -472,7 +476,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   var guessAttempts = 0
   const maxGuesses = 20
   while idx < size:
-    parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = true):
+    parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, maxLines, toBreak = true):
       guessType(data, buf, colTypes, col, idx, colStart, numCols)
       # if we see the end of the line, store the current column number
       if data[idx] in {'\n', '\r', '\l'}:
@@ -504,7 +508,8 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
 
   # 3. create the starting columns
   var cols = newSeq[Column](numCols)
-  let dataLines = lineCnt - skippedLines
+  let dataLines = if maxLines > 0: maxLines
+                  else: lineCnt - skippedLines
   for i in 0 ..< colTypes.len:
     # create column of length:
     # lines in file - header - skipLines
@@ -516,10 +521,10 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     intVal: int
     floatVal: float
   while idx < size:
-    parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, toBreak = false):
+    parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, maxLines, toBreak = false):
       parseCol(data, buf, cols[col], sep, colTypes, col, idx, colStart, row, numCols,
                intVal, floatVal, retType)
-  if row + skippedLines < lineCnt:
+  if maxLines == 0 and row + skippedLines < lineCnt:
     # missing linebreak at end of last line
     doAssert row + skippedLines == lineCnt - 1, "Line counts mismatch. " &
       $(row + skippedLines) & " lines read, expected " & $(lineCnt - 1) &
@@ -551,6 +556,7 @@ proc parseCsvString*(csvData: string,
                      sep: char = ',',
                      header: string = "",
                      skipLines = 0,
+                     maxLines = 0,
                      toSkip: set[char] = {},
                      colNames: seq[string] = @[],
                      skipInitialSpace = true,
@@ -588,13 +594,14 @@ proc parseCsvString*(csvData: string,
   ## we're dealing with ASCII files, thus each byte can be interpreted as a char
   var data = cast[ptr UncheckedArray[char]](csvData[0].unsafeAddr)
   result = readCsvTypedImpl(data, csvData.len, countNonEmptyLines(csvData),
-                            sep, header, skipLines, toSkip, colNames,
+                            sep, header, skipLines, maxLines, toSkip, colNames,
                             skipInitialSpace, quote, maxGuesses, lineBreak, eat)
 
 proc readCsvFromUrl(url: string,
               sep: char = ',',
               header: string = "",
               skipLines = 0,
+              maxLines = 0,
               toSkip: set[char] = {},
               colNames: seq[string] = @[],
               skipInitialSpace = true,
@@ -602,13 +609,14 @@ proc readCsvFromUrl(url: string,
              ): DataFrame =
   ## Reads a DF from a web URL (which must contain a CSV file)
   var client = newHttpClient()
-  return parseCsvString(client.getContent(url), sep, header, skipLines, toSkip, colNames,
+  return parseCsvString(client.getContent(url), sep, header, skipLines, maxLines, toSkip, colNames,
                         skipInitialSpace, quote)
 
 proc readCsv*(fname: string,
               sep: char = ',',
               header: string = "",
               skipLines = 0,
+              maxLines = 0,
               toSkip: set[char] = {},
               colNames: seq[string] = @[],
               skipInitialSpace = true,
@@ -640,6 +648,9 @@ proc readCsv*(fname: string,
   ## `skipLines` is used to skip `N` number of lines at the beginning of the
   ## file.
   ##
+  ## `maxLines` is used to stop parsing after this many lines have been parsed.
+  ## Does not count any `skipLines` or header lines.
+  ##
   ## `colNames` can be used to overwrite (or supply if none in file!) names of the
   ## columns in the header. This is also useful if the header is not conforming
   ## to the separator of the file. Note: if you `do` supply custom column names,
@@ -668,7 +679,7 @@ proc readCsv*(fname: string,
 
   ## we're dealing with ASCII files, thus each byte can be interpreted as a char
   var data = cast[ptr UncheckedArray[char]](ff.mem)
-  result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, toSkip, colNames,
+  result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, maxLines, toSkip, colNames,
                             skipInitialSpace, quote, maxGuesses, lineBreak, eat)
   ff.close()
 
