@@ -306,7 +306,6 @@ macro checkSymbolIsValid(n: untyped): untyped =
     else:
       false
 
-proc isPureTree(n: NimNode): bool
 proc extractSymbols(n: NimNode): seq[NimNode] =
   if n.isPureTree:
     return @[n]
@@ -701,17 +700,6 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
   ## possibly add special types
   possibleTypes.maybeAddSpecialTypes(n)
   result = possibleTypes
-
-proc isPureTree(n: NimNode): bool =
-  ## checks if this node tree is a "pure" tree. That means it does ``not``
-  ## contain any column references
-  result = true
-  if n.nodeIsDf or n.nodeIsDfIdx:
-    return false
-  for ch in n:
-    result = isPureTree(ch)
-    if not result:
-      return
 
 proc getTypeIfPureTree(tab: Table[string, NimNode], n: NimNode, numArgs: int): PossibleTypes =
   let lSym = buildName(n)

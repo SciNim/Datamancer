@@ -341,6 +341,127 @@ proc convertPreface(p: Preface): NimNode =
     `result`
     `customs`
 
+proc nodeIsDf*(n: NimNode): bool =
+  if n.kind == nnkBracketExpr:
+    result = n[0].kind == nnkIdent and n[0].strVal == "df"
+  elif n.kind == nnkCall:
+    result = n[0].kind == nnkIdent and n[0].strVal == "col"
+  elif n.kind in {nnkCallStrLit, nnkAccQuoted}:
+    result = true
+
+proc nodeIsDfIdx*(n: NimNode): bool =
+  if n.kind == nnkBracketExpr:
+    result = n[0].kind == nnkBracketExpr and n[0][0].kind == nnkIdent and
+    n[0][0].strVal == "df" and n[1].kind == nnkIdent and n[1].strVal == "idx"
+  elif n.kind == nnkCall:
+    result = n[0].kind == nnkIdent and n[0].strVal == "idx"
+  elif n.kind in {nnkCallStrLit, nnkAccQuoted}:
+    result = true
+
+type
+  LiftTreeKind = enum
+    lkLift, # it's a pure or column access node. Lift it whole.
+    lkDeeper, # it's not a pure node, but dig deeper
+    lkBreak # it's a nnkCall `idx` / `df[" "]` node, break
+    lkSkipChild0, # it's an `nnkCall` with `nnkDotExpr` as first child. The child cannot be lifted
+
+proc isPureTree*(n: NimNode): bool =
+  ## checks if this node tree is a "pure" tree. That means it does ``not``
+  ## contain any column references
+  result = true
+  if n.nodeIsDf or n.nodeIsDfIdx:
+    return false
+  for ch in n:
+    result = isPureTree(ch)
+    if not result:
+      return
+
+proc isPureTreeCol*(n: NimNode): bool =
+  ## checks if this node tree is a "pure" tree in the sense that it does ``not``
+  ## contain any references to ``indices``. (pure + `col`)
+  result = true
+  if n.nodeIsDfIdx:
+    return false
+  for ch in n:
+    result = isPureTreeCol(ch)
+    if not result:
+      return
+
+proc isPureOrColAccess*(n: NimNode): LiftTreeKind =
+  ## Checks if the given node is either a pure tree or only contains full
+  ## column accesses. If that is the case, we can lift it out of the
+  ## loop body.
+  # The test cases are refering to the test `"Lifting out column operation"`
+  if n.nodeIsDfIdx: # relevant test case `FWLN block B` after a `lkDeeper`
+    result = lkBreak
+  elif n.kind == nnkCall and n[0].kind == nnkDotExpr:
+    if n[0][0].nodeIsDf: # is a `col(foo)` node
+      # in this case the *full* call can be lifted, but `iff` it doesn't have a
+      # `idx(bar)` node in its arguments
+      result = lkLift # test case `FWLN block C`
+      # check child 1 of dotExpr
+      if n[0][1].nodeIsDfIdx:
+        doAssert false
+        return lkBreak # can this happen? `col(foo).idx(bar)` ??
+      # check children of full call
+      for i in 1 ..< n.len: # skip 0
+        if n[i].nodeIsDfIdx: return lkBreak # can't be lifted, test case `FWLN block D`
+    else:
+      result = lkSkipChild0 # test case: `FWLN block E`
+  elif n.isPureTreeCol:
+    ## we break if an ident, as we don't need to lift out individual idents.
+    ## In fact this would also lift things like `<`, `notin` etc.
+    if n.kind in {nnkIdent} + nnkLiterals: result = lkBreak
+    else: result = lkLift # test case `FWLN block A, block F`
+  else:
+    result = lkDeeper
+
+proc replaceByColumn(n: NimNode, preface: var Preface): NimNode
+proc liftConstants(fct: var FormulaCT): NimNode =
+  ## Performs the lifting of the constant / column access nodes out of the for loop
+  ##
+  ## XXX: implement lifting for accQuoted nodes by checking the `Assign` s of the
+  ## `Preface`. Can be done using `replaceByColumn` logic which checks whether
+  ## a node is in `preface`. For call str lit and acc quoted we need to check
+  ## also for the node kind. So we need to split `get` into two parts. One that
+  ## returns a node (and does not delete from preface. Or well, should it not
+  ## delete? As we replace the body here already!) and the other the return.
+  ## So in contrast to `replaceByColumn` in the general case we don't want to
+  ## replace it if it's by index.
+
+  # Note: Have to be careful with one particular case:
+  # `nnkCall` can contain a `nnkDotExpr` as first child, in which case it means
+  # a call of dotExpr child 1 with first arg dot expr child 0
+  proc liftFrom(n: NimNode): (NimNode, seq[Lift]) =
+    let lKind = n.isPureOrColAccess()
+    case lKind
+    of lkLift:
+      let rep = genSym(nskLet, "tmp")
+      result[0] = newStmtList(rep)
+      result[1].add Lift(toLift: n,
+                         liftedNode: rep)
+    of lkBreak: result[0] = n
+    of lkDeeper, lkSkipChild0:
+      result[0] = newTree(n.kind)
+      for i, ch in n:
+        if lKind == lkSkipChild0 and i == 0:
+          result[0].add ch
+          continue # skip this dot expression
+        let (body, lifted) = liftFrom(ch)
+        result[0].add body
+        result[1].add lifted
+  let (body, nodes) = liftFrom(fct.loop)
+  fct.loop = body
+  var repl = newStmtList()
+  for l in nodes:
+    # potentially replace columns in lifted nodes
+    let toL = replaceByColumn(l.toLift, fct.preface)
+    let lN = l.liftedNode
+    let newN = quote do:
+      let `lN` = `toL`
+    repl.add newN
+  result = repl
+
 proc convertDtype(d: NimNode): NimNode =
   result = nnkVarSection.newTree(
     nnkIdentDefs.newTree(
@@ -388,23 +509,6 @@ proc delete(p: var Preface, n: NimNode) =
       ## TODO: we don't depend on removing all "duplicates" (same column ref), right?
       return
     inc idx
-
-proc nodeIsDf*(n: NimNode): bool =
-  if n.kind == nnkBracketExpr:
-    result = n[0].kind == nnkIdent and n[0].strVal == "df"
-  elif n.kind == nnkCall:
-    result = n[0].kind == nnkIdent and n[0].strVal == "col"
-  elif n.kind in {nnkCallStrLit, nnkAccQuoted}:
-    result = true
-
-proc nodeIsDfIdx*(n: NimNode): bool =
-  if n.kind == nnkBracketExpr:
-    result = n[0].kind == nnkBracketExpr and n[0][0].kind == nnkIdent and
-    n[0][0].strVal == "df" and n[1].kind == nnkIdent and n[1].strVal == "idx"
-  elif n.kind == nnkCall:
-    result = n[0].kind == nnkIdent and n[0].strVal == "idx"
-  elif n.kind in {nnkCallStrLit, nnkAccQuoted}:
-    result = true
 
 proc hasExplicitTypeHint*(n: NimNode): bool =
   result = (n.nodeIsDf or n.nodeIsDfIdx) and
@@ -669,10 +773,12 @@ proc parseFormulaCT(stmts: NimNode): FormulaCT =
                      name: name,
                      loop: loop)
 
-proc generateClosure*(fct: FormulaCT): NimNode =
+proc generateClosure*(fct: sink FormulaCT): NimNode =
+  var fct = fct # need a mutable copy, to lift out nodes. `fct` is not used after
   var procBody = newStmtList()
   procBody.add getAst(convenienceValueComparisons()) # add convenience comparison ops Value ⇔ T
   procBody.add convertPreface(fct.preface)
+  procBody.add liftConstants(fct)
   if fct.funcKind == fkVector:
     procBody.add convertDtype(fct.resType)
   procBody.add convertLoop(fct.preface, fct.resType, fct.colResType, fct.loop, fct.funcKind, fct.generateLoop)
