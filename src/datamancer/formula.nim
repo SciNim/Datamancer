@@ -923,6 +923,15 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
     return
   case n.kind
   of nnkCall, nnkCommand, nnkPrefix:
+    ## Following different cases:
+    ## `nnkCall ⇔ idx(foo) | col(foo)`
+    ## `nnkCall ⇔ bar(idx(foo) | col(foo), <args>)`
+    ## `nnkCall ⇔ [idx(foo) | col(foo)].bar(<args>)`
+    ## `nnkCall ⇔ bar(<args>)`
+    ## `nnkCall ⇔ bar(<args>, [idx(foo) | col(foo)], <args>)`
+    ## ...?
+    ## the thing is, even if either of the first two is *true*, there may still be
+    ## more to learn from the rest!
     if n.isColCall:
       result.add addColRef(n, heuristicType, byTensor)
     elif n.isIdxCall:
@@ -932,8 +941,10 @@ proc determineTypesImpl(n: NimNode, tab: Table[string, NimNode], heuristicType: 
       ## determine type information from the procedure / w/e. May be `tkNone` if symbol is e.g. generic
       var cmdTyp = tab.getTypeIfPureTree(n[0], detNumArgs(n))
       if not n[0].isPureTree:
-        let res = determineTypesImpl(n[0], tab, heuristicType)
-        result.add res
+        # in this case more column references may be in the arguments of this call
+        for ch in n:
+          let res = determineTypesImpl(ch, tab, heuristicType)
+          result.add res
       else:
         doAssert n[0].isPureTree, "If this wasn't a pure tree, it would be a col reference!"
         ## for each argument to the call / cmd get the type of the argument.
