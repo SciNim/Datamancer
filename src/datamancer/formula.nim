@@ -1303,6 +1303,7 @@ proc compileFormula(n: NimNode, fullNode = false, df: NimNode = newEmptyNode()):
       typeHintNode = typeHintNode[1]
       typeHint = typeHintNode.parseTypeHint
     node = extractCall(node, "loop")[1][0]
+    fct.fullFormula = true # indicate this is a full formula, to not lift nodes
   else:
     typeHint = parseTypeHint(node)
   let tilde = recurseFind(node,
