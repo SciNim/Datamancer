@@ -1,8 +1,8 @@
 import arraymancer/tensor
-import std / [sugar, math, strformat, tables, macros, strutils]
+import std / [sugar, strformat, tables, macros, strutils]
 import value
 
-from sequtils import allIt, mapIt
+from sequtils import allIt, anyIt, mapIt
 
 import ast_utils
 export ast_utils
@@ -42,7 +42,7 @@ const TypeNames = CacheTable"ColTypeNames"
 const TypeImpls = CacheTable"ColTypeImpls"
 const TypeToEnumType = CacheTable"TypeToEnumType"
 
-import algorithm, sugar, sequtils
+import sugar
 
 proc genColNameStr*(types: seq[string]): string =
   result = "Column" & genCombinedTypeStr(types)

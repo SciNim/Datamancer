@@ -1,7 +1,7 @@
 import macros, sequtils, strformat, options, sets, tables, algorithm, strutils
 import formulaNameMacro
 
-import column, value
+import value
 
 type
   AssignKind* = enum

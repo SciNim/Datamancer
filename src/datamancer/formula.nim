@@ -559,7 +559,6 @@ proc countArgs(n: NimNode): tuple[args, optArgs: int] =
 func isTensorType(n: NimNode): bool =
   n[0].kind in {nnkSym, nnkIdent} and n[0].strVal == "Tensor"
 
-import sugar
 proc typeAcceptable(n: NimNode): bool =
   case n.kind
   of nnkIdent, nnkSym:
