@@ -1,3 +1,10 @@
+* v0.3.10
+- add ~toOrgTable~ to convert a DF into an Org style table
+- fixes a reference semantic bug when slicling a DF containing a
+  constant column, e.g. by using ~head~ or ~tail~ (or manually)
+- small improvements to non generic generics (make them usable for
+  ~filter~ if used with ~dfFn~ for example)
+- memory optimize construction of ~groupMap~ in ~group_by~ call
 * v0.3.9
 - =toDf= now degensyms identifiers so the name of the column is the
   same as the variable name also in templates (PR #45 by @hugogranstrom)
