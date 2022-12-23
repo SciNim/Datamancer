@@ -812,3 +812,25 @@ proc showBrowser*[C: ColumnLike](
     # be there when the browser is finally open. Thus default is to keep the file
     sleep(1000)
     removeFile(fname)
+
+proc toOrgTable*[C: ColumnLike](df: DataTable[C], precision = 4, emphStrNumber = true): string =
+  ## Converts the given DF to a table formatted in Org syntax. Note that the
+  ## whitespace alignment is left up to Org mode. Just <tab> on the table in Org
+  ## mode to fix it.
+  const sep = "|"
+  let keys = df.getKeys()
+  let header = "| " & keys.join(" | ") & " |\n"
+  let line   = "|" & toSeq(0 ..< keys.len).mapIt("----").join("|") & "|\n"
+  ## symbol marking the header line, e.g. `#`
+  var data = newStringOfCap(df.len * 8) # for some reserved space
+  var idx = 0
+  for row in df:
+    idx = 0
+    data.add $sep
+    for x in row:
+      if idx > 0:
+        data.add $sep
+      data.add pretty(x, precision = precision, emphStrNumber = emphStrNumber)
+      inc idx
+    data.add $sep & "\n"
+  result = header & line & data
