@@ -1057,7 +1057,7 @@ proc assignStack*[C: ColumnLike](dfs: seq[DataTable[C]]): DataTable[C] =
     inc lengths, df.len
   # 2. generate output columns of correct type and length
   for k in df0.getKeys():
-    result[k] = C.newColumnLike(df0[k].kind, lengths)
+    result[k] = C.newColumnLike(df0[k], lengths)
     # 2a. if column is constant, already assign its value
     if df0[k].kind == colConstant:
       result[k].cCol = df0[k].cCol
@@ -1240,7 +1240,7 @@ proc applyFilterFormula[C: ColumnLike](df: DataTable[C], fn: Formula[C]): C =
         "return boolean value, but " & $fn.valKind & ". Only boolean reducing formulae " &
         "are supported in `filter`.")
     let scaleVal = fn.fnS(df)
-    result = constantColumn(scaleVal.toBool, df.len)
+    result = C.constantColumn(scaleVal.toBool, df.len)
   else:
     raise newException(FormulaMismatchError, "Given formula " & $fn.name & " is of unsupported kind " &
       $fn.kind & ". Only reducing `<<` and mapping `~` formulas are supported in `filter`.")
@@ -1272,7 +1272,7 @@ proc filterImpl[C: ColumnLike](df: DataTable[C], conds: varargs[Formula[C]]): Da
   ## Does not differentiate between grouped and ungrouped inputs (done in
   ## exported `filter` below).
   result = C.newDataTable(df.ncols)
-  var filterIdx = newColumn(colBool)
+  var filterIdx = C.newColumnLike(colBool)
   for c in conds:
     if filterIdx.kind == colBool and filterIdx.len > 0:
       # combine two tensors
