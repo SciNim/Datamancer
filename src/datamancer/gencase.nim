@@ -180,12 +180,12 @@ proc bracketToSeq*(types: NimNode): seq[NimNode] =
 func enumFieldName*(s: string): string =
   var s = s
   s.removePrefix("Column")
-  result = "gk" & s.capitalizeAscii
+  result = "gk" & s # .capitalizeAscii
 
 func genericFieldName*(s: string): string =
   var s = s
   s.removePrefix("Column")
-  result = "g" & s.capitalizeAscii
+  result = "g" & s # .capitalizeAscii
 
 proc getEnumField*(typ: string): NimNode =
   if typ in EnumFieldNames:

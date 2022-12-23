@@ -226,11 +226,11 @@ proc toColumn*[T: SupportedTypes](t: Tensor[T]): Column =
       "in a DataFrame, generate a `Column` derived type using `genColumn(" & $T & ")".}
 
 proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
-  when T is SomeInteger:
+  when T is int | int64:
     result = C(kind: colInt,
                     iCol: t.asType(int),
                     len: t.size)
-  elif T is SomeFloat:
+  elif T is float64 | float: ## fix me
     result = C(kind: colFloat,
                     fCol: t.asType(float),
                     len: t.size)
@@ -251,10 +251,14 @@ proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
     ## generate a new type and return it
     ## get correct type using `getTypeEnum` and `getColType` and set
     ## use `getTypeEnum` to set the correct field value
-    result = C(kind: colGeneric,
-               len: t.size,
-               gkKind: enumField(C, T))
-    assignData(result, t)
+    when C isnot Column:
+      result = C(kind: colGeneric,
+                 len: t.size,
+                 gkKind: enumField(C, T))
+      assignData(result, t)
+    else:
+      doAssert false, "This should not happen!"
+      #{.error: "Cannot store " & $T & " in a regular `Column`.".}
 
 proc toColumn*[T: not SupportedTypes](t: openArray[T] | Tensor[T]): auto =
   ## Tries to convert the given input data to a matching generic `Column*`
@@ -610,6 +614,7 @@ proc valueTo*[T](t: Tensor[Value], dtype: typedesc[T],
       for i, idx in outputIdx:
         result[i] = t[idx]
 
+proc toObject*[C: ColumnLike](c: C): C {.inline.}
 proc toTensor*[C: ColumnLike; T](c: C, _: typedesc[T],
                                  dropNulls: static bool = false): Tensor[T] =
   ## `dropNulls` only has an effect on `colObject` columns. It allows to
@@ -656,7 +661,11 @@ proc toTensor*[C: ColumnLike; T](c: C, _: typedesc[T],
   of colConstant:
     result = c.constantToFull.toTensor(T, dropNulls)
   of colGeneric:
-    result = getTensor(c, Tensor[T])
+    when T is Value:
+      # handle differently
+      result = c.toObject.toTensor(T, dropNulls)
+    else:
+      result = getTensor(c, Tensor[T])
   of colNone: raise newException(ValueError, "Accessed column is empty!")
 
 proc toTensor*[C: ColumnLike; T](c: C, slice: Slice[int], dtype: typedesc[T]): Tensor[T] =
@@ -1076,9 +1085,9 @@ proc pretty*(c: ColumnLike): string =
       result.add &"  contained Tensor: {t}"
 template `$`*(c: ColumnLike): string = pretty(c)
 
-proc clone*(c: Column): Column =
+proc clone*[C: ColumnLike](c: C): C =
   ## clones the given column by cloning the Tensor
-  result = Column(kind: c.kind, len: c.len)
+  result = C(kind: c.kind, len: c.len)
   case result.kind
   of colInt: result.iCol = c.iCol.clone()
   of colFloat: result.fCol = c.fCol.clone()
@@ -1086,7 +1095,10 @@ proc clone*(c: Column): Column =
   of colBool: result.bCol = c.bCol.clone()
   of colObject: result.oCol = c.oCol.clone()
   of colConstant: result.cCol = c.cCol # just a `Value`
-  of colNone, colGeneric: discard
+  of colGeneric:
+    withCaseStmt(c, gk, C):
+      result.gk = c.gk.clone()
+  of colNone: discard
 
 proc map*[T; U](c: Column, fn: (T -> U)): Column =
   ## Maps a given column given `fn` to a new column.
