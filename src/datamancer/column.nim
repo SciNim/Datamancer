@@ -300,28 +300,6 @@ proc constantColumn*[C: ColumnLike; T](_: typedesc[C], val: T, len: int): C =
   ## creates a constant column based on `val` and its type
   result = C(len: len, kind: colConstant, cCol: %~ val)
 
-proc constantToFull*[C: ColumnLike](c: C): C =
-  ## creates a real constant full tensor column based on a constant column
-  if c.kind != colConstant: return c
-  withNative(c.cCol, val):
-    result = toColumn(C, newTensorWith[type(val)](c.len, val))
-
-proc `[]`*[C: ColumnLike](c: C, slice: Slice[int]): C =
-  case c.kind
-  of colInt: result = C.toColumn c.iCol[slice.a .. slice.b]
-  of colFloat: result = C.toColumn c.fCol[slice.a .. slice.b]
-  of colString: result = C.toColumn c.sCol[slice.a .. slice.b]
-  of colBool: result = C.toColumn c.bCol[slice.a .. slice.b]
-  of colObject: result = C.toColumn c.oCol[slice.a .. slice.b]
-  of colConstant:
-    # for constant keep column, only adjust the length to the slice
-    result = c
-    result.len = slice.b - slice.a + 1
-  of colGeneric:
-    withCaseStmt(c, gk, C):
-      result = C.toColumn c.gk[slice.a .. slice.b]
-  of colNone: raise newException(IndexDefect, "Accessed column is empty!")
-
 proc newColumn*(kind = colNone, length = 0): Column =
   case kind
   of colFloat: result = toColumn newTensor[float](length)
@@ -344,6 +322,54 @@ proc newColumnLike*[C: ColumnLike](_: typedesc[C], kind = colNone, length = 0): 
   of colConstant: result = C.constantColumn(Value(kind: VNull), length)
   of colNone: result = C(kind: colNone, len: 0)
   of colGeneric: doAssert false, "Constructing a generic column not supported, as it's not a specific type!"
+
+proc newColumnLike*[C: ColumnLike](_: typedesc[C], col: C, length = 0): C =
+  case col.kind
+  of colFloat: result = toColumn(C, newTensor[float](length))
+  of colInt: result = toColumn(C, newTensor[int](length))
+  of colString: result = toColumn(C, newTensor[string](length))
+  of colBool: result = toColumn(C, newTensor[bool](length))
+  of colObject: result = toColumn(C, newTensor[Value](length))
+  # XXX: fix constant
+  of colConstant: result = C.constantColumn(Value(kind: VNull), length)
+  of colNone: result = C(kind: colNone, len: 0)
+  of colGeneric:
+    withCaseStmt(col, gk, C):
+      result = toColumn(C, newTensor[typeof(col.gk[0])](length))
+
+proc shallowCopy*[C: ColumnLike](c: C): C =
+  result = newColumnLike(C, c.kind)
+  case c.kind
+  of colFloat:    result.fCol = c.fCol
+  of colInt:      result.iCol = c.iCol
+  of colString:   result.sCol = c.sCol
+  of colBool:     result.bCol = c.bCol
+  of colObject:   result.oCol = c.oCol
+  of colConstant: result.cCol = c.cCol
+  of colNone: discard
+  of colGeneric: raise newException(Exception, "implement me")
+
+proc constantToFull*[C: ColumnLike](c: C): C =
+  ## creates a real constant full tensor column based on a constant column
+  if c.kind != colConstant: return c
+  withNative(c.cCol, val):
+    result = toColumn(C, newTensorWith[type(val)](c.len, val))
+
+proc `[]`*[C: ColumnLike](c: C, slice: Slice[int]): C =
+  case c.kind
+  of colInt: result = C.toColumn c.iCol[slice.a .. slice.b]
+  of colFloat: result = C.toColumn c.fCol[slice.a .. slice.b]
+  of colString: result = C.toColumn c.sCol[slice.a .. slice.b]
+  of colBool: result = C.toColumn c.bCol[slice.a .. slice.b]
+  of colObject: result = C.toColumn c.oCol[slice.a .. slice.b]
+  of colConstant:
+    # for constant keep column, only adjust the length to the slice
+    result = c.shallowCopy() # do not want to override the length of `c`!
+    result.len = slice.b - slice.a + 1
+  of colGeneric:
+    withCaseStmt(c, gk, C):
+      result = C.toColumn c.gk[slice.a .. slice.b]
+  of colNone: raise newException(IndexDefect, "Accessed column is empty!")
 
 proc toColKind*[T](dtype: typedesc[T]): ColKind =
   when T is SomeFloat:
@@ -949,7 +975,7 @@ proc add*[C: ColumnLike](c1, c2: C): C =
     of colString: result = C.toColumn concat(c1.sCol, c2.sCol, axis = 0)
     of colObject: result = C.toColumn concat(c1.oCol, c2.oCol, axis = 0)
     of colConstant:
-      if c1.cCol == c2.cCol: result = c1 # does not matter which to return
+      if c1.cCol == c2.cCol: result = c1.shallowCopy() # does not matter which to return
       else: result = add(c1.constantToFull, c2.constantToFull)
     of colGeneric:
       withCaseStmt(c1, gk, C):
