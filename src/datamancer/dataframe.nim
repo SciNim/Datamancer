@@ -1966,7 +1966,12 @@ proc group_by*[C: ColumnLike](df: DataTable[C], by: varargs[string], add = false
     result.data = df.data
     result.len = df.len
   for key in by:
-    result.groupMap[key] = toHashSet(result[key].toTensor(Value))
+    var s = initHashSet[Value]()
+    let col = result[key]
+    withNativeTensor(col, t): # more memory efficient than `toHashSet + toTensor(Value)`
+      for i in 0 ..< result.len:
+        s.incl(%~ t[i])
+    result.groupMap[key] = s
 
 proc summarize*[C: ColumnLike](df: DataTable[C], fns: varargs[Formula[C]]): DataTable[C] =
   ## Returns a data frame with the summaries applied given by `fn`. They are applied
