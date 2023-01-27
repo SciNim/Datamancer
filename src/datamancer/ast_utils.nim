@@ -29,9 +29,13 @@ proc replaceSymsByIdents*(ast: NimNode): NimNode =
   result = inspect(ast)
 
 import macrocache
-proc contains*(t: CacheTable, key: string): bool =
-  for k, val in pairs(t):
-    if k == key: return true
+
+when not declared(macrocache.contains):
+  proc contains*(t: CacheTable, key: string): bool =
+    for k, val in pairs(t):
+      if k == key: return true
+else:
+  export contains
 
 from sequtils import deduplicate
 proc combinations*(s: seq[NimNode]): seq[seq[NimNode]] =
