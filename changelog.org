@@ -1,3 +1,5 @@
+* v0.3.11
+- use ~contains~ from the ~macrocache~ module if available, PR #49
 * v0.3.10
 - add ~toOrgTable~ to convert a DF into an Org style table
 - fixes a reference semantic bug when slicling a DF containing a
