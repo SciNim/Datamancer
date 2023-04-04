@@ -325,7 +325,8 @@ proc newColumnLike*[C: ColumnLike](_: typedesc[C], kind = colNone, length = 0): 
   # XXX: fix constant
   of colConstant: result = C.constantColumn(Value(kind: VNull), length)
   of colNone: result = C(kind: colNone, len: 0)
-  of colGeneric: doAssert false, "Constructing a generic column not supported, as it's not a specific type!"
+  of colGeneric: raise newException(ValueError, "Constructing a generic column not " &
+    "supported, as it's not a specific type!")
 
 proc newColumnLike*[C: ColumnLike](_: typedesc[C], col: C, length = 0): C =
   case col.kind
@@ -816,7 +817,8 @@ proc `[]=`*[C: ColumnLike; T](c: var C, idx: int, val: T) =
       c = c.toObjectColumn()
       c.oCol[idx] = %~ val
   else:
-    doAssert c.kind == colGeneric, "Assignment of unsupported types only to `colGeneric` columns!"
+    if c.kind != colGeneric:
+      raise newException(ValueError, "Assignment of unsupported types only to `colGeneric` columns!")
     setVal(c, idx, val)
 
 proc `[]=`*[C: ColumnLike; T](c: var C, slice: Slice[int], t: Tensor[T]) =
@@ -989,7 +991,7 @@ proc add*[C: ColumnLike](c1, c2: C): C =
     of colGeneric:
       withCaseStmt(c1, gk, C):
         result = C.toColumn concat(c1.gk, c2.gk, axis = 0)
-    of colNone: doAssert false, "Both columns are empty!"
+    of colNone: raise newException(ValueError, "Both columns are empty!")
   elif compatibleColumns(c1, c2):
     # convert both to float
     case c1.kind
@@ -1045,8 +1047,9 @@ proc toNativeColumn*(c: Column, failIfImpossible: static bool = true): Column =
     let cValue = c.toTensor(Value)
     for i in 0 ..< c.len:
       when failIfImpossible:
-        doAssert cValue[i].kind == vKind, "Column contains actual multiple datatypes! " &
-          $vKind & " and " & $cValue[i].kind & "!"
+        if cValue[i].kind != vKind:
+          raise newException(ValueError, "Column contains actual multiple datatypes! " &
+            $vKind & " and " & $cValue[i].kind & "!" & $cValue)
       else:
         if cValue[i].kind != vKind:
           # not possible to convert, return input

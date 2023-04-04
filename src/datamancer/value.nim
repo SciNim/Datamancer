@@ -39,32 +39,44 @@ func toValKind*[T](dtype: typedesc[T]): ValueKind =
     result = VObject
 
 iterator items*(row: Value): Value =
-  doAssert row.kind == VObject
+  if row.kind != VObject:
+    raise newException(ValueError, "Cannot iterate over a `Value` of " &
+      "kind " & $row.kind & ". Only `VObject` can be iterated over.")
   for v in values(row.fields):
     yield v
 
 iterator keys*(row: Value): string =
-  doAssert row.kind == VObject
+  if row.kind != VObject:
+    raise newException(ValueError, "Cannot iterate over a `Value` of " &
+      "kind " & $row.kind & ". Only `VObject` can be iterated over.")
   for k in keys(row.fields):
     yield k
 
 iterator pairs*(row: Value): tuple[key: string, val: Value] =
   ## Iterator for the elements of `row`. `row` has to be a JObject
   ## representing a row of a `DataFrame`
-  assert row.kind == VObject
+  if row.kind != VObject:
+    raise newException(ValueError, "Cannot iterate over a `Value` of " &
+      "kind " & $row.kind & ". Only `VObject` can be iterated over.")
   for key, val in pairs(row.fields):
     yield (key, val)
 
 proc contains*(v: Value, key: string): bool =
-  doAssert v.kind == VObject
+  if v.kind != VObject:
+    raise newException(ValueError, "A `Value` of kind" & $v.kind &
+      "cannot contain other elements, `in` not supported.")
   result = v.fields.hasKey(key)
 
 proc `[]`*(v: Value, key: string): Value {.inline.} =
-  doAssert v.kind == VObject
+  if v.kind != VObject:
+    raise newException(ValueError, "A `Value` of kind" & $v.kind &
+      "cannot be accessed using `[]`.")
   result = v.fields[key]
 
 proc `[]=`*(v: var Value, key: string, val: Value) {.inline.} =
-  doAssert v.kind == VObject
+  if v.kind != VObject:
+    raise newException(ValueError, "A `Value` of kind" & $v.kind &
+      "cannot be assigned to using `[]=`.")
   v.fields[key] = val
 
 proc `%~`*(c: char): Value =
@@ -231,7 +243,11 @@ func isNumber*(s: string): bool =
   return true
 
 func isNumber*(v: Value): bool =
-  doAssert v.kind == VString
+  ## NOTE: this checks whether a `string` (!) stored in a value corresponds to
+  ## a number, not if the Value stores an actual number!
+  if v.kind != VString:
+    raise newException(ValueError, "`isNumber` can only be checked for `Value` " &
+      "objects of kind `VString`. Input is " & $v.kind)
   result = v.str.isNumber
 
 func isInt*(s: string): bool =
@@ -245,14 +261,20 @@ func isBool*(s: string): bool =
 func isInt*(v: Value): bool =
   ## checks whether the string contained in `Value` is likely an integer
   ## For an `isFloat` equivalent see `isNumber`.
-  doAssert v.kind == VString
+  if v.kind != VString:
+    raise newException(ValueError, "`isInt` can only be checked for `Value` " &
+      "objects of kind `VString`. Input is " & $v.kind)
   result = v.str.isInt
 
 proc toFloat*(v: Value, allowNull: static bool = false): float =
   when not allowNull:
-    doAssert v.kind in {VInt, VFloat}
+    if v.kind notin {VInt, VFloat}:
+      raise newException(ValueError, "`toFloat` only sensible for " &
+        "`Value` objects of kind {VInt, VFloat}. Input is " & $v.kind)
   else:
-    doAssert v.kind in {VInt, VFloat, VNull}
+    if v.kind notin {VInt, VFloat, VNull}:
+      raise newException(ValueError, "`toFloat` only sensible for " &
+        "`Value` objects of kind {VInt, VFloat, VNull}. Input is " & $v.kind)
   case v.kind
   of VInt: result = v.num.float
   of VFloat: result = v.fnum
@@ -264,7 +286,9 @@ proc toFloat*(v: Value, allowNull: static bool = false): float =
 proc toInt*(v: Value): int = #BiggestInt =
   ## Converts a numeric value to an int. If the value is a float
   ## we round and convert to int
-  doAssert v.kind in {VInt, VFloat}
+  if v.kind notin {VInt, VFloat}:
+    raise newException(ValueError, "`toInt` only sensible for " &
+      "`Value` objects of kind {VInt, VFloat}. Input is " & $v.kind)
   case v.kind
   of VInt: result = v.num
   of VFloat: result = v.fnum.round.int
@@ -272,7 +296,9 @@ proc toInt*(v: Value): int = #BiggestInt =
 
 proc toBool*(v: Value): bool =
   ## Checks if the value is a bool and returns its value
-  doAssert v.kind == VBool
+  if v.kind != VBool:
+    raise newException(ValueError, "`toBool` only sensible for " &
+      "`Value` objects of kind VBool. Input is " & $v.kind)
   result = v.bval
 
 proc toStr*(v: Value): string =
@@ -510,7 +536,10 @@ proc formatFloatValue(v: Value, precision: int): string =
   ## Performs the formatting of a value of kind `VFloat` to string.
   ## If the values are smaller < 1e-5 or > 1e5 scientific notation is
   ## used.
-  doAssert v.kind == VFloat
+  if v.kind != VFloat:
+    raise newException(ValueError, "`formatFloatValue` only sensible for " &
+      "`Value` objects of kind VFloat. Input is " & $v.kind)
+
   let f = v.fnum
   if almostEqual(abs(f), 0.0):
     # to make sure zero is not formatted in scientific
@@ -580,8 +609,12 @@ proc contains*(v: Value, has: Value): bool =
   ## checks whether `has` is a subset of `v` if both are `VObject`.
   ## A subset means that all keys of `has` are in `v` and their values match.
   ## There may be more fields in `v` than in `has`
-  doAssert v.kind == VObject
-  doAssert has.kind == VObject
+  if v.kind != VObject:
+    raise newException(ValueError, "`contains` can only check members of " &
+      "`Value` objects of kind `VObject`. Input is " & $v.kind)
+  if has.kind != VObject:
+    raise newException(ValueError, "`contains` can only check if " &
+      "`Value` object of kind `VObject` is a member. Target is " & $has.kind)
   result = true
   for key, val in has:
     if key in v: result = result and val == v[key]
