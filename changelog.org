@@ -1,3 +1,6 @@
+* v0.3.12
+- replace all ~doAssert~ calls that really should be exceptions by
+  exceptions so that ~--panics:on~ is saner. Fixes issue #51
 * v0.3.11
 - use ~contains~ from the ~macrocache~ module if available, PR #49
 * v0.3.10
