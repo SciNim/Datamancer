@@ -1507,12 +1507,12 @@ t_in_s,  C1_in_V,  C2_in_V,  type
       # that's not really desired behavior, is it?
       check abCol.toNativeColumn.kind == colString
       check false
-    except AssertionError:
+    except ValueError:
       check true
     try:
       check cdCol.toNativeColumn.kind == colFloat
       check false
-    except AssertionError:
+    except ValueError:
       check true
 
   test "Remove 'null' values from DF":
@@ -1558,12 +1558,12 @@ t_in_s,  C1_in_V,  C2_in_V,  type
 
       # convert manually to correct dtypes
       check dfRes1["Age"].toNativeColumn.kind == colInt
-      expect(AssertionDefect):
+      expect(ValueError):
         check dfRes1["City"].toNativeColumn.kind == colString
       check dfRes1["City"].toNativeColumn(failIfImpossible = false).kind == colObject
 
       check dfRes2["City"].toNativeColumn.kind == colString
-      expect(AssertionDefect):
+      expect(ValueError):
         check dfRes2["Age"].toNativeColumn.kind == colInt
       check dfRes2["Age"].toNativeColumn(failIfImpossible = false).kind == colObject
 
@@ -1662,11 +1662,11 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     block:
       try:
         discard df[[-1]]
-      except IndexError:
+      except ValueError:
         discard
       try:
         discard df[[5]]
-      except IndexError:
+      except ValueError:
         discard
 
     let df2 = toDf({"b" : [3, 4], "a" : [1, 2], "d" : [7, 8], "c" : [5, 6]})

@@ -515,7 +515,8 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     # lines in file - header - skipLines
     cols[i] = newColumn(colTypes[i], dataLines)
   # 4. parse the actual data
-  doAssert row >= 0, "Parsing the header failed"
+  if row < 0:
+    raise newException(IOError, "Parsing the header failed.")
   var
     retType: RetType
     intVal: int
@@ -526,10 +527,11 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
                intVal, floatVal, retType)
   if maxLines == 0 and row + skippedLines < lineCnt:
     # missing linebreak at end of last line
-    doAssert row + skippedLines == lineCnt - 1, "Line counts mismatch. " &
-      $(row + skippedLines) & " lines read, expected " & $(lineCnt - 1) &
-      ". Is your file using non unix line breaks? Try switching the `lineBreak` " &
-      "and `eat` options to `readCsv`."
+    if row + skippedLines != lineCnt - 1:
+      raise newException(IOError, "Line counts mismatch. " &
+        $(row + skippedLines) & " lines read, expected " & $(lineCnt - 1) &
+        ". Is your file using non unix line breaks? Try switching the `lineBreak` " &
+        "and `eat` options to `readCsv`.")
     parseCol(data, buf, cols[col], sep, colTypes, col, idx, colStart, row, numCols,
              intVal, floatVal, retType)
   for i, col in colNames:

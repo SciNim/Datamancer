@@ -245,8 +245,9 @@ proc `[]`*[C: ColumnLike](df: DataTable[C], idx: array[1, int]): C =
     doAssert df[[2]].toTensor(string) == toTensor ["5", "6", "7"] ## get the third column
 
   let j = idx[0]
-  if j < 0 or j >= df.ncols:
-    raise newException(IndexDefect, "Index " & $j & " is out of bounds for DF with " & $df.ncols & " columns.")
+  if j < 0 or j >= df.ncols: # it's a bit dumb to make this a `ValueError` instead of an IndexDefect/Error
+                             # just because an `IndexError` is deemed uncatcheable.....
+    raise newException(ValueError, "Index " & $j & " is out of bounds for DF with " & $df.ncols & " columns.")
   doAssert j >= 0 and j < df.ncols
   for i, k in df.getKeys:
     if i == j: return df[k]
@@ -345,11 +346,13 @@ proc `[]=`*[C: ColumnLike; T](df: var DataTable[C], fn: Formula[C], key: string,
     doAssert df["x", int] == [-1,-1,5].toTensor
     doAssert df["y", int] == [5,6,7].toTensor ## still unchanged
   # eval boolean function on DF
-  doAssert fn.kind == fkVector, "Function must be of kind `fkVector` " &
-    "(i.e. function acting on a whole column)!"
+  if fn.kind != fkVector:
+    raise newException(ValueError, "Function must be of kind `fkVector` " &
+    "(i.e. function acting on a whole column)!")
   let filterIdx = fn.fnV(df)
-  doAssert filterIdx.kind == colBool, "Function must return bool values! " &
-    "Returns " & $fn.resType
+  if filterIdx.kind != colBool:
+    raise newException(ValueError, "Function must return bool values! " &
+    "Returns " & $fn.resType)
   var col = df[key] # make mutable copy, reference semantics so data will be modified
   let bTensor = filterIdx.bCol
   for idx in 0 ..< bTensor.size:
@@ -752,7 +755,10 @@ proc add*[C: ColumnLike; T: tuple](df: var DataTable[C], args: T) =
     doAssert df["y", int] == [2, 5, 10].toTensor
   {.warning: "Using `add` to add rows to a DF individually is very slow. Be " &
     "sure to only add very few rows using this proc!".}
-  doAssert args.tupleLen == df.ncols or df.ncols == 0
+  if args.tupleLen != df.ncols and df.ncols != 0:
+    raise newException(ValueError, "Input tuple `args` length must be equal " &
+      "to the number of columns in `df` or `df` must be empty. Tuple arity " &
+      $args.tupleLen & " and number of df columns: " & $df.ncols)
   if df.ncols == 0:
     for key, arg in fieldPairs(args):
       df[key] = newColumn(toColKind(typeof arg))
@@ -1151,7 +1157,8 @@ iterator groups*[C: ColumnLike](df: DataTable[C], order = SortOrder.Ascending): 
       doAssert subDf["Num", int] == expDf[idx]["Num", int]
       inc idx
 
-  doAssert df.kind == dfGrouped
+  if df.kind != dfGrouped:
+    raise newException(ValueError, "`groups` iterator can only be called for grouped data frames.")
   # sort by keys
   let keys = getKeys(df.groupMap)
   # arrange by all keys in ascending order
@@ -1955,7 +1962,8 @@ proc group_by*[C: ColumnLike](df: DataTable[C], by: varargs[string], add = false
   ##
   ## It is meant to be used with any of the normal procedurs like `filter`, `summarize`,
   ## `mutate` in which case the action will be performed group wise.
-  doAssert by.len > 0, "Need at least one argument to group by!"
+  if by.len == 0:
+    raise newException(ValueError, "Need at least one argument to group by!")
   if df.kind == dfGrouped and add:
     # just copy `df`
     result = df.shallowCopy()
