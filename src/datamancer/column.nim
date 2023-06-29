@@ -44,6 +44,19 @@ const TypeToEnumType = CacheTable"TypeToEnumType"
 
 import sugar
 
+proc pretty*(c: ColumnLike): string
+template `$`*(c: ColumnLike): string = pretty(c)
+
+proc item*[T](t: Tensor[T]): T =
+  doAssert t.size == 1, "`item` not valid for tensors with length > 1. Input tensor length: " & $t.size
+  result = t[0]
+
+proc toTensor*[C: ColumnLike; T](c: C, _: typedesc[T], dropNulls: static bool = false): Tensor[T]
+proc item*[C: ColumnLike; T](c: C, _: typedesc[T]): T =
+  doAssert c.len == 1, "`item` not valid for columns with length > 1. Input column length: " & $c.len &
+    " The column: " & $c
+  result = c.toTensor(T)[0]
+
 proc genColNameStr*(types: seq[string]): string =
   result = "Column" & genCombinedTypeStr(types)
 
@@ -158,7 +171,6 @@ proc getColumnImpl(n: NimNode): NimNode =
     error("invalid")
 
 template `%~`*(v: Value): Value = v
-proc pretty*(c: ColumnLike): string
 proc compatibleColumns*[C: ColumnLike](c1, c2: C): bool {.inline.}
 # just a no-op
 template toColumn*[C: ColumnLike](c: C): C = c
@@ -1086,7 +1098,6 @@ proc pretty*(c: ColumnLike): string =
     result.add "\n"
     withNativeTensor(c, t):
       result.add &"  contained Tensor: {t}"
-template `$`*(c: ColumnLike): string = pretty(c)
 
 proc clone*[C: ColumnLike](c: C): C =
   ## clones the given column by cloning the Tensor
