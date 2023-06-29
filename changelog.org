@@ -1,3 +1,12 @@
+* v0.3.13
+- [io] add ~emphStrNumber~ arg to ~writeCsv~, ~pretty~ to disable
+  highlighting of strings that look like numbers via explicit ~"~
+- do not lift control flow out of loop bodies even if they do not
+  touch DF colums / indices
+- improve error message for ~add~ of two DataFrames, prints the
+  mismatching columns
+- fix Column conversion to string column from ~char~ input
+- add ~item~ to retrieve the single element of a ~Column~ and ~Tensor~ 
 * v0.3.12
 - replace all ~doAssert~ calls that really should be exceptions by
   exceptions so that ~--panics:on~ is saner. Fixes issue #51
