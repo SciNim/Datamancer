@@ -240,7 +240,7 @@ proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
                     len: t.size)
   elif T is string or T is char:
     result = C(kind: colString,
-               sCol: t.asType(string),
+               sCol: t.map_inline($x),
                len: t.size)
   elif T is Value:
     result = C(kind: colObject,
