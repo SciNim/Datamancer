@@ -707,7 +707,7 @@ proc readCsvAlt*(fname: string,
   s.close()
 
 proc writeCsv*[C: ColumnLike](df: DataTable[C], filename: string, sep = ',', header = "",
-                              precision = 4, emphStrNumber = true) =
+                              precision = 8, emphStrNumber = true) =
   ## writes a DataFrame to a "CSV" (separator can be changed) file.
   ## `sep` is the actual separator to be used. `header` indicates a potential
   ## symbol marking the header line, e.g. `#`
@@ -815,7 +815,7 @@ proc showBrowser*[C: ColumnLike](
     sleep(1000)
     removeFile(fname)
 
-proc toOrgTable*[C: ColumnLike](df: DataTable[C], precision = 4, emphStrNumber = true): string =
+proc toOrgTable*[C: ColumnLike](df: DataTable[C], precision = 8, emphStrNumber = true): string =
   ## Converts the given DF to a table formatted in Org syntax. Note that the
   ## whitespace alignment is left up to Org mode. Just <tab> on the table in Org
   ## mode to fix it.
