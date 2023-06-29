@@ -603,6 +603,7 @@ proc determineTypeFromProc(n: NimNode, numArgs: int): Option[ProcType] =
         of nnkIdent:
           if lastCh.strVal in ["false", "true"]: typ = ident"bool"
           else: error("Node " & $(lastCh.repr) & " is an identifier for which we don't understand the type.")
+        of nnkDotExpr: discard # cannot deduce a type properly
         else:
           typ = lastCh.getType # use the default values type
       else: # else param has a specific type
