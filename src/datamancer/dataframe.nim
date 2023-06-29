@@ -785,7 +785,8 @@ template add*[C: ColumnLike](df: var DataTable[C], args: varargs[untyped]): unty
   let tup = varargsToTuple(args)
   df.add(tup)
 
-proc pretty*[C: ColumnLike](df: DataTable[C], numLines = 20, precision = 4, header = true): string =
+proc pretty*[C: ColumnLike](df: DataTable[C], numLines = 20, precision = 4, header = true,
+                            emphStrNumber = true): string =
   ## Converts the first `numLines` of the input `DataFrame df` to a string table.
   ##
   ## If the `numLines` argument is negative, will print all rows of the data frame.
@@ -825,7 +826,7 @@ proc pretty*[C: ColumnLike](df: DataTable[C], numLines = 20, precision = 4, head
   for i in 0 ..< num:
     result.add align($i, idxAlign)
     for k in keys(df):
-      let element = pretty(df[k, i], precision = precision)
+      let element = pretty(df[k, i], precision = precision, emphStrNumber = emphStrNumber)
       if element.len < alignBy - 1:
         result.add align(element,
                          alignBy)
