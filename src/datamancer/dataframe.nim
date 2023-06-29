@@ -1829,7 +1829,7 @@ proc rename*[C: ColumnLike](df: DataTable[C], cols: varargs[Formula[C]]): DataTa
     doAssert "foo" in dfRes
     doAssert "y" in dfRes
 
-  result = df
+  result = df.shallowCopy()
   for fn in cols:
     if fn.kind == fkAssign:
       result[fn.lhs] = df[fn.rhs.toStr]
