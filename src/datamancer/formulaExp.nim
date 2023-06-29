@@ -391,6 +391,12 @@ proc isPureTreeCol*(n: NimNode, dirtyNodes: seq[NimNode]): bool =
     if not result:
       return
 
+proc isControlFlow(n: NimNode): bool =
+  ## XXX: add remaining. Which are applicable though?
+  ## The idea here is to *not* consider a node for lifting out of
+  ## a loop, as that would break the code.
+  result = n.kind in {nnkIfStmt, nnkIfExpr, nnkElifExpr, nnkElifBranch, nnkElseExpr}
+
 proc isPureOrColAccess*(n: NimNode, dirtyNodes: var seq[NimNode]): LiftTreeKind =
   ## Checks if the given node is either a pure tree or only contains full
   ## column accesses. If that is the case, we can lift it out of the
@@ -420,7 +426,7 @@ proc isPureOrColAccess*(n: NimNode, dirtyNodes: var seq[NimNode]): LiftTreeKind 
       result = lkBreak
     else:
       result = lkLift
-  elif n.isPureTreeCol(dirtyNodes):
+  elif n.isPureTreeCol(dirtyNodes) and not n.isControlFlow():
     ## we break if an ident, as we don't need to lift out individual idents.
     ## In fact this would also lift things like `<`, `notin` etc.
     if n.kind in {nnkNone, nnkEmpty, nnkIdent, nnkSym, nnkType} + nnkLiterals: result = lkBreak
