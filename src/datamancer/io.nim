@@ -707,7 +707,7 @@ proc readCsvAlt*(fname: string,
   s.close()
 
 proc writeCsv*[C: ColumnLike](df: DataTable[C], filename: string, sep = ',', header = "",
-               precision = 4) =
+                              precision = 4, emphStrNumber = true) =
   ## writes a DataFrame to a "CSV" (separator can be changed) file.
   ## `sep` is the actual separator to be used. `header` indicates a potential
   ## symbol marking the header line, e.g. `#`
@@ -722,7 +722,7 @@ proc writeCsv*[C: ColumnLike](df: DataTable[C], filename: string, sep = ',', hea
     for x in row:
       if idx > 0:
         data.add $sep
-      data.add pretty(x, precision = precision)
+      data.add pretty(x, precision = precision, emphStrNumber = emphStrNumber)
       inc idx
     data.add "\n"
   writeFile(filename, data)
