@@ -6,7 +6,9 @@
 - improve error message for ~add~ of two DataFrames, prints the
   mismatching columns
 - fix Column conversion to string column from ~char~ input
-- add ~item~ to retrieve the single element of a ~Column~ and ~Tensor~ 
+- add ~item~ to retrieve the single element of a ~Column~ and ~Tensor~
+- allow tilde =~= in paths for ~readCsv~
+- add optional ~serialize~ submodule to serialize to / from HDF5 files    
 * v0.3.12
 - replace all ~doAssert~ calls that really should be exceptions by
   exceptions so that ~--panics:on~ is saner. Fixes issue #51
