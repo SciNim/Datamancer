@@ -671,7 +671,7 @@ proc readCsv*(fname: string,
   if fname.startsWith("http://") or fname.startsWith("https://"):
     return readCsvFromUrl(fname, sep=sep, header=header, skipLines=skipLines,
                           toSkip=toSkip, colNames=colNames)
-
+  let fname = fname.expandTilde()
   result = newDataFrame()
   var ff = memfiles.open(fname)
   var lineCnt = 0
