@@ -2392,6 +2392,34 @@ proc drop_null*[C: ColumnLike](df: DataTable[C], cols: varargs[string],
       else:
         result[col] = result[col].toNativeColumn(failIfImpossible = false)
 
+proc dropNaN*[C: ColumnLike](df: DataTable[C], cols: varargs[string],
+                             convertColumnKind = false,
+                             failIfConversionFails: bool = false): auto =
+  ## Returns a DF with only those rows left, which contain no NaN float values.
+  ##
+  ## By default this includes all columns in the data frame of type `colFloat` or `colObject`.
+  ## If one or more `cols` are given, only those columns will be considered.
+  ##
+  var mcols = @cols
+  if mcols.len == 0:
+    mcols = getKeys(df)
+  var colsNeedPruning = newSeq[string]()
+  for col in mcols:
+    if df[col].kind in {colObject, colFloat}: # cols which aren't object or float cannot contain NaN
+      colsNeedPruning.add col
+  result = df.shallowCopy()
+  for col in colsNeedPruning:
+    ## TODO: avoid filtering several times somehow?
+    ## can read all cols first and then iterate over them? Not necessarily faster
+    let localCol = col # ref: https://github.com/nim-lang/Nim/pull/14447
+    case df[col].kind
+    of colObject:
+      result = result.filter(f{Value -> bool: classify(idx(localCol).toFloat) != fcNaN})
+    of colFloat:
+      result = result.filter(f{float -> bool: classify(idx(localCol)) != fcNaN})
+    else:
+      doAssert false, "This branch cannot happen!"
+
 func evaluate*[C: ColumnLike](node: Formula[C]): Value =
   ## Tries to return a single `Value` from a `Formula`.
   ##
