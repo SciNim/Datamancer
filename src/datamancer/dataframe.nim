@@ -282,7 +282,7 @@ proc `[]=`*[C: ColumnLike](df: var DataTable[C], k: string, col: C) {.inline.} =
     raise newException(ValueError, "Given column length of " & $col.len &
       " does not match DF length of: " & $df.len & "!")
 
-proc `[]=`*[C: ColumnLike; T: SomeNumber | string | bool](df: var DataTable[C], k: string, t: T) {.inline.} =
+proc `[]=`*[C: ColumnLike; T: SomeNumber | string | bool | Value](df: var DataTable[C], k: string, t: T) {.inline.} =
   ## Assigns a scalar `t` as a constant column to the `DataFrame`.
   runnableExamples:
     var df = toDf({"x" : @[1,2,3]})
