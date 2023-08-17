@@ -21,6 +21,8 @@ export formula
 import formulaNameMacro
 export formulaNameMacro
 
+export math # for `classify` among others
+
 const ValueNull* = Value(kind: VNull)
 
 import ast_utils
