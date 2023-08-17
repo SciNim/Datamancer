@@ -222,6 +222,15 @@ proc `[]`*[C: ColumnLike; U, V](df: DataTable[C], rowSlice: HSlice[U, V]): DataT
   # add 1, because it's an ``inclusive`` slice!
   result.len = (b - a) + 1
 
+proc `[]`*[C: ColumnLike](df: DataTable[C], row: int): DataTable[C] =
+  ## Returns the `row` as a data frame with a single element.
+  let keys = getKeys(df)
+  result = C.newDataTable(df.ncols)
+  for k in keys:
+    withNative(df[k], row, val):
+      result[k] = toColumn val
+  result.len = 1
+
 proc `[]`*[C: ColumnLike; U](df: DataTable[C], key: string, dtype: typedesc[U]): Tensor[U] =
   ## Returns the column `key` as a Tensor of type `dtype`.
   ##
