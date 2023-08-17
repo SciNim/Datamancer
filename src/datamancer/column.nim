@@ -537,7 +537,7 @@ template withNative*[C: ColumnLike](c: C, idx: int,
     withCaseStmt(c, gk, C):
       let `valName` {.inject.} = c.gk[idx]
       body
-  of colNone, colGeneric: raise newException(ValueError, "Accessed column is empty!")
+  of colNone: raise newException(ValueError, "Accessed column is empty!")
 
 template withNativeDtype*[C: ColumnLike](c: C, body: untyped): untyped =
   case c.kind
