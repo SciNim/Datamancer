@@ -644,6 +644,10 @@ iterator items*[C: ColumnLike](df: DataTable[C]): Value =
     row.assignRow(df, i)
     yield row
 
+iterator rows*[C: ColumnLike](df: DataTable[C]): DataFrame =
+  for i in 0 ..< df.len:
+    yield df[i]
+
 iterator values*[C: ColumnLike](df: DataTable[C], cols: varargs[string]): Tensor[Value] {.inline.} =
   ## Yields all columns `cols` of `DataFrame df` as `Tensor[Value]` rows.
   ##
