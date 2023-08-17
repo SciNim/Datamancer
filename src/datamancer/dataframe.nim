@@ -1172,8 +1172,8 @@ iterator groups*[C: ColumnLike](df: DataTable[C], order = SortOrder.Ascending): 
   # get all columns by which we group in a seq
   let cols = keys.mapIt(dfArranged[it])
 
-  proc buildClassLabel(df: DataTable[C], keys: seq[string],
-                       idx: int): seq[(string, Value)] =
+  proc buildClassLabel[C: ColumnLike](df: DataTable[C], keys: seq[string],
+                                      idx: int): seq[(string, Value)] =
     result = newSeq[(string, Value)](keys.len)
     for j, key in keys:
       result[j] = (key, df[key][idx, Value])
