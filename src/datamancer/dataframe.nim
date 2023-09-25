@@ -2069,8 +2069,10 @@ proc summarize*[C: ColumnLike](df: DataTable[C], fns: varargs[Formula[C]]): Data
       result.asgn(k, toNativeColumn vals)
       result.len = vals.len
 
-proc count*[C: ColumnLike](df: DataTable[C], col: string, name = "n"): DataTable[C] =
-  ## Counts the number of elements per type in `col` of the data frame.
+proc count*[C: ColumnLike](df: DataTable[C], col: openArray[string], name = "n"): DataTable[C] =
+  ## Counts the number of elements per type in `col` of the data frame. It may be
+  ## a single column or multiple. Each column simply implies a `group_by` that
+  ## column.
   ##
   ## The counts are stored in a new column given by `name`.
   ##
@@ -2099,6 +2101,10 @@ proc count*[C: ColumnLike](df: DataTable[C], col: string, name = "n"): DataTable
     result.asgn(k, toNativeColumn vals)
   result.asgn(name, toColumn counts)
   result.len = idx
+
+proc count*[C: ColumnLike](df: DataTable[C], col: string, name = "n"): DataTable[C] =
+  ## Overload of the above for a single string argument.
+  result = df.count([col], name)
 
 proc setDiff*[C: ColumnLike](df1, df2: DataTable[C], symmetric = false): DataTable[C] =
   ## Returns a `DataFrame` with all elements in `df1` that are ``not`` found in
