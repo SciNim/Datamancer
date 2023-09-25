@@ -1238,11 +1238,11 @@ t_in_s,  C1_in_V,  C2_in_V,  type
                      "n" : [20, 10, 30, 10, 30] })
 
     ## Manual using `summarize`
-    check df.group_by(by=["A", "B"]).summarize(f{int: "n" << len(col("C")) }) == exp
+    check equal(df.group_by(by=["A", "B"]).summarize(f{int: "n" << len(col("C")) }), exp)
     ## First a single `group_by`, then `count`
-    check df.group_by("A").count("B") == exp
+    check equal(df.group_by("A").count("B"), exp)
     ## Using multiple columns in `count`
-    check df.count(["A", "B"]) == exp
+    check equal(df.count(["A", "B"]), exp)
 
   test "isNull":
     # tests removal of VNull elements in a column with VNull
