@@ -1,3 +1,6 @@
+* v0.3.15
+- fix potential segfault when calling ~pretty~ on ~nil~ DF
+- allow ~count~ to take multiple arguments to group by and count
 * v0.3.14
 - add optional ~serialize~ submodule to serialize to / from HDF5 files    
 - allow tilde =~= in paths for ~readCsv~
