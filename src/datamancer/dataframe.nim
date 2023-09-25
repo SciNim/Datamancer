@@ -384,6 +384,28 @@ proc asgn*[C: ColumnLike; U](df: var DataTable[C], k: string, col: U) {.inline.}
   ## XXX: error at CT if not fit? modify?
   df.data[k] = toColumn col #, T)
 
+proc equal*[C: ColumnLike](df1, df2: DataTable[C]): bool =
+  ## Equality operation of two data frames based on data equality, not
+  ## the same ref.
+  ##
+  ## We do not use `==` to allow `==` to remain a reference equality including
+  ## comparing with `nil`.
+  if df1 == nil and df2 == nil: result = true
+  elif df1 == nil or df2 == nil: result = false
+  elif df1.kind != df2.kind: result = false
+  elif df1.len != df2.len: result = false
+  else:
+    let k1 = getKeys(df1)
+    let k2 = getKeys(df2)
+    if k1 != k2: result = false
+    else:
+      result = true
+      for k in k1:
+        if not equal(df1[k], df2[k]): return false
+      if df1.kind == dfGrouped:
+        # group map can be compared using `OrderedTable` equality
+        result = df1.groupMap == df2.groupMap
+
 # ---------- Data frame construction from data ----------
 
 proc extendShortColumns*[C: ColumnLike](df: var DataTable[C]) =
