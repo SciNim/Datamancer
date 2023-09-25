@@ -815,6 +815,7 @@ proc pretty*[C: ColumnLike](df: DataTable[C], numLines = 20, precision = 4, head
   ## `pretty` is called by `$` with the default parameters.
   # TODO: need to improve printing of string columns if length of elements
   # more than `alignBy`.
+  if df == nil: return "DataFrame(nil)"
 
   ## XXX: should columns of different types have different default widths? e.g. float being
   ## at least 9 chars, ints X, strings Y ?
