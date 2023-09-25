@@ -1114,6 +1114,19 @@ proc clone*[C: ColumnLike](c: C): C =
       result.gk = c.gk.clone()
   of colNone: discard
 
+proc equal*[C: ColumnLike](c1, c2: C): bool =
+  ## Equality of two `Columns` by equality of all elements.
+  ## Note: float values are compared exactly!
+  if c1.kind != c2.kind:
+    result = false
+  elif c1.len != c2.len:
+    result = false
+  else:
+    result = true
+    withNativeDtype(c1):
+      for i in 0 ..< c1.len:
+        if c1[i, dtype] != c2[i, dtype]: return false
+
 proc map*[T; U](c: Column, fn: (T -> U)): Column =
   ## Maps a given column given `fn` to a new column.
   ## Because `Column` is a variant type, an untyped mapping function
