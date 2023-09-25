@@ -1230,6 +1230,20 @@ t_in_s,  C1_in_V,  C2_in_V,  type
         resDirectSet.incl (row["cyl"].toInt.int, row["n"].toInt.int)
       check resDirectSet == exp
 
+  test "Count - multiple columns":
+    let df = toDf({ "A" : concat(newSeqWith(30, 1), newSeqWith(30, 2), newSeqWith(40, 3)),
+                    "B" : concat(newSeqWith(20, 5), newSeqWith(50, 6), newSeqWith(30, 7)),
+                    "C" : toSeq(0 ..< 100) })
+    let exp = toDf({ "A": [1, 1, 2, 3, 3], "B" : [5, 6, 6, 6, 7],
+                     "n" : [20, 10, 30, 10, 30] })
+
+    ## Manual using `summarize`
+    check df.group_by(by=["A", "B"]).summarize(f{int: "n" << len(col("C")) }) == exp
+    ## First a single `group_by`, then `count`
+    check df.group_by("A").count("B") == exp
+    ## Using multiple columns in `count`
+    check df.count(["A", "B"]) == exp
+
   test "isNull":
     # tests removal of VNull elements in a column with VNull
     let x1 = toSeq(0 .. 100)
