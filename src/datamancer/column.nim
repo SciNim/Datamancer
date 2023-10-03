@@ -51,6 +51,78 @@ proc item*[T](t: Tensor[T]): T =
   doAssert t.size == 1, "`item` not valid for tensors with length > 1. Input tensor length: " & $t.size
   result = t[0]
 
+proc toColKind*[T](dtype: typedesc[T]): ColKind =
+  when T is SomeFloat:
+    result = colFloat
+  elif T is SomeInteger:
+    result = colInt
+  elif T is bool:
+    result = colBool
+  elif T is string:
+    result = colString
+  elif T is Value:
+    result = colObject
+
+proc toColKind*(vKind: ValueKind): ColKind =
+  case vKind
+  of VFloat: result = colFloat
+  of VInt: result = colInt
+  of VString: result = colString
+  of VBool: result = colBool
+  of VObject: result = colObject
+  of VNull: result = colObject
+
+proc toValueKind*(col: Column): ValueKind =
+  case col.kind
+  of colFloat: result = VFloat
+  of colInt: result = VInt
+  of colString: result = VString
+  of colBool: result = VBool
+  of colObject: result = VObject
+  of colConstant:
+    # need to look at the `ValueKind` of the constant!
+    result = col.cCol.kind
+  of colGeneric:
+    raise newException(ValueError, "Generic column does not have a corresponding ValueKind.")
+  of colNone: result = VNull
+
+proc toValueKind*(col: ColKind): ValueKind {.deprecated: "This version of `toValueKind` " &
+    "has been deprecated in favor of a `toValueKind` taking a `Column` object. This way a " &
+    "conversion of `colConstant` can be done to the underlying type of the `Value` object.".} =
+  case col
+  of colFloat: result = VFloat
+  of colInt: result = VInt
+  of colString: result = VString
+  of colBool: result = VBool
+  of colObject: result = VObject
+  of colConstant: result = VObject
+  of colNone: result = VNull
+  of colGeneric: raise newException(Exception, "implement me")
+
+proc nativeColKind*(col: Column): ColKind =
+  ## Returns the native column kind, i.e. the column kind the native data stored
+  ## in the column has, ``including`` constant columns (hence the native kind is
+  ## ``not`` equal to the `kind` field of the column!
+  result = col.toValueKind.toColKind # a back and forth
+
+proc toNimType*[C: ColumnLike](c: C): string =
+  ## returns the string name of the underlying data type of the column kind
+  case c.kind
+  of colFloat: result = "float"
+  of colInt: result = "int"
+  of colString: result = "string"
+  of colBool: result = "bool"
+  of colObject: result = "object"
+  of colConstant: result = "constant"
+  of colNone: result = "null"
+  of colGeneric:
+    when C isnot Column:
+      var typ = $c.gkKind
+      typ.removePrefix("gk")
+      result = "generic[" & typ & "]"
+    else:
+      raise newException(ValueError, "Invalid branch for `Column` type.")
+
 proc toTensor*[C: ColumnLike; T](c: C, _: typedesc[T], dropNulls: static bool = false): Tensor[T]
 proc item*[C: ColumnLike; T](c: C, _: typedesc[T]): T =
   doAssert c.len == 1, "`item` not valid for columns with length > 1. Input column length: " & $c.len &
@@ -204,6 +276,7 @@ proc assignData*[C: ColumnLike; U](c: var C, data: Tensor[U]) =
     assignField(c, data)
 
 proc toColumn*[T: SupportedTypes](t: Tensor[T]): Column =
+  if t.size == 0: return Column(kind: toColKind(T), len: 0)
   when T is SomeInteger:
     result = Column(kind: colInt,
                     iCol: t.astype(int),
@@ -238,26 +311,27 @@ proc toColumn*[T: SupportedTypes](t: Tensor[T]): Column =
       "in a DataFrame, generate a `Column` derived type using `genColumn(" & $T & ")".}
 
 proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
+  if t.size == 0: return C(kind: toColKind(T), len: 0)
   when T is int | int64:
     result = C(kind: colInt,
-                    iCol: t.asType(int),
-                    len: t.size)
+               iCol: t.asType(int),
+               len: t.size)
   elif T is float64 | float: ## fix me
     result = C(kind: colFloat,
-                    fCol: t.asType(float),
-                    len: t.size)
+               fCol: t.asType(float),
+               len: t.size)
   elif T is bool:
     result = C(kind: colBool,
-                    bCol: t,
-                    len: t.size)
+               bCol: t,
+               len: t.size)
   elif T is string or T is char:
     result = C(kind: colString,
                sCol: t.map_inline($x),
                len: t.size)
   elif T is Value:
     result = C(kind: colObject,
-                    oCol: t,
-                    len: t.size)
+               oCol: t,
+               len: t.size)
   else:
     #elif T isnot seq and T isnot Tensor:
     ## generate a new type and return it
@@ -282,7 +356,10 @@ proc toColumn*[T: not SupportedTypes](t: openArray[T] | Tensor[T]): auto =
   result = colType(T).toColumn(t)
 
 proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: openArray[T]): C =
-  result = C.toColumn(t.toTensor())
+  if t.len > 0:
+    result = C.toColumn(t.toTensor())
+  else:
+    result = C(kind: toColKind(T), len: 0)
 
 proc toColumn*[T: SupportedTypes](s: openArray[T]): Column =
   var vals = newTensor[T](s.len)
@@ -387,78 +464,6 @@ proc `[]`*[C: ColumnLike](c: C, slice: Slice[int]): C =
     withCaseStmt(c, gk, C):
       result = C.toColumn c.gk[slice.a .. slice.b]
   of colNone: raise newException(IndexDefect, "Accessed column is empty!")
-
-proc toColKind*[T](dtype: typedesc[T]): ColKind =
-  when T is SomeFloat:
-    result = colFloat
-  elif T is SomeInteger:
-    result = colInt
-  elif T is bool:
-    result = colBool
-  elif T is string:
-    result = colString
-  elif T is Value:
-    result = colObject
-
-proc toColKind*(vKind: ValueKind): ColKind =
-  case vKind
-  of VFloat: result = colFloat
-  of VInt: result = colInt
-  of VString: result = colString
-  of VBool: result = colBool
-  of VObject: result = colObject
-  of VNull: result = colObject
-
-proc toValueKind*(col: Column): ValueKind =
-  case col.kind
-  of colFloat: result = VFloat
-  of colInt: result = VInt
-  of colString: result = VString
-  of colBool: result = VBool
-  of colObject: result = VObject
-  of colConstant:
-    # need to look at the `ValueKind` of the constant!
-    result = col.cCol.kind
-  of colGeneric:
-    raise newException(ValueError, "Generic column does not have a corresponding ValueKind.")
-  of colNone: result = VNull
-
-proc toValueKind*(col: ColKind): ValueKind {.deprecated: "This version of `toValueKind` " &
-    "has been deprecated in favor of a `toValueKind` taking a `Column` object. This way a " &
-    "conversion of `colConstant` can be done to the underlying type of the `Value` object.".} =
-  case col
-  of colFloat: result = VFloat
-  of colInt: result = VInt
-  of colString: result = VString
-  of colBool: result = VBool
-  of colObject: result = VObject
-  of colConstant: result = VObject
-  of colNone: result = VNull
-  of colGeneric: raise newException(Exception, "implement me")
-
-proc nativeColKind*(col: Column): ColKind =
-  ## Returns the native column kind, i.e. the column kind the native data stored
-  ## in the column has, ``including`` constant columns (hence the native kind is
-  ## ``not`` equal to the `kind` field of the column!
-  result = col.toValueKind.toColKind # a back and forth
-
-proc toNimType*[C: ColumnLike](c: C): string =
-  ## returns the string name of the underlying data type of the column kind
-  case c.kind
-  of colFloat: result = "float"
-  of colInt: result = "int"
-  of colString: result = "string"
-  of colBool: result = "bool"
-  of colObject: result = "object"
-  of colConstant: result = "constant"
-  of colNone: result = "null"
-  of colGeneric:
-    when C isnot Column:
-      var typ = $c.gkKind
-      typ.removePrefix("gk")
-      result = "generic[" & typ & "]"
-    else:
-      raise newException(ValueError, "Invalid branch for `Column` type.")
 
 template withNativeTensor*[C: ColumnLike](c: C,
                                           valName: untyped,
