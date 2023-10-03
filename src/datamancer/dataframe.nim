@@ -1099,6 +1099,7 @@ proc assignStack*[C: ColumnLike](dfs: seq[DataTable[C]]): DataTable[C] =
   ## procedure is speeding up assignment for cases where we know this holds.
   if dfs.len == 0: return C.newDataTable()
   elif dfs.len == 1: return dfs[0]
+  let dfs = dfs.filterIt(it.getKeys().len > 0)
   let df0 = dfs[0]
   result = C.newDataTable(df0.getKeys().len)
   # 1. determine required lengths of final columns
