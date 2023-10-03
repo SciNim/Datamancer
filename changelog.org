@@ -1,3 +1,6 @@
+* v0.3.17
+- handle DF construction from an empty seq or tensor
+- hotfix for ~assignStack~ fix of previous version
 * v0.3.16
 - handle empty datasets in ~assignStack~
 - add overload for ~innerJoin~ for more than two arguments  
