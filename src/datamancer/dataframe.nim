@@ -1097,9 +1097,9 @@ proc assignStack*[C: ColumnLike](dfs: seq[DataTable[C]]): DataTable[C] =
   ## All dataframes must have matching keys and column types. It should only
   ## be called from places where this is made sure as the point of the
   ## procedure is speeding up assignment for cases where we know this holds.
+  let dfs = dfs.filterIt(it.getKeys().len > 0)
   if dfs.len == 0: return C.newDataTable()
   elif dfs.len == 1: return dfs[0]
-  let dfs = dfs.filterIt(it.getKeys().len > 0)
   let df0 = dfs[0]
   result = C.newDataTable(df0.getKeys().len)
   # 1. determine required lengths of final columns
