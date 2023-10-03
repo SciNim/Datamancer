@@ -1990,6 +1990,17 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
             result.asgn(k, toColumn(t[_ ..< result.len]))
         result[k].len = result.len
 
+proc innerJoin*[C: ColumnLike](dfs: varargs[DataTable[C]], by: string): DataTable[C] =
+  ## Inner join for more than two arguments
+  if dfs.len == 0:
+    result = newDataFrame()
+  elif dfs.len == 1:
+    result = dfs[0]
+  else:
+    result = innerJoin(dfs[0], dfs[1], by)
+    for i in 2 ..< dfs.len:
+      result = result.innerJoin(dfs[i], by)
+
 proc toHashSet*[T](t: Tensor[T]): HashSet[T] =
   ## Internal helper to convert a tensor to a `HashSet`
   for el in t:
