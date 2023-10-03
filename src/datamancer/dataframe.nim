@@ -1992,7 +1992,9 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
         result[k].len = result.len
 
 proc innerJoin*[C: ColumnLike](dfs: varargs[DataTable[C]], by: string): DataTable[C] =
-  ## Inner join for more than two arguments
+  ## Inner join for more than two arguments. Performs the `innerJoin` operation on each
+  ## set of arguments after another. Does *not* optimize the order in  which the operations
+  ## are performed!
   if dfs.len == 0:
     result = newDataFrame()
   elif dfs.len == 1:
