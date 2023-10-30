@@ -673,17 +673,20 @@ proc readCsv*(fname: string,
                           toSkip=toSkip, colNames=colNames)
   let fname = fname.expandTilde()
   result = newDataFrame()
-  var ff = memfiles.open(fname)
-  var lineCnt = 0
-  for slice in memSlices(ff, delim = lineBreak, eat = eat):
-    if slice.size > 0:
-      inc lineCnt
+  try:
+    var ff = memfiles.open(fname)
+    var lineCnt = 0
+    for slice in memSlices(ff, delim = lineBreak, eat = eat):
+      if slice.size > 0:
+        inc lineCnt
 
-  ## we're dealing with ASCII files, thus each byte can be interpreted as a char
-  var data = cast[ptr UncheckedArray[char]](ff.mem)
-  result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, maxLines, toSkip, colNames,
-                            skipInitialSpace, quote, maxGuesses, lineBreak, eat)
-  ff.close()
+    ## we're dealing with ASCII files, thus each byte can be interpreted as a char
+    var data = cast[ptr UncheckedArray[char]](ff.mem)
+    result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, maxLines, toSkip, colNames,
+                              skipInitialSpace, quote, maxGuesses, lineBreak, eat)
+    ff.close()
+  except OSError:
+    raise newException(OSError, "Attempt to read CSV file: " & $fname & " failed. No such file or directory.")
 
 proc readCsvAlt*(fname: string,
                  sep = ',',
