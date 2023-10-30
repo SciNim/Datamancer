@@ -1083,7 +1083,7 @@ proc add*[C: ColumnLike](df: var DataTable[C], dfToAdd: DataTable[C]) =
         "present in one DF, but not the other: " & $diff)
     df = bind_rows([("", df), ("", dfToAdd)])
 
-proc assignStack*[C: ColumnLike](dfs: seq[DataTable[C]]): DataTable[C] =
+proc assignStack*[C: ColumnLike](dfs: openArray[DataTable[C]]): DataTable[C] =
   ## Returns a data frame built as a stack of the data frames in the sequence.
   ##
   ## This is a somewhat unsafe procedure as it trades performance for safety. It's
