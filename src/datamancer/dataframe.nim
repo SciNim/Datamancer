@@ -2478,6 +2478,34 @@ proc dropNaN*[C: ColumnLike](df: DataTable[C], cols: varargs[string],
     else:
       doAssert false, "This branch cannot happen!"
 
+from std/random import Rand, shuffle
+from std/sugar import dup
+proc shuffle*(df: DataFrame, rnd: var Rand): DataFrame =
+  ## Shuffles the input data frame using the given RNG
+  result = df.shallowCopy()
+  var idxs = toSeq(0 .. df.high)
+  rnd.shuffle(idxs)
+  result["Idx"] = idxs
+  result = result.arrange("Idx")
+  result.drop("Idx")
+
+proc shuffle*(df: DataFrame): DataFrame =
+  ## Shuffles the input data frame using the stdlib global RNG
+  result = df.shallowCopy()
+  result["Idx"] = toSeq(0 .. df.high).dup(shuffle())
+  result = result.arrange("Idx")
+  result.drop("Idx")
+
+proc randomHead*(df: DataFrame, head: int, rnd: var Rand): DataFrame =
+  ## Returns `head` elements of the input DataFrame after shuffling it,
+  ## using the given RNG
+  result = df.shuffle(rnd).head(min(head, df.len))
+
+proc randomHead*(df: DataFrame, head: int): DataFrame =
+  ## Returns `head` elements of the input DataFrame after shuffling it,
+  ## using the stdlib global RNG.
+  result = df.shuffle().head(min(head, df.len))
+
 func evaluate*[C: ColumnLike](node: Formula[C]): Value =
   ## Tries to return a single `Value` from a `Formula`.
   ##
