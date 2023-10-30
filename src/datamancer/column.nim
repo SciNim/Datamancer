@@ -1206,3 +1206,25 @@ proc lead*[C: ColumnLike](c: C, n = 1): C =
   ## Overload of the above for columns
   withNativeDtype(c):
     result = C.toColumn lead(c.toTensor(dtype), n)
+
+proc extend*[T](s: openArray[T], val: T): seq[T] =
+  ## Extends the given seq / array and returns a version with the element(s) added.
+  ## This is a single element version of `concat` if you wish.
+  result = @s
+  result.add val
+
+proc extend*[T](s: Tensor[T], val: T): Tensor[T] =
+  ## Extends the given seq / array and returns a version with the element(s) added.
+  ## This is a single element version of `concat` if you wish.
+  result = newTensorUninit[T](s.size)
+  for i in 0 ..< s.size:
+    result[i] = s[i]
+  result[result.size - 1] = val
+
+proc extend*[C: ColumnLike; T](s: C, val: T): ColumnLike =
+  ## Extends the given seq / array and returns a version with the element(s) added.
+  ## This is a single element version of `concat` if you wish.
+  result = newColumnLike(C, s.len + 1)
+  for i in 0 ..< s.len:
+    result[i] = s[i]
+  result[result.high] = val
