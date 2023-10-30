@@ -139,6 +139,12 @@ proc `%~`*[T: ScalarLike](x: T): Value =
   result = newVObject()
   result[$T] = %~ x.float
 
+proc `%~`*[T](v: (string, T)): Value =
+  ## construct a `VObject` `Value`. Assumes that the 'key' is a string and
+  ## `T` can be converted via `%~`
+  result = newVObject()
+  result[v[0]] = %~ v[1]
+
 proc toObject*(s: seq[(string, Value)]): Value =
   ## converts the given sequence to an object
   ## This is only used to store the result of the `groups` iterator as a
