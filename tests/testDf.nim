@@ -1026,18 +1026,42 @@ suite "DataTable tests":
     check onlyy2.len == x2s.len
 
   test "Spread":
-    let df = readCsv("data/fishdata_sparse.csv")
-    let dfSpread = df.spread(namesFrom = "station", valuesFrom = "seen")
-    let namesExp = concat(df["station"].unique.toTensor(string).toSeq1D,
-                          @["fish"]).sorted
-    check dfSpread.len == 19
-    check dfSpread.getKeys().len == 12
-    check dfSpread.getKeys().sorted == namesExp
-    for k in dfSpread.getKeys():
-      check dfSpread[k].kind == colInt
-    # easy column to check, all 1
-    check dfSpread["\"Release\"", int] == newTensorWith(19, 1)
-    ## TODO: support NULL values instead of filling by default T(0)
+    block:
+      let df = readCsv("data/fishdata_sparse.csv")
+      let dfSpread = df.spread(namesFrom = "station", valuesFrom = "seen")
+      let namesExp = concat(df["station"].unique.toTensor(string).toSeq1D,
+                            @["fish"]).sorted
+      check dfSpread.len == 19
+      check dfSpread.getKeys().len == 12
+      check dfSpread.getKeys().sorted == namesExp
+      for k in dfSpread.getKeys():
+        check dfSpread[k].kind == colInt
+      # easy column to check, all 1
+      check dfSpread["\"Release\"", int] == newTensorWith(19, 1)
+      ## TODO: support NULL values instead of filling by default T(0)
+    block:
+      let data = """
+          Type          Septem            Line            Fake          ε_cut    FractionPass
+      LineReal           false            true            Real               1          0.2204
+      LineFake           false            true            Fake               1          0.8622
+    SeptemReal            true           false            Real               1          0.2315
+SeptemLineReal            true            true            Real               1          0.1368
+SeptemLineFake            true            true            Fake               1          0.7255
+    SeptemFake            true           false            Fake               1          0.7763
+"""
+      let df = parseCsvString(data, sep = ' ')
+      let exp = """
+Type           Septem  Line   ε_cut     Real     Fake
+LineReal       false   true       1   0.2204   0.8622
+SeptemReal     true    false      1   0.2315   0.7255
+SeptemLineReal true    true       1   0.1368   0.7763
+"""
+      let dfExp = parseCsvString(exp, sep = ' ')
+      let dfRes = df.spread("Fake", "FractionPass")
+      check dfRes.len == 3
+      check dfRes.getKeys().len == 6
+      check dfRes.getKeys() == dfExp.getKeys()
+      check equal(dfRes, dfExp)
 
   test "Pretty printing of DFs":
     var
