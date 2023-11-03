@@ -2315,27 +2315,29 @@ proc spread*[C: ColumnLike; T](df: DataTable[C], namesFrom, valuesFrom: string,
   for c in newCols:
     result[c.toStr] = newColumn(df[valuesFrom].kind, dfOutlen)
   var idx = 0
+
   # 5. now group by *other* keys and get the `newCols` from each. That way each subgroup
   #   corresponds to *one row* in the output
   if restKeys.len > 0:
     # 6. for each sub df, walk all rows to get correct key/vals
     # NOTE: this is inefficient
-    for (tup, subDf) in groups(df.group_by(restKeys)):
+    for (tup, subDf) in groups(df.group_by(namesFrom)):
+      idx = 0
       for row in subDf:
         # NOTE: we could also extract the restKeys info from `tup`
         for col in restKeys:
           withNative(row[col], x):
-            result[col, idx] = x
+            result[col][idx] = x
         withNative(row[valuesFrom], x):
-          result[row[namesFrom].toStr, idx] = x
-      inc idx
+          result[row[namesFrom].toStr][idx] = x
+        inc idx
   else:
     # if there are no other keys, group by each class and fill the classes separately.
     for (tup, subDf) in groups(df.group_by(namesFrom)):
       idx = 0
       for row in subDf:
         withNative(row[valuesFrom], x):
-          result[row[namesFrom].toStr, idx] = x
+          result[row[namesFrom].toStr][idx] = x
         inc idx
 
 proc unique*[C: ColumnLike](c: C): C =
