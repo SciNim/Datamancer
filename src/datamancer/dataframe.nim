@@ -331,7 +331,7 @@ proc `[]=`*[C: ColumnLike; T](df: var DataTable[C], k: string, idx: int, val: T)
 
   # we depend on df.len != df.data.len in `innerJoin` among others. This is a somewhat
   # unsafe procedure!
-  assert df.data[k].len > idx, "Invalid index " & $idx & " for DF column of length " & $df.data.len
+  assert df.data[k].len > idx, "Invalid index " & $idx & " for DF column of length " & $df.data[k].len
   when T is float:
     df.data[k].fCol[idx] = val
   elif T is int:
