@@ -1009,6 +1009,8 @@ proc add*[C: ColumnLike](c1, c2: C): C =
       withCaseStmt(c1, gk, C):
         result = C.toColumn concat(c1.gk, c2.gk, axis = 0)
     of colNone: raise newException(ValueError, "Both columns are empty!")
+  elif c1.kind == colConstant or c2.kind == colConstant: # important to happen before next branch!
+    result = add(c1.constantToFull, c2.constantToFull)
   elif compatibleColumns(c1, c2):
     # convert both to float
     case c1.kind
@@ -1024,8 +1026,6 @@ proc add*[C: ColumnLike](c1, c2: C): C =
       # one of the two is constant and same type as the other
       # `constantToFull` is a no-op for the non-constant column
       result = add(c1.constantToFull, c2.constantToFull) # recurse on this proc
-  elif c1.kind == colConstant or c2.kind == colConstant:
-    result = add(c1.constantToFull, c2.constantToFull)
   else:
     # convert both columns to Value
     result = C.toColumn concat(c1.toObject.oCol, c2.toObject.oCol, axis = 0)
