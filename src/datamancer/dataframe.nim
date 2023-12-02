@@ -1080,7 +1080,7 @@ proc add*[C: ColumnLike](df: var DataTable[C], dfToAdd: DataTable[C]) =
       bind sets.items
       let diff = symmetricDifference(s1, s2)
       raise newException(ValueError, "All keys must match to add data frames. The following columns are " &
-        "present in one DF, but not the other: " & $diff)
+        "present in one DF, but not the other: " & $diff & ". Mutable df: " & $df & " and dfToAdd: " & $dfToAdd)
     df = bind_rows([("", df), ("", dfToAdd)])
 
 proc assignStack*[C: ColumnLike](dfs: openArray[DataTable[C]]): DataTable[C] =
