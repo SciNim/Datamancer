@@ -1877,7 +1877,7 @@ proc rename*[C: ColumnLike](df: DataTable[C], cols: varargs[Formula[C]]): DataTa
   result = df.shallowCopy()
   for fn in cols:
     if fn.kind == fkAssign:
-      result[fn.lhs] = df[fn.rhs.toStr]
+      result[fn.lhs] = result[fn.rhs.toStr]
       # remove the column of the old name
       result.drop(fn.rhs.toStr)
     else:
