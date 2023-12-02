@@ -2301,40 +2301,49 @@ proc spread*[C: ColumnLike; T](df: DataTable[C], namesFrom, valuesFrom: string,
       doAssert dfRes["C", int] == [0, 5, 7, 2].toTensor
 
   result = C.newDataTable()
-  # 1. determine new columns from all unique values in `namesFrom`
-  let dfGrouped = df.group_by(namesFrom)
+  # 1. find remaining keys
+  let restKeys = df.getKeys().filterIt(it != namesFrom and it != valuesFrom)
+  # 2. sort DF by keys for where we take names from *and* all other columns
+  #  important to get same order in all sub DFs
+  let dfS = df.arrange(concat(@[namesFrom], restKeys))
+  # 3. determine new columns from all unique values in `namesFrom`
+  var dfGrouped = dfS.group_by(namesFrom)
   # bind `items` here to make it available in calling scope without `import sets`
   bind items
   let newCols = toSeq(items(dfGrouped.groupMap[namesFrom]))
-  # 2. find remaining keys
-  let restKeys = df.getKeys().filterIt(it != namesFrom and it != valuesFrom)
-  # 3. and length of resulting DF by getting class with most counts
+  # 4. and length of resulting DF by getting class with most counts
   let dfOutlen = df.count(namesFrom)["n", int].max
-  # 4. create result DF from input column types
+  # 5. create result DF from input column types
   for c in restKeys:
     result[c] = newColumn(df[c].kind, dfOutlen)
   for c in newCols:
     result[c.toStr] = newColumn(df[valuesFrom].kind, dfOutlen)
   var idx = 0
 
+  let remainNumber = dfS.count(restKeys).len
+  if remainNumber != dfOutlen:
+    raise newException(ValueError, "One or more of the remaining columns in the input DF not used " &
+      "as `namesFrom` or `valuesFrom` contains data not cleanly mapped to any name in `namesFrom`. Remaining keys:\n" &
+      "\t" & $restKeys & ". The groups: " & $df.count(restKeys) & " compared to number of classes " &
+      "based on `namesFrom`: " & $dfOutlen)
+
   # 5. now group by *other* keys and get the `newCols` from each. That way each subgroup
   #   corresponds to *one row* in the output
   if restKeys.len > 0:
     # 6. for each sub df, walk all rows to get correct key/vals
-    # NOTE: this is inefficient
-    for (tup, subDf) in groups(df.group_by(namesFrom)):
-      idx = 0
+    # Group by the *other* keys
+    dfGrouped = dfS.group_by(restKeys)
+    for (tup, subDf) in groups(dfGrouped):
       for row in subDf:
-        # NOTE: we could also extract the restKeys info from `tup`
         for col in restKeys:
           withNative(row[col], x):
             result[col][idx] = x
         withNative(row[valuesFrom], x):
           result[row[namesFrom].toStr][idx] = x
-        inc idx
+      inc idx
   else:
     # if there are no other keys, group by each class and fill the classes separately.
-    for (tup, subDf) in groups(df.group_by(namesFrom)):
+    for (tup, subDf) in groups(dfGrouped, sorted = true):
       idx = 0
       for row in subDf:
         withNative(row[valuesFrom], x):
