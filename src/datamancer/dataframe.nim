@@ -1177,7 +1177,7 @@ proc compareRows[C: ColumnLike](cols: seq[C], i, j: int): bool =
     if not result: return false
 
 proc arrange*[C: ColumnLike](df: DataTable[C], by: varargs[string], order = SortOrder.Ascending): DataTable[C]
-iterator groups*[C: ColumnLike](df: DataTable[C], order = SortOrder.Ascending): (seq[(string, Value)], DataTable[C]) =
+iterator groups*[C: ColumnLike](df: DataTable[C], order = SortOrder.Ascending, sorted = false): (seq[(string, Value)], DataTable[C]) =
   ## Yields the subgroups of a grouped DataFrame `df` and the `(key, Value)`
   ## pairs that were used to create the subgroup.
   ##
@@ -1207,7 +1207,8 @@ iterator groups*[C: ColumnLike](df: DataTable[C], order = SortOrder.Ascending): 
   # sort by keys
   let keys = getKeys(df.groupMap)
   # arrange by all keys in ascending order
-  let dfArranged = df.arrange(keys, order = order)
+  let dfArranged = if sorted: df
+                   else: df.arrange(keys, order = order)
   # get all columns by which we group in a seq
   let cols = keys.mapIt(dfArranged[it])
 
