@@ -26,6 +26,7 @@ proc toH5*(h5f: H5File, x: DataFrame, name = "", path = "/") =
   let grp = path / name
   echo "Generating group ", grp
   discard h5f.create_group(grp)
+  if x == nil: return # nothing to serialize!
   for k in getKeys(x):
     withNativeTensor(x[k], val):
       when typeof(val) isnot Tensor[Value]:
