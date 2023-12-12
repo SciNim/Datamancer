@@ -615,13 +615,23 @@ proc determineTypeFromProc(n: NimNode, numArgs: int): Option[ProcType] =
 
 proc maybeAddSpecialTypes(possibleTypes: var PossibleTypes, n: NimNode) =
   ## These don't appear as overloads sometimes?
-  if n.kind in {nnkSym, nnkIdent}:
-    if n.strVal in ["<", ">", ">=", "<=", "==", "!="]:
-      for dtype in Dtypes:
-        possibleTypes.add ProcType(inputTypes: @[ident(dtype),
-                                                 ident(dtype)],
-                                   isGeneric: false,
-                                   resType: some(ident("bool")))
+  var strVal: string
+  case n.kind:
+  of nnkSym, nnkIdent:
+    strVal = n.strVal
+  of nnkClosedSymChoice:
+    if len(n) > 0:
+      strVal = n[0].strVal
+    else:
+      return
+  else:
+    return
+  if strVal in ["<", ">", ">=", "<=", "==", "!="]:
+    for dtype in Dtypes:
+      possibleTypes.add ProcType(inputTypes: @[ident(dtype),
+                                                ident(dtype)],
+                                  isGeneric: false,
+                                  resType: some(ident("bool")))
 
 proc findType(n: NimNode, numArgs: int): PossibleTypes =
   ## This procedure tries to find type information about a given NimNode.
