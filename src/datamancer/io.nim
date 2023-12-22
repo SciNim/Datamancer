@@ -118,7 +118,7 @@ template parseHeaderCol(data: ptr UncheckedArray[char], buf: var string,
 
 template guessType(data: ptr UncheckedArray[char], buf: var string,
                    colTypes: var seq[ColKind],
-                   col, idx, colStart, numCols: untyped): untyped =
+                   col, idx, colStart, numCols, quote: untyped): untyped =
   # only determine types for as many cols as in header
   if col < numCols:
     copyBuf(data, buf, idx, colStart)
@@ -126,7 +126,7 @@ template guessType(data: ptr UncheckedArray[char], buf: var string,
       if buf.len == 0:
         # inconclusive, need to look at next line
         colTypes[col] = colNone
-      elif buf.isInt:
+      elif buf.isInt(quote):
         colTypes[col] = colInt
       elif buf.isNumber:
         colTypes[col] = colFloat
@@ -187,7 +187,7 @@ func tryParse(toEat: seq[char], data: ptr UncheckedArray[char], idx: var int,
 
 
 proc parseNumber(data: ptr UncheckedArray[char],
-                 sep: char, # if this sep is found parsing ends
+                 sep, quote: char, # if this sep is found parsing ends
                  idxIn: int,
                  intVal: var int, floatVal: var float): RetType {.inline, noinit.} =
   ## this code is taken and adapted from @c-blake's code in Nim PR #16055.
@@ -205,8 +205,8 @@ proc parseNumber(data: ptr UncheckedArray[char],
   var nD = 0
   var giant = false
   intVal = 0                                    # build intVal up from zero..
-  if data[idx] in Sign:
-    idx.inc                                     # skip optional sign
+  if data[idx] in Sign + {quote}:
+    idx.inc                                     # skip optional sign or quote character
   while data[idx] != '\0':                      # ..and track scale/pow10.
     if data[idx] notin Digits:
       if data[idx] != '.' or pnt >= 0:
@@ -232,7 +232,7 @@ proc parseNumber(data: ptr UncheckedArray[char],
     return rtError                              # ONLY "[+-]*\.*"
 
   # `\0` is necessary to support parsing until the end of the file in case of no line break
-  if data[idx] notin {'\0', sep, '\n', '\r', 'e', 'E'}: ## TODO: generalize this?
+  if data[idx] notin {'\0', sep, quote, '\n', '\r', 'e', 'E'}: ## TODO: generalize this?
     # might be "nan", "inf" or "-inf" or some other invalid string
     var ret = tryParse(@['n', 'a', 'n'], data, idx,
                        sep,
@@ -279,14 +279,14 @@ proc parseNumber(data: ptr UncheckedArray[char],
 
 template parseCol(data: ptr UncheckedArray[char], buf: var string,
                   col: var Column,
-                  sep: char,
+                  sep, quote: char,
                   colTypes: seq[ColKind], colIdx, idx, colStart, row, numCols: int,
                   intVal: var int, floatVal: var float, rtType: var RetType): untyped =
   ## if there are more `,` in a row than in the header, skip it
   if likely(colIdx < numCols):
     case colTypes[colIdx]
     of colInt:
-      retType = parseNumber(data, sep, colStart, intVal, floatVal)
+      retType = parseNumber(data, sep, quote, colStart, intVal, floatVal)
       case retType
       of rtInt: col.iCol[row] = intVal
       of rtFloat, rtNaN, rtInf:
@@ -302,7 +302,7 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
         colTypes[colIdx] = colObject
         col.oCol[row] = %~ buf
     of colFloat:
-      retType = parseNumber(data, sep, colStart, intVal, floatVal)
+      retType = parseNumber(data, sep, quote, colStart, intVal, floatVal)
       case retType
       of rtInt: col.fCol[row] = intVal.float
       of rtFloat, rtNaN, rtInf: col.fCol[row] = floatVal # `floatVal` may be NaN, Inf or regular value
@@ -323,10 +323,10 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
         col.oCol[row] = %~ buf
     of colString:
       copyBuf(data, buf, idx, colStart)
-      col.sCol[row] = buf
+      col.sCol[row] = buf.strip(chars = Whitespace + {quote})
     of colObject:
       # try to parse as number
-      retType = parseNumber(data, sep, colStart, intVal, floatVal)
+      retType = parseNumber(data, sep, quote, colStart, intVal, floatVal)
       case retType
       of rtInt: col.oCol[row] = %~ intVal
       of rtFloat, rtInf: col.oCol[row] = %~ floatVal
@@ -361,6 +361,8 @@ template parseLine(data: ptr UncheckedArray[char], buf: var string,
                    toBreak: static bool,
                    fnToCall: untyped): untyped =
   if unlikely(data[idx] == quote):
+    #if not inQuote:
+    #  colStart = idx + 1
     inQuote = not inQuote
   elif unlikely(inQuote):
     inc idx
@@ -477,7 +479,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
   const maxGuesses = 20
   while idx < size:
     parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, maxLines, toBreak = true):
-      guessType(data, buf, colTypes, col, idx, colStart, numCols)
+      guessType(data, buf, colTypes, col, idx, colStart, numCols, quote)
       # if we see the end of the line, store the current column number
       if data[idx] in {'\n', '\r', '\l'}:
         if lastWasSep and sep in {' ', '\t'}:
@@ -523,7 +525,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
     floatVal: float
   while idx < size:
     parseLine(data, buf, sep, quote, lineBreak, eat, col, idx, colStart, row, rowStart, lastWasSep, inQuote, maxLines, toBreak = false):
-      parseCol(data, buf, cols[col], sep, colTypes, col, idx, colStart, row, numCols,
+      parseCol(data, buf, cols[col], sep, quote, colTypes, col, idx, colStart, row, numCols,
                intVal, floatVal, retType)
   if maxLines == 0 and row + skippedLines < lineCnt:
     # missing linebreak at end of last line
@@ -532,7 +534,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
         $(row + skippedLines) & " lines read, expected " & $(lineCnt - 1) &
         ". Is your file using non unix line breaks? Try switching the `lineBreak` " &
         "and `eat` options to `readCsv`.")
-    parseCol(data, buf, cols[col], sep, colTypes, col, idx, colStart, row, numCols,
+    parseCol(data, buf, cols[col], sep, quote, colTypes, col, idx, colStart, row, numCols,
              intVal, floatVal, retType)
   for i, col in colNames:
     result[col] = cols[i]
@@ -728,7 +730,7 @@ proc writeCsv*[C: ColumnLike](df: DataTable[C], filename: string, sep = ',', hea
       data.add pretty(x, precision = precision, emphStrNumber = emphStrNumber)
       inc idx
     data.add "\n"
-  writeFile(filename, data)
+  writeFile(filename.expandTilde(), data)
 
 const HtmlTmpl* = """
 <!DOCTYPE html>

@@ -256,21 +256,25 @@ func isNumber*(v: Value): bool =
       "objects of kind `VString`. Input is " & $v.kind)
   result = v.str.isNumber
 
-func isInt*(s: string): bool =
+func isInt*(s: string, quote: char): bool =
   ## simple "most likely int" check. If the string only contains digits and
   ## `_` we consider it an Int
-  s.allCharsInSet({'0' .. '9', '_'})
+  let s = s.strip(chars = {quote})
+  if s.allCharsInSet({'0' .. '9', '_'}):
+    result = true
+  elif s.normalize in ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]:
+    result = true
 
 func isBool*(s: string): bool =
   s == "true" or s == "false"
 
-func isInt*(v: Value): bool =
+func isInt*(v: Value, quote = '"'): bool =
   ## checks whether the string contained in `Value` is likely an integer
   ## For an `isFloat` equivalent see `isNumber`.
   if v.kind != VString:
     raise newException(ValueError, "`isInt` can only be checked for `Value` " &
       "objects of kind `VString`. Input is " & $v.kind)
-  result = v.str.isInt
+  result = v.str.isInt(quote)
 
 proc toFloat*(v: Value, allowNull: static bool = false): float =
   when not allowNull:
