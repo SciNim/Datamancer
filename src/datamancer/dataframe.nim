@@ -437,7 +437,7 @@ proc strTabToDf*(t: OrderedTable[string, seq[string]]): DataFrame =
     if v.len > 0:
       # TODO: CLEAN UP
       var maybeNumber = v[0].isNumber
-      var maybeInt = v[0].isInt
+      var maybeInt = v[0].isInt('"')
       if maybeNumber and maybeInt:
         # try as int
         try:
