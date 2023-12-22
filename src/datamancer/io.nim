@@ -277,6 +277,29 @@ proc parseNumber(data: ptr UncheckedArray[char],
   #  #copyBuf(data, strVal, idx, idxIn)
   result = rtFloat                              # mark as float
 
+type
+  DigitString = enum
+    dsZero = "zero"
+    dsOne = "one"
+    dsTwo = "two"
+    dsThree = "three"
+    dsFour = "four"
+    dsFive = "five"
+    dsSix = "six"
+    dsSeven = "seven"
+    dsEight = "eight"
+    dsNine = "nine"
+    dsInvalid = "INVALID" # invalid in case input is not a string!
+
+proc parseStringDigit(s: string, quote: char): int =
+  ## Parses a given string digit in the form "One", "Two", "Three" etc.
+  let s = s.strip(chars = {quote}).normalize # strip possible quote and normalize
+  let res = parseEnum[DigitString](s, dsInvalid)
+  if res != dsInvalid:
+    result = ord(res)
+  else:
+    raise newException(ValueError, "Input string " & $s & " is not a valid string digit.")
+
 template parseCol(data: ptr UncheckedArray[char], buf: var string,
                   col: var Column,
                   sep, quote: char,
@@ -296,11 +319,16 @@ template parseCol(data: ptr UncheckedArray[char], buf: var string,
         col.fCol[row] = floatVal # `floatVal` may be NaN, Inf or regular value
         colTypes[colIdx] = colFloat
       of rtError:
-        # object column
-        copyBuf(data, buf, idx, colStart)
-        col = toObjectColumn col
-        colTypes[colIdx] = colObject
-        col.oCol[row] = %~ buf
+        copyBuf(data, buf, idx, colStart) # copy field to string buffer
+        # check if number is digit in string format
+        try:
+          intVal = parseStringDigit(buf, quote)
+          col.iCol[row] = intVal
+        except ValueError:
+          # object column
+          col = toObjectColumn col
+          colTypes[colIdx] = colObject
+          col.oCol[row] = %~ buf
     of colFloat:
       retType = parseNumber(data, sep, quote, colStart, intVal, floatVal)
       case retType
