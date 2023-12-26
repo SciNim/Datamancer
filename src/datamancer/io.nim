@@ -444,7 +444,8 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
                       skipInitialSpace = true,
                       quote = '"',
                       maxGuesses = 20,
-                      lineBreak = '\n', eat = '\r'): DataFrame =
+                      lineBreak = '\n', eat = '\r',
+                      allowLineBreaks = false): DataFrame =
   ## Implementation of the CSV parser that works on a data array of chars.
   ##
   ## `maxGuesses` is the maximum number of rows to look at before we give up
@@ -538,7 +539,7 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
 
   # 3. create the starting columns
   var cols = newSeq[Column](numCols)
-  let dataLines = if maxLines > 0: maxLines
+  var dataLines = if maxLines > 0: maxLines
                   else: lineCnt - skippedLines
   for i in 0 ..< colTypes.len:
     # create column of length:
@@ -557,16 +558,21 @@ proc readCsvTypedImpl(data: ptr UncheckedArray[char],
                intVal, floatVal, retType)
   if maxLines == 0 and row + skippedLines < lineCnt:
     # missing linebreak at end of last line
-    if row + skippedLines != lineCnt - 1:
+    if not allowLineBreaks and row + skippedLines != lineCnt - 1:
       raise newException(IOError, "Line counts mismatch. " &
         $(row + skippedLines) & " lines read, expected " & $(lineCnt - 1) &
         ". Is your file using non unix line breaks? Try switching the `lineBreak` " &
         "and `eat` options to `readCsv`.")
     parseCol(data, buf, cols[col], sep, quote, colTypes, col, idx, colStart, row, numCols,
              intVal, floatVal, retType)
+
+  let readLines = row # actual number we read
   for i, col in colNames:
-    result[col] = cols[i]
-  result.len = dataLines
+    if allowLineBreaks and readLines != dataLines:
+      result[col] = cols[i][0 ..< readLines]
+    else:
+      result[col] = cols[i]
+  result.len = readLines
 
 func countNonEmptyLines(s: string): int =
   var idx = 0
@@ -595,7 +601,8 @@ proc parseCsvString*(csvData: string,
                      quote = '"',
                      maxGuesses = 20,
                      lineBreak = '\n',
-                     eat = '\r'
+                     eat = '\r',
+                     allowLineBreaks = false
                     ): DataFrame =
   ## Parses a `DataFrame` from a string containing CSV data.
   ##
@@ -627,7 +634,8 @@ proc parseCsvString*(csvData: string,
   var data = cast[ptr UncheckedArray[char]](csvData[0].unsafeAddr)
   result = readCsvTypedImpl(data, csvData.len, countNonEmptyLines(csvData),
                             sep, header, skipLines, maxLines, toSkip, colNames,
-                            skipInitialSpace, quote, maxGuesses, lineBreak, eat)
+                            skipInitialSpace, quote, maxGuesses, lineBreak, eat,
+                            allowLineBreaks = allowLineBreaks)
 
 proc readCsvFromUrl(url: string,
               sep: char = ',',
@@ -655,7 +663,8 @@ proc readCsv*(fname: string,
               quote = '"',
               maxGuesses = 20,
               lineBreak = '\n',
-              eat = '\r'
+              eat = '\r',
+              allowLineBreaks = false
              ): DataFrame =
   ## Reads a DF from a CSV file or a web URL using the separator character `sep`.
   ##
@@ -698,6 +707,16 @@ proc readCsv*(fname: string,
   ## are fine. In principle for windows style endings `\r\n` the defaults *should*
   ## work as well, but in rare cases the default causes issues with mismatched
   ## line counts. In those cases try to switch `lineBreaks` and `eat` around.
+  ##
+  ## If `allowLineBreaks` is `true`, line breaks are allowed inside of quoted fields.
+  ## Otherwise (the default) we raise an exception due to an unexpected number of
+  ## lines in the file. This is because we perform an initial pass to count the number
+  ## of lines and wish to err on the side of correctness (rather raise than parse
+  ## garbage if the file is fully malformed).
+  ##
+  ## *NOTE*: If this CSV parser is too brittle for your CSV file, an older, slower
+  ## parser using `std/parsecsv` is available under the name `readCsvAlt`. However,
+  ## it does not return a full `DataFrame`. You need to call `toDf` on the result.
   if fname.startsWith("http://") or fname.startsWith("https://"):
     return readCsvFromUrl(fname, sep=sep, header=header, skipLines=skipLines,
                           toSkip=toSkip, colNames=colNames)
@@ -713,7 +732,8 @@ proc readCsv*(fname: string,
     ## we're dealing with ASCII files, thus each byte can be interpreted as a char
     var data = cast[ptr UncheckedArray[char]](ff.mem)
     result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, maxLines, toSkip, colNames,
-                              skipInitialSpace, quote, maxGuesses, lineBreak, eat)
+                              skipInitialSpace, quote, maxGuesses, lineBreak, eat,
+                              allowLineBreaks = allowLineBreaks)
     ff.close()
   except OSError:
     raise newException(OSError, "Attempt to read CSV file: " & $fname & " failed. No such file or directory.")
