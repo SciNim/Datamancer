@@ -1,3 +1,11 @@
+* v0.3.18
+- add ~shuffle~ to shuffle a DF. Either using stdlib global RNG or
+  given RNG
+- add ~extend~ helpers for ~seq/Tensor/Column~ to add a single element
+  to any collection and return the extended version
+- throw custom ~OSError~ if CSV file cannot be read
+- add =%~= for ~(string, T)~ to construct a ~VObject~ Value
+- fix ~spread~ implementation if more keys are present
 * v0.3.17
 - handle DF construction from an empty seq or tensor
 - hotfix for ~assignStack~ fix of previous version
