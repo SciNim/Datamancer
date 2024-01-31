@@ -392,6 +392,7 @@ template parseLine(data: ptr UncheckedArray[char], buf: var string,
     #if not inQuote:
     #  colStart = idx + 1
     inQuote = not inQuote
+    lastWasSep = false
   elif unlikely(inQuote):
     inc idx
     # skip ahead in case we start quote
