@@ -1037,7 +1037,7 @@ suite "DataTable tests":
       for k in dfSpread.getKeys():
         check dfSpread[k].kind == colInt
       # easy column to check, all 1
-      check dfSpread["\"Release\"", int] == newTensorWith(19, 1)
+      check dfSpread["Release", int] == newTensorWith(19, 1)
       ## TODO: support NULL values instead of filling by default T(0)
     block:
       let data = """
