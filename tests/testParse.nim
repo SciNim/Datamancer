@@ -23,7 +23,7 @@ suite "`parseNumber` tests":
     initBuf()
     template checkInt(v: typed): untyped =
       toBuf($v)
-      let ret = buf.parseNumber(sep = ',',
+      let ret = buf.parseNumber(sep = ',', quote = '#',
                                 idxIn = 0,
                                 intBuf, floatBuf)
       check intBuf == v
@@ -50,7 +50,7 @@ suite "`parseNumber` tests":
     initBuf()
     template checkInt(str, val: typed, start: int): untyped =
       toBuf(str)
-      let ret = buf.parseNumber(sep = ',',
+      let ret = buf.parseNumber(sep = ',', quote = '#',
                                 idxIn = start,
                                 intBuf, floatBuf)
       check intBuf == val
@@ -75,7 +75,7 @@ suite "`parseNumber` tests":
     for i in 0 ..< 50:
       toBuf($i & "," & $i)
       let start = if i < 10: 1 else: 2
-      let ret = buf.parseNumber(sep = ',',
+      let ret = buf.parseNumber(sep = ',', quote = '#',
                                 idxIn = start,
                                 intBuf, floatBuf)
       check ret == rtNaN
@@ -84,7 +84,7 @@ suite "`parseNumber` tests":
     initBuf()
     template checkFloat(v: typed, class = fcNormal, retTyp = rtFloat): untyped =
       toBuf($v)
-      let ret = buf.parseNumber(sep = ',',
+      let ret = buf.parseNumber(sep = ',', quote = '#',
                                 idxIn = 0,
                                 intBuf, floatBuf)
       if class notin {fcNan, fcInf, fcNegInf}:
@@ -115,7 +115,7 @@ suite "`parseNumber` tests":
     initBuf()
     template checkFloat(str, val: typed, start: int, retTyp = rtFloat, class = fcNormal): untyped =
       toBuf(str)
-      let ret = buf.parseNumber(sep = ',',
+      let ret = buf.parseNumber(sep = ',', quote = '#',
                                 idxIn = start,
                                 intBuf, floatBuf)
       if class notin {fcNan, fcInf, fcNegInf}:
@@ -179,7 +179,7 @@ suite "`parseNumber` tests":
     initBuf()
     template checkFloat(str: typed, start: int, retTyp = rtFloat, class = fcNormal): untyped =
       toBuf(str)
-      let ret = buf.parseNumber(sep = ',',
+      let ret = buf.parseNumber(sep = ',', quote = '#',
                                 idxIn = start,
                                 intBuf, floatBuf)
       check ret == retTyp
@@ -214,7 +214,7 @@ suite "`parseNumber` tests":
     initBuf()
     template checkFloat(str: typed, start: int, retTyp = rtFloat, class = fcNormal): untyped =
       toBuf(str)
-      let ret = buf.parseNumber(sep = ',',
+      let ret = buf.parseNumber(sep = ',', quote = '#',
                                 idxIn = start,
                                 intBuf, floatBuf)
       check ret == retTyp
