@@ -1041,7 +1041,7 @@ suite "DataTable tests":
       ## TODO: support NULL values instead of filling by default T(0)
     block:
       let data = """
-          Type          Septem            Line            Fake          ε_cut    FractionPass
+          Type          Septem            Line            Fake           ε_cut    FractionPass
       LineReal           false            true            Real               1          0.2204
       LineFake           false            true            Fake               1          0.8622
     SeptemReal            true           false            Real               1          0.2315
@@ -1051,14 +1051,17 @@ SeptemLineFake            true            true            Fake               1  
 """
       let df = parseCsvString(data, sep = ' ')
       let exp = """
-Type           Septem  Line   ε_cut     Real     Fake
-LineReal       false   true       1   0.2204   0.8622
-SeptemReal     true    false      1   0.2315   0.7255
-SeptemLineReal true    true       1   0.1368   0.7763
+          Type       Septem         Line        ε_cut         Real         Fake
+      LineFake        false         true            1            0       0.8622
+      LineReal        false         true            1       0.2204            0
+    SeptemFake         true        false            1            0       0.7763
+SeptemLineFake         true         true            1            0       0.7255
+SeptemLineReal         true         true            1       0.1368            0
+    SeptemReal         true        false            1       0.2315            0
 """
       let dfExp = parseCsvString(exp, sep = ' ')
       let dfRes = df.spread("Fake", "FractionPass")
-      check dfRes.len == 3
+      check dfRes.len == 6
       check dfRes.getKeys().len == 6
       check dfRes.getKeys() == dfExp.getKeys()
       check equal(dfRes, dfExp)

@@ -2311,8 +2311,8 @@ proc spread*[C: ColumnLike; T](df: DataTable[C], namesFrom, valuesFrom: string,
   # bind `items` here to make it available in calling scope without `import sets`
   bind items
   let newCols = toSeq(items(dfGrouped.groupMap[namesFrom]))
-  # 4. and length of resulting DF by getting class with most counts
-  let dfOutlen = df.count(namesFrom)["n", int].max
+  # 4. number of output: unique values in remaining columns
+  let dfOutlen = df.select(restKeys).unique().len
   # 5. create result DF from input column types
   for c in restKeys:
     result[c] = newColumn(df[c].kind, dfOutlen)
