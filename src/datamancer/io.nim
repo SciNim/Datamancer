@@ -1,10 +1,14 @@
 import dataframe, value, column
 
-import memfiles, streams, strutils, tables, parsecsv, sequtils
-# for reading CSV files from URLs
-import httpclient
+import streams, strutils, tables, parsecsv, sequtils
+when not defined(js):
+  import memfiles
+  # for reading CSV files from URLs
+  import httpclient
+#else:
+#  import jscore
 # for `showBrowser`
-import browsers, strformat, os
+import strformat, os
 
 proc checkHeader(s: Stream, fname, header: string, colNames: seq[string]): bool =
   ## checks whether the given file contains the header `header`
@@ -79,16 +83,36 @@ proc readCsv*(s: Stream,
       result[colHeaders[i]].add parser.rowEntry(col)
   parser.close()
 
-template copyBuf(data: ptr UncheckedArray[char], buf: var string,
+
+when defined(js):
+  type
+    MemoryView[T] = seq[T]
+
+  proc toMemoryView[T](s: seq[T]): MemoryView[T] = s
+  proc toMemoryView(s: string): MemoryView[char] =
+    result = newSeq[char](s.len)
+    for i, x in s:
+      result[i] = x
+else:
+  type
+    MemoryView[T] = ptr UncheckedArray[T]
+  proc toMemoryView[T](s: seq[T]): MemoryView[T] = cast[ptr UncheckedArray[T]](s[0].addr)
+  proc toMemoryView(s: string): MemoryView[char] = cast[ptr UncheckedArray[T]](s[0].addr)
+
+template copyBuf(data: MemoryView[char], buf: var string,
                  idx, colStart: int): untyped =
   let nIdx = idx - colStart
   if nIdx > 0:
     buf.setLen(nIdx) # will auto reallocate if `len` is larger than capacity!
-    copyMem(buf[0].addr, data[colStart].addr, nIdx)
+    when defined(js):
+      for i in 0 ..< nIdx:
+        buf[i] = data[colStart + i]
+    else:
+      copyMem(buf[0].addr, data[colStart].addr, nIdx)
   else:
     buf.setLen(0)
 
-template parseHeaderCol(data: ptr UncheckedArray[char], buf: var string,
+template parseHeaderCol(data: MemoryView[char], buf: var string,
                         colNames: var seq[string],
                         header: string, sep, quote: char,
                         idx, colStart: int): untyped =
@@ -116,7 +140,7 @@ template parseHeaderCol(data: ptr UncheckedArray[char], buf: var string,
   else:
     colNames.add bufStripped
 
-template guessType(data: ptr UncheckedArray[char], buf: var string,
+template guessType(data: MemoryView[char], buf: var string,
                    colTypes: var seq[ColKind],
                    col, idx, colStart, numCols, quote: untyped): untyped =
   # only determine types for as many cols as in header
@@ -167,7 +191,7 @@ func normalizeChar(c: char): char =
   else:
     c
 
-func tryParse(toEat: seq[char], data: ptr UncheckedArray[char], idx: var int,
+func tryParse(toEat: seq[char], data: MemoryView[char], idx: var int,
               sep: char,
               retTyp: RetType, retVal: float, floatVal: var float): RetType =
   ## tries to parse certain strings `NaN`, `Inf` into floats
@@ -186,7 +210,7 @@ func tryParse(toEat: seq[char], data: ptr UncheckedArray[char], idx: var int,
     return rtError
 
 
-proc parseNumber(data: ptr UncheckedArray[char],
+proc parseNumber(data: MemoryView[char],
                  sep, quote: char, # if this sep is found parsing ends
                  idxIn: int,
                  intVal: var int, floatVal: var float): RetType {.inline, noinit.} =
@@ -207,7 +231,7 @@ proc parseNumber(data: ptr UncheckedArray[char],
   intVal = 0                                    # build intVal up from zero..
   if data[idx] in Sign + {quote}:
     idx.inc                                     # skip optional sign or quote character
-  while data[idx] != '\0':                      # ..and track scale/pow10.
+  while idx < data.len and data[idx] != '\0':   # ..and track scale/pow10.
     if data[idx] notin Digits:
       if data[idx] != '.' or pnt >= 0:
         break                                   # a second '.' is forbidden
@@ -220,6 +244,7 @@ proc parseNumber(data: ptr UncheckedArray[char],
       p10.inc                                   # any digit moves implicit '.'
     idx.inc
     nD.inc
+
   if data[idxIn] == '-':
     intVal = -intVal                            # adjust sign
 
@@ -232,6 +257,9 @@ proc parseNumber(data: ptr UncheckedArray[char],
     return rtError                              # ONLY "[+-]*\.*"
 
   # `\0` is necessary to support parsing until the end of the file in case of no line break
+  if idx >= data.len:
+    return
+
   if data[idx] notin {'\0', sep, quote, '\n', '\r', 'e', 'E'}: ## TODO: generalize this?
     # might be "nan", "inf" or "-inf" or some other invalid string
     var ret = tryParse(@['n', 'a', 'n'], data, idx,
@@ -300,7 +328,7 @@ proc parseStringDigit(s: string, quote: char): int =
   else:
     raise newException(ValueError, "Input string " & $s & " is not a valid string digit.")
 
-template parseCol(data: ptr UncheckedArray[char], buf: var string,
+template parseCol(data: MemoryView[char], buf: var string,
                   col: var Column,
                   sep, quote: char,
                   colTypes: seq[ColKind], colIdx, idx, colStart, row, numCols: int,
@@ -381,7 +409,10 @@ template advanceToNextRow() {.dirty.} =
   if maxLines > 0 and row >= maxLines:
     break
 
-template parseLine(data: ptr UncheckedArray[char], buf: var string,
+#when defined(js):
+#  template unlikely(body: untyped): untyped = body
+
+template parseLine(data: MemoryView[char], buf: var string,
                    sep, quote, lineBreak, eat: char,
                    col, idx, colStart, row, rowStart: var int,
                    lastWasSep, inQuote: var bool,
@@ -433,7 +464,7 @@ proc allColTypesSet(colTypes: seq[ColKind]): bool =
   ## checks if all column types are determined, i.e. not `colNone` the default
   result = colTypes.allIt(it != colNone)
 
-proc readCsvTypedImpl(data: ptr UncheckedArray[char],
+proc readCsvTypedImpl(data: MemoryView[char],
                       size: int,
                       lineCnt: int,
                       sep: char = ',',
@@ -632,112 +663,127 @@ proc parseCsvString*(csvData: string,
   result = newDataFrame()
 
   ## we're dealing with ASCII files, thus each byte can be interpreted as a char
-  var data = cast[ptr UncheckedArray[char]](csvData[0].unsafeAddr)
+  var data = toMemoryView(csvData)
   result = readCsvTypedImpl(data, csvData.len, countNonEmptyLines(csvData),
                             sep, header, skipLines, maxLines, toSkip, colNames,
                             skipInitialSpace, quote, maxGuesses, lineBreak, eat,
                             allowLineBreaks = allowLineBreaks)
 
-proc readCsvFromUrl(url: string,
-              sep: char = ',',
-              header: string = "",
-              skipLines = 0,
-              maxLines = 0,
-              toSkip: set[char] = {},
-              colNames: seq[string] = @[],
-              skipInitialSpace = true,
-              quote = '"'
-             ): DataFrame =
-  ## Reads a DF from a web URL (which must contain a CSV file)
-  var client = newHttpClient()
-  return parseCsvString(client.getContent(url), sep, header, skipLines, maxLines, toSkip, colNames,
-                        skipInitialSpace, quote)
+when not defined(js):
+  proc readCsvFromUrl(url: string,
+                sep: char = ',',
+                header: string = "",
+                skipLines = 0,
+                maxLines = 0,
+                toSkip: set[char] = {},
+                colNames: seq[string] = @[],
+                skipInitialSpace = true,
+                quote = '"'
+               ): DataFrame =
+    ## Reads a DF from a web URL (which must contain a CSV file)
+    var client = newHttpClient()
+    return parseCsvString(client.getContent(url), sep, header, skipLines, maxLines, toSkip, colNames,
+                          skipInitialSpace, quote)
 
-proc readCsv*(fname: string,
-              sep: char = ',',
-              header: string = "",
-              skipLines = 0,
-              maxLines = 0,
-              toSkip: set[char] = {},
-              colNames: seq[string] = @[],
-              skipInitialSpace = true,
-              quote = '"',
-              maxGuesses = 20,
-              lineBreak = '\n',
-              eat = '\r',
-              allowLineBreaks = false
-             ): DataFrame =
-  ## Reads a DF from a CSV file or a web URL using the separator character `sep`.
-  ##
-  ## `fname` can be a local filename or a web URL. If `fname` starts with
-  ## "http://" or "https://" the file contents will be read from the selected
-  ## web server. No caching is performed so if you plan to read from the same
-  ## URL multiple times it might be best to download the file manually instead.
-  ## Please note that to download files from https URLs you must compile with
-  ## the -d:ssl option.
-  ##
-  ## `toSkip` can be used to skip optional characters that may be present
-  ## in the data. For instance if a CSV file is separated by `,`, but contains
-  ## additional whitespace (`5, 10, 8` instead of `5,10,8`) this can be
-  ## parsed correctly by setting `toSkip = {' '}`.
-  ##
-  ## `header` designates the symbol that defines the header of the CSV file.
-  ## By default it's empty meaning that the first line will be treated as
-  ## the header. If a header is given, e.g. `"#"`, this means we will determine
-  ## the column names from the first line (which has to start with `#`) and
-  ## skip every line until the first line starting without `#`.
-  ##
-  ## `skipLines` is used to skip `N` number of lines at the beginning of the
-  ## file.
-  ##
-  ## `maxLines` is used to stop parsing after this many lines have been parsed.
-  ## Does not count any `skipLines` or header lines.
-  ##
-  ## `colNames` can be used to overwrite (or supply if none in file!) names of the
-  ## columns in the header. This is also useful if the header is not conforming
-  ## to the separator of the file. Note: if you `do` supply custom column names,
-  ## but there `is` a header in the file, make sure to use `skipLines` to skip
-  ## that header, as we will not try to parse any header information if `colNames`
-  ## is supplied.
-  ##
-  ## `maxGuesses` is the maximum number of rows to look at before we give up
-  ## trying to determine the datatype of the column and set it to 'object'.
-  ##
-  ## `lineBreak` is the character used to detect if a new line starts. `eat`
-  ## on the other hand is simply ignore. For unix style line endings the defaults
-  ## are fine. In principle for windows style endings `\r\n` the defaults *should*
-  ## work as well, but in rare cases the default causes issues with mismatched
-  ## line counts. In those cases try to switch `lineBreaks` and `eat` around.
-  ##
-  ## If `allowLineBreaks` is `true`, line breaks are allowed inside of quoted fields.
-  ## Otherwise (the default) we raise an exception due to an unexpected number of
-  ## lines in the file. This is because we perform an initial pass to count the number
-  ## of lines and wish to err on the side of correctness (rather raise than parse
-  ## garbage if the file is fully malformed).
-  ##
-  ## *NOTE*: If this CSV parser is too brittle for your CSV file, an older, slower
-  ## parser using `std/parsecsv` is available under the name `readCsvAlt`. However,
-  ## it does not return a full `DataFrame`. You need to call `toDf` on the result.
-  if fname.startsWith("http://") or fname.startsWith("https://"):
-    return readCsvFromUrl(fname, sep=sep, header=header, skipLines=skipLines,
-                          toSkip=toSkip, colNames=colNames)
-  let fname = fname.expandTilde()
-  result = newDataFrame()
-  try:
-    var ff = memfiles.open(fname)
-    var lineCnt = 0
-    for slice in memSlices(ff, delim = lineBreak, eat = eat):
-      if slice.size > 0:
-        inc lineCnt
-
-    ## we're dealing with ASCII files, thus each byte can be interpreted as a char
-    var data = cast[ptr UncheckedArray[char]](ff.mem)
-    result = readCsvTypedImpl(data, ff.size, lineCnt, sep, header, skipLines, maxLines, toSkip, colNames,
-                              skipInitialSpace, quote, maxGuesses, lineBreak, eat,
-                              allowLineBreaks = allowLineBreaks)
-    ff.close()
-  except OSError:
-    raise newException(OSError, "Attempt to read CSV file: " & $fname & " failed. No such file or directory.")
+  proc readCsv*(fname: string,
+                sep: char = ',',
+                header: string = "",
+                skipLines = 0,
+                maxLines = 0,
+                toSkip: set[char] = {},
+                colNames: seq[string] = @[],
+                skipInitialSpace = true,
+                quote = '"',
+                maxGuesses = 20,
+                lineBreak = '\n',
+                eat = '\r',
+                allowLineBreaks = false
+               ): DataFrame =
+    ## Reads a DF from a CSV file or a web URL using the separator character `sep`.
+    ##
+    ## `fname` can be a local filename or a web URL. If `fname` starts with
+    ## "http://" or "https://" the file contents will be read from the selected
+    ## web server. No caching is performed so if you plan to read from the same
+    ## URL multiple times it might be best to download the file manually instead.
+    ## Please note that to download files from https URLs you must compile with
+    ## the -d:ssl option.
+    ##
+    ## `toSkip` can be used to skip optional characters that may be present
+    ## in the data. For instance if a CSV file is separated by `,`, but contains
+    ## additional whitespace (`5, 10, 8` instead of `5,10,8`) this can be
+    ## parsed correctly by setting `toSkip = {' '}`.
+    ##
+    ## `header` designates the symbol that defines the header of the CSV file.
+    ## By default it's empty meaning that the first line will be treated as
+    ## the header. If a header is given, e.g. `"#"`, this means we will determine
+    ## the column names from the first line (which has to start with `#`) and
+    ## skip every line until the first line starting without `#`.
+    ##
+    ## `skipLines` is used to skip `N` number of lines at the beginning of the
+    ## file.
+    ##
+    ## `maxLines` is used to stop parsing after this many lines have been parsed.
+    ## Does not count any `skipLines` or header lines.
+    ##
+    ## `colNames` can be used to overwrite (or supply if none in file!) names of the
+    ## columns in the header. This is also useful if the header is not conforming
+    ## to the separator of the file. Note: if you `do` supply custom column names,
+    ## but there `is` a header in the file, make sure to use `skipLines` to skip
+    ## that header, as we will not try to parse any header information if `colNames`
+    ## is supplied.
+    ##
+    ## `maxGuesses` is the maximum number of rows to look at before we give up
+    ## trying to determine the datatype of the column and set it to 'object'.
+    ##
+    ## `lineBreak` is the character used to detect if a new line starts. `eat`
+    ## on the other hand is simply ignore. For unix style line endings the defaults
+    ## are fine. In principle for windows style endings `\r\n` the defaults *should*
+    ## work as well, but in rare cases the default causes issues with mismatched
+    ## line counts. In those cases try to switch `lineBreaks` and `eat` around.
+    ##
+    ## If `allowLineBreaks` is `true`, line breaks are allowed inside of quoted fields.
+    ## Otherwise (the default) we raise an exception due to an unexpected number of
+    ## lines in the file. This is because we perform an initial pass to count the number
+    ## of lines and wish to err on the side of correctness (rather raise than parse
+    ## garbage if the file is fully malformed).
+    ##
+    ## *NOTE*: If this CSV parser is too brittle for your CSV file, an older, slower
+    ## parser using `std/parsecsv` is available under the name `readCsvAlt`. However,
+    ## it does not return a full `DataFrame`. You need to call `toDf` on the result.
+    if fname.startsWith("http://") or fname.startsWith("https://"):
+      when not defined(js):
+        return readCsvFromUrl(fname, sep=sep, header=header, skipLines=skipLines,
+                              toSkip=toSkip, colNames=colNames)
+      else:
+        raise newException(ValueError, "Cannot perform http request in parseCsv for JS backend at the moment.")
+    let fname = fname.expandTilde()
+    result = newDataFrame()
+    try:
+      when not defined(js):
+        var ff = memfiles.open(fname)
+        var lineCnt = 0
+        for slice in memSlices(ff, delim = lineBreak, eat = eat):
+          if slice.size > 0:
+            inc lineCnt
+        ## we're dealing with ASCII files, thus each byte can be interpreted as a char
+        var data = toMemoryView(ff.mem)
+        let size = ff.size
+      else:
+        var ff = open(fname)
+        var lineCnt = 0
+        for slice in lines(ff):
+          if slice.len > 0:
+            inc lineCnt
+        ## we're dealing with ASCII files, thus each byte can be interpreted as a char
+        var fileDat = fname.readFile()
+        var data = toMemoryView(fileDat)
+        let size = data.len
+      result = readCsvTypedImpl(data, size, lineCnt, sep, header, skipLines, maxLines, toSkip, colNames,
+                                skipInitialSpace, quote, maxGuesses, lineBreak, eat,
+                                allowLineBreaks = allowLineBreaks)
+      ff.close()
+    except OSError:
+      raise newException(OSError, "Attempt to read CSV file: " & $fname & " failed. No such file or directory.")
 
 proc readCsvAlt*(fname: string,
                  sep = ',',
@@ -847,27 +893,28 @@ proc toHtml*[C: ColumnLike](df: DataTable[C], tmpl = ""): string =
   body.add "</tbody>"
   result = tmpl % (header & body)
 
-proc showBrowser*[C: ColumnLike](
-  df: DataTable[C], fname = "df.html", path = getTempDir(), toRemove = false,
-  htmlTmpl = "") =
-  ## Displays the given DataFrame as a table in the default browser.
-  ##
-  ## `htmlTmpl` can be used as the HTML template of the page on which to print the
-  ## data frame. It requires two `$#` fields, one for the header of the page and the
-  ## second for the actual `<table>` body.
-  ##
-  ## Note: the HTML generation is not written for speed at this time. For very large
-  ## dataframes expect bad performance.
-  let tmpl = if htmlTmpl.len > 0: htmlTmpl else: HtmlTmpl
-  let fname = path / fname
-  let page = tmpl % [fname, df.toHtml()]
-  writeFile(fname, page)
-  openDefaultBrowser(fname)
-  if toRemove:
-    # opening browsers may be slow, so wait a long time before we delete (file still needs to
-    # be there when the browser is finally open. Thus default is to keep the file
-    sleep(1000)
-    removeFile(fname)
+when not defined(js):
+  proc showBrowser*[C: ColumnLike](
+    df: DataTable[C], fname = "df.html", path = getTempDir(), toRemove = false,
+    htmlTmpl = "") =
+    ## Displays the given DataFrame as a table in the default browser.
+    ##
+    ## `htmlTmpl` can be used as the HTML template of the page on which to print the
+    ## data frame. It requires two `$#` fields, one for the header of the page and the
+    ## second for the actual `<table>` body.
+    ##
+    ## Note: the HTML generation is not written for speed at this time. For very large
+    ## dataframes expect bad performance.
+    let tmpl = if htmlTmpl.len > 0: htmlTmpl else: HtmlTmpl
+    let fname = path / fname
+    let page = tmpl % [fname, df.toHtml()]
+    writeFile(fname, page)
+    openDefaultBrowser(fname)
+    if toRemove:
+      # opening browsers may be slow, so wait a long time before we delete (file still needs to
+      # be there when the browser is finally open. Thus default is to keep the file
+      sleep(1000)
+      removeFile(fname)
 
 proc toOrgTable*[C: ColumnLike](df: DataTable[C], precision = 8, emphStrNumber = true): string =
   ## Converts the given DF to a table formatted in Org syntax. Note that the
