@@ -1,4 +1,8 @@
 ## .. include:: ./docs/datamancer.rst
 
-import datamancer / [dataframe, io]
-export dataframe, io
+when not defined(js):
+  import datamancer / [dataframe, io]
+  export dataframe, io
+else:
+  import datamancer / [dataframe, io]
+  export dataframe, io

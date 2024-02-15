@@ -709,8 +709,11 @@ proc convertLoop(p: Preface, dtype, fctColResType, loop: NimNode,
                  fnKind: FormulaKind,
                  generateLoop: bool): NimNode =
   let memCopyable = ["float", "int", "bool"]
-  let isMemCopyable = dtype.strVal in memCopyable and
-    p.args.allIt(it.colType.strVal in memCopyable)
+  when defined(js):
+    let isMemcopyable = false
+  else:
+    let isMemCopyable = dtype.strVal in memCopyable and
+      p.args.allIt(it.colType.strVal in memCopyable)
   proc genForLoop(p: Preface, loop: NimNode, fkKind: FormulaKind): NimNode =
     var mpreface = p
     let loopIndexed = fixupTensorIndices(loop, mpreface,
