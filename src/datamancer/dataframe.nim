@@ -1,8 +1,12 @@
 import std / [macros, tables, strutils, options, sets, hashes, math,
               sequtils, stats, strformat, algorithm, typetraits]
 
-import arraymancer/tensor
-export tensor
+when not defined(js):
+  import arraymancer/tensor
+  export tensor
+else:
+  import seq_tensor
+  export seq_tensor
 
 import value
 export value
@@ -1983,7 +1987,7 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
       for k in getKeys(result):
         if result[k].kind != colConstant: # if constant nothing to short
           withNativeTensor(result[k], t):
-            result.asgn(k, toColumn(t[_ ..< result.len]))
+            result.asgn(k, toColumn(t[0 ..< result.len]))
         result[k].len = result.len
 
 proc innerJoin*[C: ColumnLike](dfs: varargs[DataTable[C]], by: string): DataTable[C] =

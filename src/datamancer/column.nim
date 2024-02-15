@@ -1,4 +1,8 @@
-import arraymancer/tensor
+when not defined(js):
+  import arraymancer/tensor
+else:
+  import seq_tensor
+
 import std / [sugar, strformat, tables, macros, strutils]
 import value
 
