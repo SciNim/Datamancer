@@ -4,7 +4,7 @@ import streams, strutils, tables, parsecsv, sequtils
 when not defined(js):
   import memfiles
   # for reading CSV files from URLs
-  import httpclient
+  import httpclient, browsers
 #else:
 #  import jscore
 # for `showBrowser`
@@ -97,7 +97,8 @@ else:
   type
     MemoryView[T] = ptr UncheckedArray[T]
   proc toMemoryView[T](s: seq[T]): MemoryView[T] = cast[ptr UncheckedArray[T]](s[0].addr)
-  proc toMemoryView(s: string): MemoryView[char] = cast[ptr UncheckedArray[T]](s[0].addr)
+  proc toMemoryView(s: string): MemoryView[char] = cast[ptr UncheckedArray[char]](s[0].addr)
+  proc toMemoryView[T](p: pointer): MemoryView[T] = cast[ptr UncheckedArray[T]](p)
 
 template copyBuf(data: MemoryView[char], buf: var string,
                  idx, colStart: int): untyped =
@@ -766,7 +767,7 @@ when not defined(js):
           if slice.size > 0:
             inc lineCnt
         ## we're dealing with ASCII files, thus each byte can be interpreted as a char
-        var data = toMemoryView(ff.mem)
+        var data = toMemoryView[char](ff.mem)
         let size = ff.size
       else:
         var ff = open(fname)
