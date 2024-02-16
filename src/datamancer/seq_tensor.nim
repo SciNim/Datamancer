@@ -26,6 +26,12 @@ proc toSeq1D*[T](x: Tensor[T]): seq[T] =
     result[i] = el
 proc clone*[T](t: Tensor[T]): Tensor[T] = t
 proc size*[T](t: Tensor[T]): int = t.len
+proc rank*[T](t: Tensor[T]): int =
+  result = 1
+  var tchild: T ## we need to work with a concrete var since T is a typedesc, and can't use t[0] because tensor may not have any concrete elements
+  when T is Tensor:
+    result = 1 + rank(tchild)
+
 proc astype*[T; U](t: Tensor[T], dtype: typedesc[U]): Tensor[U] = t.mapIt(it.dtype)
 proc map*[T; U](t: Tensor[T], fn: proc(x: T): U): Tensor[U] = t.mapIt(fn(it))
 template map_inline*(t: untyped, body: untyped): untyped =
