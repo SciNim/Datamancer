@@ -3,7 +3,14 @@
   (update arraymancer dep to ~>= 0.7.28~)
 - improvement to formula logic to detect procedures with ~{.error:
   "".}~ pragma usage and ignore them for type matching (necessary due
-  to forbidding e.g. ~+~ in arraymancer for ~Tensor + Scalar~ now)  
+  to forbidding e.g. ~+~ in arraymancer for ~Tensor + Scalar~ now)
+
+*Note*: If you are on Nim 1.6 or 2.0 (but not after) and you are using
+ a formula with ~max(c"foo")~ where ~foo~ is a column name, you will
+ have to replace that by ~max(col("foo"))~. Due to a new addition of a
+ ~max(varargs[Tensor]]): Tensor~ type procedure in arraymancer, for
+ some reason older Nim versions bind the symbol ~max~ fully to that
+ ~varargs~ version. That breaks previous formulas.
 * v0.4.0
 - add ~shuffle~ to shuffle a DF. Either using stdlib global RNG or
   given RNG
