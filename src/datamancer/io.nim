@@ -95,8 +95,13 @@ when defined(js):
 else:
   type
     MemoryView[T] = ptr UncheckedArray[T]
-  proc toMemoryView[T](s: seq[T]): MemoryView[T] = cast[ptr UncheckedArray[T]](s[0].addr)
-  proc toMemoryView(s: string): MemoryView[char] = cast[ptr UncheckedArray[char]](s[0].addr)
+  template address(x: untyped): untyped =
+    when (NimMajor, NimMinor, NimPatch) <= (2, 0, 0):
+      unsafeAddr x
+    else:
+      addr x
+  proc toMemoryView[T](s: seq[T]): MemoryView[T] = cast[ptr UncheckedArray[T]](s[0].address)
+  proc toMemoryView(s: string): MemoryView[char] = cast[ptr UncheckedArray[char]](s[0].address)
   proc toMemoryView[T](p: pointer): MemoryView[T] = cast[ptr UncheckedArray[T]](p)
 
 template copyBuf(data: MemoryView[char], buf: var string,
