@@ -11,6 +11,15 @@
  ~max(varargs[Tensor]]): Tensor~ type procedure in arraymancer, for
  some reason older Nim versions bind the symbol ~max~ fully to that
  ~varargs~ version. That breaks previous formulas.
+ In formulas using ~max~ (or similarly ~min~) it may also be necessary
+ to supply type hints, even if they were not required previously for
+ related reasons. E.g. replace:
+ ~f{ max(idx("a"), 2) }~
+ by
+ ~f{int: max(idx("a"), 2) }~
+ to indicate the column ~"a"~ should be treated as integers.
+ Given that this is fixed on Nim devel, I won't attempt a hacky
+ workaround. Please just update your Nim version or your formulas. :( 
 * v0.4.0
 - add ~shuffle~ to shuffle a DF. Either using stdlib global RNG or
   given RNG
