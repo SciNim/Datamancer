@@ -1,3 +1,9 @@
+* v0.4.1
+- remove our ~len~ for ~Tensor~ due to addition in arraymaner now
+  (update arraymancer dep to ~>= 0.7.28~)
+- improvement to formula logic to detect procedures with ~{.error:
+  "".}~ pragma usage and ignore them for type matching (necessary due
+  to forbidding e.g. ~+~ in arraymancer for ~Tensor + Scalar~ now)  
 * v0.4.0
 - add ~shuffle~ to shuffle a DF. Either using stdlib global RNG or
   given RNG
