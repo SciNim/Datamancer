@@ -60,5 +60,4 @@ template apply2_inline*(t1, t2: untyped, body: untyped): untyped =
     let y {.inject.} = t2[i]
     t1[i] = body
 
-import seqmath, math
-proc concat*[T](ts: varargs[Tensor[T]], axis: int = 0): Tensor[T] = Tensor[T](concat(ts))
+proc concat*[T](ts: varargs[Tensor[T]], axis: int = 0): Tensor[T] = Tensor[T](sequtils.concat(ts))
