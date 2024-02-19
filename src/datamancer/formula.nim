@@ -629,9 +629,28 @@ proc maybeAddSpecialTypes(possibleTypes: var PossibleTypes, n: NimNode) =
   if strVal in ["<", ">", ">=", "<=", "==", "!="]:
     for dtype in Dtypes:
       possibleTypes.add ProcType(inputTypes: @[ident(dtype),
-                                                ident(dtype)],
+                                               ident(dtype)],
                                   isGeneric: false,
                                   resType: some(ident("bool")))
+
+proc isForbiddenByErrorPragma*(n: NimNode): bool =
+  ## Checks whether the given procedure is actually forbidden by usage of the `{.error: "".}` pragma.
+  ## This happens e.g. in arraymancer for the `+` and similar operations between Tensor and Scalar
+  ## nowadays.
+  ##
+  ## An example of such a body:
+  ##
+  ##    StmtList
+  ##      CommentStmt "Mathematical addition of tensors and scalars is undefined. Must use a broadcasted addition instead"
+  ##      Pragma
+  ##        ExprColonExpr
+  ##          Ident "error"
+  ##          StrLit "To add a tensor to a scalar you must use the `+.` operator (instead of a plain `+` operator)"
+  ##
+  let body = n.body
+  if body.kind == nnkStmtList: # magic procs can have an empty body!
+    result = body[^1].kind == nnkPragma and body[^1][0].kind == nnkExprColonExpr and
+      body[^1][0][0].kind in {nnkIdent, nnkSym} and body[^1][0][0].strVal == "error"
 
 proc findType(n: NimNode, numArgs: int): PossibleTypes =
   ## This procedure tries to find type information about a given NimNode.
@@ -684,6 +703,8 @@ proc findType(n: NimNode, numArgs: int): PossibleTypes =
       let tImpl = ch.getImpl
       case tImpl.kind
       of nnkProcDef, nnkFuncDef:
+        if tImpl.isForbiddenByErrorPragma(): continue # Forbidden by `{.error: "".}`, skip this
+
         let pt = determineTypeFromProc(tImpl, numArgs)
         if pt.isSome:
           possibleTypes.add pt.get
