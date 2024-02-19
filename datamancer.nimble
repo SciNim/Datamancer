@@ -21,6 +21,9 @@ task test, "Run standard tests":
   exec "nim c -r tests/testsFormula.nim"
   exec "nim c -r tests/testParse.nim"
 
+task testJs, "Run test for JS":
+  exec "nim js -r tests/testdf_js_simple.nim"
+
 import os, strutils, strformat
 const
   pkgName = "datamancer"

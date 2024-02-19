@@ -61,6 +61,7 @@ jobs:
         run: |
           cd datamancer
           nimble -y test
+          nimble -y testJs
 
       - name: Build docs
         if: >
