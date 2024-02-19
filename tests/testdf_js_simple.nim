@@ -1855,8 +1855,8 @@ t_in_s,  C1_in_V,  C2_in_V,  type
   test "Mutate - computing a new column using a local variable":
     let df = toDf({ "x" : @[1, 2, 3], "y" : @[10, 11, 12], "z": ["5","6","7"] })
     # of course local variables can be referenced:
-    let foo = 5
-    let dfRes = df.mutate(f{"x+foo" ~ `x` + foo})
+    let foo: int = 5
+    let dfRes = df.mutate(f{int -> int: "x+foo" ~ `x` + foo})
     check "x+foo" in dfRes
     check dfRes["x+foo", int] == [6,7,8].toTensor
 
@@ -2114,7 +2114,7 @@ suite "Formulas with nodes lifted out of body":
 
     block A:
       var df = toDf({"x" : x, "y" : y})
-      df = df.mutate(f{int: "z" ~ `x` + mySum(col("y"))})
+      df = df.mutate(f{int -> int: "z" ~ `x` + mySum(col("y"))})
       check "z" in df
       check df["z", int] == @[16, 17, 18].toTensor()
       check counter == 1 # and *not* 3 as it was before
@@ -2128,7 +2128,7 @@ suite "Formulas with nodes lifted out of body":
       ## obvious reasons!
       counter = 0
       var df = toDf({"x" : x, "y" : y})
-      df = df.mutate(f{int: "z" ~ `x` + mySum2(col("y"), `x`)})
+      df = df.mutate(f{int -> int: "z" ~ `x` + mySum2(col("y"), `x`)})
       check "z" in df
       check df["z", int] == @[17, 19, 21].toTensor()
       check counter == 3 # no lift!
