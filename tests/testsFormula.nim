@@ -11,6 +11,11 @@ template fails(body: untyped): untyped =
   else:
     check true
 
+template onlyDevel(body: untyped): untyped =
+  ## Used to disable some tests on older nim versions
+  when (NimMajor, NimMinor, NimPatch) >= (2, 1, 0):
+    body
+
 when (NimMajor, NimMinor, NimPatch) < (1, 6, 0):
   proc isNan(x: float): bool =
     result = classify(x) == fcNaN
@@ -79,9 +84,9 @@ suite "Formulas":
       # - prefix, automatic type deduction
       let fn = f{ not idx("f") }
       check fn.evaluate(df).bCol == [true, false, true].toTensor
-    block:
-      let fn = f{ idx("x") >= max(col("x")) * 0.5 }
-
+    onlyDevel:
+      block:
+        let fn = f{ idx("x") >= max(col("x")) * 0.5 }
     block:
       let fn = f{ parseInt(idx("a")) > 2 }
 
@@ -117,16 +122,32 @@ suite "Formulas":
       # - type deduction based on `idx` in specific argument of a typically overloaded
       #   symbol. Can be deduced due to only single overload matching the arguments
       proc someInt(): int = 2
-      proc max(x: int, y: string, z: float, b: int): int =
-        result = 5
-      let fn = f{ max(idx("a"), "hello", 5.5, someInt()) }
-      check fn.evaluate(df).iCol == [5, 5, 5].toTensor
+
+      ## On none devel, `max` and `min` are broken
+      onlyDevel:
+        block:
+          proc max(x: int, y: string, z: float, b: int): int =
+            result = 5
+
+          let fn = f{ max(idx("a"), "hello", 5.5, someInt()) }
+          check fn.evaluate(df).iCol == [5, 5, 5].toTensor
+      block:
+        proc getAnInt(x: int, y: string, z: float, b: int): int =
+          result = 5
+
+        let fn = f{ getAnInt(idx("a"), "hello", 5.5, someInt()) }
+        check fn.evaluate(df).iCol == [5, 5, 5].toTensor
 
     block:
       # - automatically determines that `a` should be read as `int`
       # - formula is mapping
-      let fn = f{ max(idx("a"), 2) }
-      check fn.evaluate(df).iCol == [2, 2, 3].toTensor
+      onlyDevel:
+        block:
+          let fn = f{ max(idx("a"), 2) }
+          check fn.evaluate(df).iCol == [2, 2, 3].toTensor
+      block: # on 1.6, 2.0 requires explicit type hint. Should work though!
+        let fn = f{int: max(idx("a"), 2) }
+        check fn.evaluate(df).iCol == [2, 2, 3].toTensor
 
   test "Formula with an if expression accessing multiple columns":
     block:
@@ -174,8 +195,12 @@ suite "Formulas":
       check fn.evaluate(df).fCol == [5.5, 5.5, 5.5].toTensor
 
   test "`max` overload is resolved in context of infix with float":
-    block:
-      let fn = f{ `a` >= max(`a`) * 0.5 }
+    onlyDevel:
+      block:
+        let fn = f{ `a` >= max(`a`) * 0.5 }
+        check fn.evaluate(df).bCol == [false, true, true].toTensor
+    block: # For 1.6, 2.0 does not work anymore!
+      let fn = f{float: `a` >= max(col("a")) * 0.5 }
       check fn.evaluate(df).bCol == [false, true, true].toTensor
 
     block:
