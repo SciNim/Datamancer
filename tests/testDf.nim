@@ -6,6 +6,11 @@ from os import removeFile
 when not declared(AssertionDefect):
   type AssertionDefect = AssertionError
 
+template onlyDevel(body: untyped): untyped =
+  ## Used to disable some tests on older nim versions
+  when (NimMajor, NimMinor, NimPatch) >= (2, 1, 0):
+    body
+
 suite "Column":
   test "Constant columns":
     let c = constantColumn(12, 100)
@@ -901,18 +906,35 @@ suite "DataTable tests":
   test "Filter - comparisons using function":
     let x = toSeq(0 .. 100)
     let df = toDf(x)
-    let dfFilter = df.filter(f{float: c"x" >= max(c"x") * 0.5})
-    check dfFilter["x"].toTensor(int) == toTensor toSeq(50 .. 100)
-
+    block:
+      let dfFilter = df.filter(f{float: c"x" >= max(col("x")) * 0.5})
+      check dfFilter["x"].toTensor(int) == toTensor toSeq(50 .. 100)
+    onlyDevel:
+      block:
+        let dfFilter = df.filter(f{float: c"x" >= max(col("x")) * 0.5})
+        check dfFilter["x"].toTensor(int) == toTensor toSeq(50 .. 100)
   test "Filter - data types":
     let x = toSeq(0 .. 100)
     let df = toDf(x)
-    let dfFiltered = df.filter(f{float: c"x" >= max(c"x") * 0.5})
-    check dfFiltered["x"].kind == colInt
-    let dfReduced1 = df.summarize(f{int: max(c"x")})
-    check dfReduced1["(max x)"].kind == colInt
-    let dfReduced2 = df.summarize(f{float: max(c"x")})
-    check dfReduced2["(max x)"].kind == colFloat
+    block:
+      let dfFiltered = df.filter(f{float: c"x" >= max(col("x")) * 0.5})
+      check dfFiltered["x"].kind == colInt
+      let dfReduced1 = df.summarize(f{int: max(col("x"))})
+      check dfReduced1["(max (col x))"].kind == colInt
+      let dfReduced2 = df.summarize(f{float: max(col("x"))})
+      check dfReduced2["(max (col x))"].kind == colFloat
+    ## Test that `c"x"` works on devel. On older Nim (1.6, 2.0) the `max` is bound directly
+    ## to `max(varargs[Tensor[T]]): Tensor[T]`, which breaks the formula!
+    ## This `max` is a recent addition in arraymancer.
+    ## On devel this seems fixed.
+    onlyDevel:
+      block:
+        let dfFiltered = df.filter(f{float: c"x" >= max(c"x") * 0.5})
+        check dfFiltered["x"].kind == colInt
+        let dfReduced1 = df.summarize(f{int: max(c"x")})
+        check dfReduced1["(max x)"].kind == colInt
+        let dfReduced2 = df.summarize(f{float: max(c"x")})
+        check dfReduced2["(max x)"].kind == colFloat
 
   test "Transmute - float arithmetic":
     let x = toSeq(0 ..< 100)
