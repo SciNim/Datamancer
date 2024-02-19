@@ -90,9 +90,12 @@ when defined(js):
 
   proc toMemoryView[T](s: seq[T]): MemoryView[T] = s
   proc toMemoryView(s: string): MemoryView[char] =
-    result = newSeq[char](s.len)
+    result = newSeq[char](s.len + 1)
     for i, x in s:
       result[i] = x
+    ## To simulate behavior of regular Nim strings on C backend (after accessing via MemoryView)
+    ## we need a zero byte to correctly behave in `parseNumber`
+    result[^1] = '\0'
 else:
   type
     MemoryView[T] = ptr UncheckedArray[T]
@@ -210,7 +213,6 @@ func tryParse(toEat: seq[char], data: MemoryView[char], idx: var int,
   else:
     return rtError
 
-
 proc parseNumber(data: MemoryView[char],
                  sep, quote: char, # if this sep is found parsing ends
                  idxIn: int,
@@ -232,7 +234,7 @@ proc parseNumber(data: MemoryView[char],
   intVal = 0                                    # build intVal up from zero..
   if data[idx] in Sign + {quote}:
     idx.inc                                     # skip optional sign or quote character
-  while idx < data.len and data[idx] != '\0':   # ..and track scale/pow10.
+  while data[idx] != '\0':   # ..and track scale/pow10.
     if data[idx] notin Digits:
       if data[idx] != '.' or pnt >= 0:
         break                                   # a second '.' is forbidden
@@ -258,9 +260,6 @@ proc parseNumber(data: MemoryView[char],
     return rtError                              # ONLY "[+-]*\.*"
 
   # `\0` is necessary to support parsing until the end of the file in case of no line break
-  if idx >= data.len:
-    return
-
   if data[idx] notin {'\0', sep, quote, '\n', '\r', 'e', 'E'}: ## TODO: generalize this?
     # might be "nan", "inf" or "-inf" or some other invalid string
     var ret = tryParse(@['n', 'a', 'n'], data, idx,
