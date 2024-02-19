@@ -350,14 +350,15 @@ proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: Tensor[T]): C =
       doAssert false, "This should not happen!"
       #{.error: "Cannot store " & $T & " in a regular `Column`.".}
 
-proc toColumn*[T: not SupportedTypes](t: openArray[T] | Tensor[T]): auto =
-  ## Tries to convert the given input data to a matching generic `Column*`
-  ## type. Errors at CT if there is no matching `Column*` defined so far.
-  when typeof(t) is Tensor:
-    let x = t
-  else:
-    let x = t.toTensor()
-  result = colType(T).toColumn(t)
+when not defined(js) or (NimMajor, NimMinor, NimPatch) >= (2, 1, 0):
+  proc toColumn*[T: not SupportedTypes](t: openArray[T] | Tensor[T]): auto =
+    ## Tries to convert the given input data to a matching generic `Column*`
+    ## type. Errors at CT if there is no matching `Column*` defined so far.
+    when typeof(t) is Tensor:
+      let x = t
+    else:
+      let x = t.toTensor()
+    result = colType(T).toColumn(t)
 
 proc toColumn*[C: ColumnLike; T](_: typedesc[C], t: openArray[T]): C =
   if t.len > 0:
