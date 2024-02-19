@@ -121,12 +121,6 @@ proc shallowCopy*[C: ColumnLike](df: DataTable[C]): DataTable[C] =
 
 # ---------- General convenience helpers ----------
 
-func len*[T](t: Tensor[T]): int =
-  ## Helper proc for 1D `Tensor[T]` to return the length of the vector, which
-  ## corresponds to a length of a DF column.
-  assert t.rank == 1
-  result = t.size
-
 proc contains*[C: ColumnLike](df: DataTable[C], key: string): bool =
   ## Checks if the `key` names column in the `DataFrame`.
   result = df.data.hasKey(key)

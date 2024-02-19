@@ -11,7 +11,7 @@ srcDir        = "src"
 
 requires "nim >= 1.2.0"
 requires "https://github.com/Vindaar/seqmath >= 0.1.11"
-requires "arraymancer >= 0.7.1"
+requires "arraymancer >= 0.7.28"
 
 task test, "Run standard tests":
   exec "nim c -r tests/testDf.nim"
