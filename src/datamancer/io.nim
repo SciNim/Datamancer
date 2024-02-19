@@ -1,14 +1,10 @@
 import dataframe, value, column
 
-import streams, strutils, tables, parsecsv, sequtils
+import std / [streams, strutils, tables, parsecsv, sequtils,  strformat, os]
 when not defined(js):
   import memfiles
-  # for reading CSV files from URLs
+  # for reading CSV files from URLs (former) and `showBrowsers` (latter)
   import httpclient, browsers
-#else:
-#  import jscore
-# for `showBrowser`
-import strformat, os
 
 proc checkHeader(s: Stream, fname, header: string, colNames: seq[string]): bool =
   ## checks whether the given file contains the header `header`
@@ -408,9 +404,6 @@ template advanceToNextRow() {.dirty.} =
   lastWasSep = false
   if maxLines > 0 and row >= maxLines:
     break
-
-#when defined(js):
-#  template unlikely(body: untyped): untyped = body
 
 template parseLine(data: MemoryView[char], buf: var string,
                    sep, quote, lineBreak, eat: char,
