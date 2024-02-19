@@ -1,8 +1,10 @@
-
 * Datamancer
 [[https://github.com/SciNim/datamancer/workflows/datamancer%20CI/badge.svg]]
 [[https://matrix.to/#/#nim-science:envs.net][https://img.shields.io/static/v1?message=join%20chat&color=blue&label=nim-science&logo=matrix&logoColor=gold&style=flat-square&.svg]]
 [[https://discord.gg/f5hA9UK3dY][https://img.shields.io/discord/371759389889003530?color=blue&label=nim-science&logo=discord&logoColor=gold&style=flat-square&.svg]]
+
+~Datamancer~ is a DataFrame library for Nim, which is heavily inspired
+by [[https://dplyr.tidyverse.org/][dplyr]].
 
 ** Comparison to other dataframe libraries
 
@@ -10,7 +12,6 @@ Check out the following gist for a comparison of this library with
 dplyr (R) and pandas (Python):
 
 https://gist.github.com/Vindaar/6908c038707c7d8293049edb3d204f84
-
 
 ** Documentation
 
@@ -33,6 +34,19 @@ Installation should be just a
 nimble install datamancer
 #+END_SRC
 away.
+
+** Backend targets
+
+The library supports both Nim's C/C++ backends as well as the
+JavaScript target. The latter was added in ~v0.4.2~ and is still
+experimental. Certain features are currently not supported (reading
+files from disk, reading CSVs from a URL).
+
+Note also that on older versions than current devel (as of
+<2024-02-19 Mon 14:47>) including the current stable, in certain
+applications the formula macro ~f{}~ (see below) does not resolve
+types in the way it should on the JS backend. You might need to give
+explicit type hints in more cases than usual (also see below).
 
 ** Features and formulas
 
