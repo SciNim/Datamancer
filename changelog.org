@@ -1,3 +1,13 @@
+* v0.4.2
+Add experimental support for the JS backend!
+
+Not everything works, but the most important parts are there. The
+basic idea is that we have a non arraymancer data storage for columns,
+simply a wrapper around ~seq[T]~.
+
+Some basic features related to IO are currently not supported. And on
+older Nim versions (older than current devel), it may be required to
+be more explicit in ~f{}~ formulas in terms of type hints.
 * v0.4.1
 - remove our ~len~ for ~Tensor~ due to addition in arraymaner now
   (update arraymancer dep to ~>= 0.7.28~)
