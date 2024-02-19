@@ -11,6 +11,11 @@ proc almostEq(a, b: float, epsilon = 1e-8): bool =
   if not result:
     echo "Comparison failed: a = ", a, ", b = ", b
 
+template onlyDevel(body: untyped): untyped =
+  ## Used to disable some tests on older nim versions
+  when (NimMajor, NimMinor, NimPatch) >= (2, 1, 0):
+    body
+
 suite "Value":
   let
     v1 = %~ 1
@@ -210,9 +215,15 @@ suite "Formula":
     check h.val == %~ false
     check h.name == "(== (%~ tup.a) (%~ tup.b))"
 
-    let f2 = f{float: "min" << min(c"runTimes")}
-    check $f2 == "min" # LHS of formula
-    check f2.name == "(<< min (min runTimes))"
+    block:
+      let f2 = f{float: "min" << min(col("runTimes"))}
+      check $f2 == "min" # LHS of formula
+      check f2.name == "(<< min (min (col runTimes)))"
+    onlyDevel:
+      block:
+        let f2 = f{float: "min" << min(c"runTimes")}
+        check $f2 == "min" # LHS of formula
+        check f2.name == "(<< min (min runTimes))"
 
 
   test "Evaluate raw formula (no DF column dependency)":
