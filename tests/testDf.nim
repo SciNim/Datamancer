@@ -1987,15 +1987,32 @@ suite "Formulas":
     ## This test is really only to test that the `mutate` formula shown here is
     ## actually compiled correctly into a mapping operation, with or without
     ## user given `~`
+    let mpgDf = readCsv("data/mpg.csv")
+    block WithName:
+      let df = mpgDf
+        .group_by("class")
+        .mutate(f{float -> float: "subMeanHwy" ~ idx(`cty`) + mean(df["hwy"])})
+        .arrange("class")
+      check df.len == 234
+      check df["subMeanHwy", float][0 ..< 5] == [40.8, 39.8, 40.8, 39.8, 39.8].toTensor
     block:
-      let df = readCsv("data/mpg.csv")
+      ## Check that it also works correctly without `idx`!
+      let df = mpgDf
         .group_by("class")
         .mutate(f{float -> float: "subMeanHwy" ~ `cty` + mean(df["hwy"])})
         .arrange("class")
       check df.len == 234
       check df["subMeanHwy", float][0 ..< 5] == [40.8, 39.8, 40.8, 39.8, 39.8].toTensor
     block:
-      let df = readCsv("data/mpg.csv")
+      ## And same with direct `col`
+      let df = mpgDf
+        .group_by("class")
+        .mutate(f{float -> float: "subMeanHwy" ~ `cty` + mean(col("hwy"))})
+        .arrange("class")
+      check df.len == 234
+      check df["subMeanHwy", float][0 ..< 5] == [40.8, 39.8, 40.8, 39.8, 39.8].toTensor
+    block NoName: ## without an explicit name
+      let df = mpgDf
         .group_by("class")
         .mutate(f{float -> float: `cty` + mean(df["hwy"])})
         .arrange("class")
