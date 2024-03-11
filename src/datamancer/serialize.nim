@@ -35,7 +35,7 @@ proc toH5*(h5f: H5File, x: DataFrame, name = "", path = "/") =
         echo "[WARNING]: writing object column " & $k & " as string values!"
         h5f.toH5(val.valueTo(string), k.replace("/", "|"), grp)
 
-proc fromH5*(h5f: H5File, res: var DataFrame, name = "", path = "/") =
+proc fromH5*(h5f: H5File, res: var DataFrame, name = "", path = "/", exclude: seq[string] = @[]) =
   ## Stores the given datamancer `DataFrame` as in the H5 file.
   ## This is done by constructing a group for the dataframe and then adding
   ## each column as a 1D dataset.
@@ -45,4 +45,4 @@ proc fromH5*(h5f: H5File, res: var DataFrame, name = "", path = "/") =
   let grp = h5f[(path / name).grp_str]
   for dataset in items(grp):
     withDset(dataset):
-      res[dset.name.extractFilename()] = dset
+      res[dataset.name.extractFilename()] = dset
