@@ -44,5 +44,7 @@ proc fromH5*(h5f: H5File, res: var DataFrame, name = "", path = "/", exclude: se
   ## efficient for reading individual columns.
   let grp = h5f[(path / name).grp_str]
   for dataset in items(grp):
-    withDset(dataset):
-      res[dataset.name.extractFilename()] = dset
+    let col = dataset.name.extractFilename()
+    if col notin exclude:
+      withDset(dataset):
+        res[col] = dset
