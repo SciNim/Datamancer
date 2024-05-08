@@ -1,3 +1,9 @@
+* v0.4.3
+- fix issue #65 where not enough identifier hygiene in formula macros
+  could cause CT errors if user variable of same name as column name
+  appeared and accented quoting was used
+- allow a title for the page in ~showBrowser~
+- add option to ~exclude~ columns when using ~fromH5~ serialization
 * v0.4.2
 Add experimental support for the JS backend!
 
