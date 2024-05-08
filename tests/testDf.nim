@@ -2069,6 +2069,18 @@ suite "Formulas":
       let res = df.filter(f{bool: not `y`})
       check res["x", int] == [2].toTensor
 
+  test "Variables with same name as column names work with accent quotes":
+    # Previous to the fix of #65 this was not allowed
+    let df = toDf({ "x" : @[1, 2, 3, 4, 5], "y" : @["a", "b", "c", "d", "e"] })
+    let y = "e"
+    # check it compiles and leaves 3 elements
+    check df.filter(f{ `x` < 3 or `y` == y }).len == 3
+    # should of course also work with explicit `idx()` syntax
+    check df.filter(f{ `x` < 3 or idx("y") == y }).len == 3
+    # and for completeness manual type info is valid
+    check df.filter(f{ idx("x", int) < 3 or idx("y", string) == y }).len == 3
+
+
 suite "Formulas with object columns using convenience operators":
   test "int comparisons":
     let df = toDf({"x" : [%~ 1, %~ 2, %~ 3]})
