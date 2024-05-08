@@ -894,7 +894,7 @@ proc toHtml*[C: ColumnLike](df: DataTable[C], tmpl = ""): string =
 when not defined(js):
   proc showBrowser*[C: ColumnLike](
     df: DataTable[C], fname = "df.html", path = getTempDir(), toRemove = false,
-    htmlTmpl = "") =
+    htmlTmpl = "", title = "") =
     ## Displays the given DataFrame as a table in the default browser.
     ##
     ## `htmlTmpl` can be used as the HTML template of the page on which to print the
@@ -904,8 +904,10 @@ when not defined(js):
     ## Note: the HTML generation is not written for speed at this time. For very large
     ## dataframes expect bad performance.
     let tmpl = if htmlTmpl.len > 0: htmlTmpl else: HtmlTmpl
-    let fname = path / fname
-    let page = tmpl % [fname, df.toHtml()]
+    var titl = path / fname
+    if title.len > 0:
+       titl &= " - " & title
+    let page = tmpl % [titl, df.toHtml()]
     writeFile(fname, page)
     openDefaultBrowser(fname)
     if toRemove:
