@@ -439,21 +439,31 @@ proc determineHeuristicTypes(body: NimNode,
 proc genColSym(name, s: string): NimNode =
   ## custom symbol generation from `name` (may contain characters that are
   ## invalid Nim symbols) and `s`
+  ##
+  ## Note: We do not use `genSym`, because a single formula might reference the
+  ## same column twice. Thus, if we were to use `genSym` we'd get new identifiers
+  ## for each occurence. So we just stick a fixed, but unusual suffix to it so that
+  ## user clashes are essentially impossible.
+  const Suffix = "_∫Λ⊂∪" ## Just a suffix that no user should have as a variable
   var name = name
   if name.len == 0 or name[0] notin IdentStartChars:
     name = "col" & name
-  result = ident(name & s)
+  result = ident(name & s & Suffix)
 
 proc addColRef(n: NimNode, typeHint: FormulaTypes, asgnKind: AssignKind): seq[Assign] =
   let (dtype, resType) = (typeHint.inputType, typeHint.resType)
   case n.kind
   of nnkAccQuoted:
-    let name = n[0].strVal
+    let name = buildName(n[0])
+    let colName = genColSym(name, "T")
+    let colIdxName = genColSym(name, "Idx")
+    let nameCol = newLit(name)
+
     result.add Assign(asgnKind: asgnKind,
                       node: n,
-                      element: ident(name & "Idx"),
-                      tensor: ident(name),
-                      col: newLit(name),
+                      element: colIdxName,
+                      tensor: colName,
+                      col: nameCol,
                       colType: dtype,
                       resType: resType)
   of nnkCallStrLit:
