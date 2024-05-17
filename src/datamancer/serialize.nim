@@ -11,10 +11,11 @@ proc toH5*[T](h5f: H5File, x: Tensor[T], name = "", path = "/") =
   let dset = h5f.create_dataset(path / name,
                                 @(x.shape), # 1D, so use length
                                 T)
-  when T is KnownSupportsCopyMem:
-    dset.unsafeWrite(x.toUnsafeView(), x.size.int)
-  else:
-    dset[dset.all] = x.toSeq1D
+  if x.size > 0:
+    when T is KnownSupportsCopyMem:
+      dset.unsafeWrite(x.toUnsafeView(), x.size.int)
+    else:
+      dset[dset.all] = x.toSeq1D
 
 proc toH5*(h5f: H5File, x: DataFrame, name = "", path = "/") =
   ## Stores the given datamancer `DataFrame` as in the H5 file.
