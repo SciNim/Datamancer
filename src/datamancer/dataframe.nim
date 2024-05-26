@@ -2003,11 +2003,6 @@ proc innerJoin*[C: ColumnLike](dfs: varargs[DataTable[C]], by: string): DataTabl
     for i in 2 ..< dfs.len:
       result = result.innerJoin(dfs[i], by)
 
-proc toHashSet*[T](t: Tensor[T]): HashSet[T] =
-  ## Internal helper to convert a tensor to a `HashSet`
-  for el in t:
-    result.incl el
-
 proc group_by*[C: ColumnLike](df: DataTable[C], by: varargs[string], add = false): auto =
   ## Returns a grouped data frame grouped by all unique keys in `by`.
   ##
