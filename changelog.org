@@ -1,3 +1,5 @@
+* v0.4.4
+- remove ~toHashSet~ from Datamancer, as it is now part of Arraymancer directly
 * v0.4.3
 - fix issue #65 where not enough identifier hygiene in formula macros
   could cause CT errors if user variable of same name as column name
