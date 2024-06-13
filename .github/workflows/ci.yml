@@ -19,6 +19,7 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         nim:
           - '1.6.x'
