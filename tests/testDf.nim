@@ -828,6 +828,34 @@ suite "DataTable tests":
                                                       toTensor(toSeq(0..<c.len).mapIt("two")),
                                                       axis = 0)
 
+  test "Arrange":
+    # Test based on ggplotnim issue:
+    # https://github.com/Vindaar/ggplotnim/issues/180
+    var df = readCsv("data/Studentenstatistik_BB_Datensatz.csv", sep = ';')
+    # the offending columns that caused the ggplotnim bug:
+    let cats = @["Subject_group","Type_of_university", "Gender"]
+    # sort by them
+    df = df.arrange(cats)
+    # manually sort the 3 columns by hand using `algorithm/sort`
+    let sg = df[cats[0], string]
+    let tu = df[cats[1], string]
+    let ge = df[cats[2], string]
+    # zip them to a single seq
+    var s = newSeq[(string, string, string)](df.len)
+    for i in 0 ..< df.len:
+      s[i] = (sg[i], tu[i], ge[i])
+    # sort
+    s.sort(order = SortOrder.Ascending)
+    # check the data is the same
+    for i in 0 ..< df.len:
+      let row = df[i]
+      # get elements of DF row:
+      let sgI = row[cats[0]].item(string)
+      let tuI = row[cats[1]].item(string)
+      let geI = row[cats[2]].item(string)
+      # compare
+      check (sgI, tuI, geI) == s[i]
+
   test "Group by":
     proc almostEqual(x, y: float, eps = 1e-6): bool =
       result = (x - y) < eps
@@ -839,19 +867,12 @@ suite "DataTable tests":
     # TODO: make this to `doAssert`!
     let summary = mpg.summarize(f{float: "mean_cyl" << mean(c"cyl")},
                                 f{float: "mean_hwy" << mean(c"hwy")})
-    echo "done "
-    echo summary
     check almostEqual(summary["mean_cyl"][0, float], 5.88889)
     check almostEqual(summary["mean_hwy"][0, float], 23.4402)
-    echo "almost queal"
     var sum_grouped = mpggroup.summarize(f{float: "mean_displ" << mean(c"displ")},
                                          f{float: "mean_hwy" << mean(c"hwy")})
-    echo "summarized"
-    echo sum_grouped
     sum_grouped = sum_grouped
       .arrange("cyl")
-    echo "arranged"
-    echo sum_grouped
     check sum_grouped.len == 4
     check sum_grouped["cyl"][0, int] == 4
     check sum_grouped["cyl"][1, int] == 5
