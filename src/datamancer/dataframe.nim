@@ -1563,23 +1563,20 @@ iterator slice[T](s: seq[(int, T)]): (int, int) =
 proc sortRecurse[C: ColumnLike](df: DataTable[C], by: seq[string], idx: seq[int], order: SortOrder): seq[int] =
   ## Recursively sorts the remaining columns `by` (last element `by` is first to be sorted)
   ## within the indices given by `idx`.
-  ##
-  ## XXX: The following causes a segfault in the allocator. Likely a destructor bug, because it happens
-  ## with `-d:useMalloc` too
-  #var by = by # mutable *local* copy
-  let b = by[^1] #by.pop
+  var by = by # mutable *local* copy
+  let b = by.pop
   let col = df[b]
   withNativeDtype(col):
     # Sort within indices `idx` the current column `b`
     let res = sortBySubset[dtype](toTensor(col, dtype), b, idx, order)
     # now walk over `res` indices to see when data changes. Then recurse, but only if still
     # more columns to sort by
-    if by.len > 1: # if on the last column `sortBySubset` already did all the work
+    if by.len > 0: # if on the last column `sortBySubset` already did all the work
       result = newSeq[int](idx.len)
       for sl in slice(res):
         let (start, stop) = sl # inclusive indices
         if stop - start > 0: # if only a single element, nothing to sort
-          var subset = sortRecurse(df, by[0 .. ^2], # slice of last element, due to `pop` bug
+          var subset = sortRecurse(df, by,
                                    toOpenArray(res, start, stop).mapIt(it[0]), # extract indices in which to sort
                                    order)
           result[start .. stop] = subset
@@ -1601,7 +1598,7 @@ proc sortBys[C: ColumnLike](df: DataTable[C], by: seq[string], order: SortOrder)
   ## "hack around" a bit to work on CT typed data.
   # Indices for the _first_ column
   var idx = toSeq(0 ..< df.len)
-  var by = by.reversed # reversed so we can `pop` the next column (XXX: doesn't work)
+  var by = by.reversed # reversed so we can `pop` the next column
   result = sortRecurse(df, by, idx, order)
 
 proc arrange*[C: ColumnLike](df: DataTable[C], by: varargs[string], order = SortOrder.Ascending): DataTable[C] =
