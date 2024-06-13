@@ -1536,110 +1536,73 @@ proc arrangeSortImpl[T](toSort: var seq[(int, T)], order: SortOrder) =
       order = order
     )
 
-proc sortBySubset[C: ColumnLike](df: DataTable[C], by: string, idx: seq[int], order: SortOrder): seq[int] =
-  let col = df[by]
-  if col.kind == colConstant: # nothing to sort
-    result = idx
-  else:
-    withNativeDtype(col):
-      let t: Tensor[dtype] = toTensor(col, dtype)
-      ## XXX: Nim compiler messes up type deduction if we write `(int, dtype)`. In the second
-      ## branch of the `colGeneric` case statement the type will be the same as in the
-      ## first for the `res` variable (for `dtype`). But *only* for that variable!
-      var res: seq[(int, typeof(t[0]))] = newSeq[(int, typeof(t[0]))](idx.len)
-      for i, val in idx:
-        res[i] = (val, t[val])
-      res.arrangeSortImpl(order = order)
-      # after sorting here, check duplicate values of `val`, slice
-      # of those duplicates, use the next `by` in line and sort
-      # the remaining indices. Recursively do this until
-      result = res.mapIt(it[0])
+proc sortBySubset[T](t: Tensor[T], by: string, idx: seq[int], order: SortOrder): seq[(int, T)] =
+  ## Sorts the given `idx` subset of `t` according to `order` and returns a
+  ## seq of the "shuffled" indices and the sorted values `T`
+  result = newSeq[(int, T)](idx.len)
+  for i, val in idx:
+    result[i] = (val, t[val])
+  result.arrangeSortImpl(order = order)
 
-proc sortRecurse[C: ColumnLike](df: DataTable[C], by: seq[string],
-                    startIdx: int,
-                    resIdx: seq[int],
-                    order: SortOrder): seq[int]
-
-proc sortRecurseImpl[T; U](result: var seq[int], df: DataTable[U], by: seq[string],
-                           startIdx: int,
-                           resIdx: seq[int],
-                           order: SortOrder) =
-  var res = newSeq[(int, T)](result.len)
-  let t = toTensor(df[by[0]], T)
-  for i, val in result:
-    res[i] = (val, t[val])
-
-  ## The logic in the following is a bit easy to misunderstand. Here we are
-  ## sorting the current key `by[0]` (its data is in `res`) by any additional
-  ## keys `by[1 .. ^1]`. It is important to keep in mind that `res` (key `by[0]`)
-  ## is already sorted in the proc calling `sortRecurse`.
-  ## Then we walk over the sorted data and any time a value of `res` changes,
-  ## we have to look at that whole slice and sort it by the second key `by[1]`.
-  ## Thus, the while loop below checks for:
-  ## - `last != cur`: val changed at index i, need to sort, iff the last search
-  ##   was ``not`` done at index `i - 1` (that happens immediately the iteration
-  ##   after sorting a slice -> `i > lastSearch + 1`.
-  ## - `i == df.high`: In the case of the last element we do ``not`` require
-  ##   the value to change, ``but`` here we have to sort not the slice until
-  ##   `i - 1` (val changed at current `i`, only want to sort same slice!),
-  ##   but until `df.high` -> let topIdx = …
-  ## Finally, if there are more keys in `by`, sort the subset itself as subsets.
-  let mby = by[1 .. ^1]
-  var
-    last = res[0][1]
-    cur = res[1][1]
-    i = startIdx
-    lastSearch = 0
-  while i < res.len:
-    cur = res[i][1]
-    if last != cur or i == df.high:
-      if i > lastSearch + 1:
-        # sort between `lastSearch` and `i`.
-        let topIdx = if i == df.high: i else: i - 1
-        var subset = sortBySubset(df, mby[0],
-                                  res[lastSearch .. topIdx].mapIt(it[0]),
-                                  order = order)
-        if mby.len > 1:
-          # recurse again
-          subset = sortRecurse(df, mby, lastSearch,
-                               resIdx = subset,
-                               order = order)
-        result[lastSearch .. topIdx] = subset
-      lastSearch = i
-    last = res[i][1]
+iterator slice[T](s: seq[(int, T)]): (int, int) =
+  ## Returns the slices in which `s` is unchanged in `T` so that it can be
+  ## sorted by the next column
+  var i = 0
+  var last = s[0][1]
+  var lastYield = 0
+  while i < s.len:
+    let cur = s[i][1]
+    if last != cur: # yield from last yielded index (+1) to i - 1, i.e. the subset in which `last == cur` held
+      yield (lastYield, i - 1)
+      lastYield = i # set to current index as next slice start
+    last = cur
     inc i
+  # handle up to last element
+  yield (lastYield, s.high)
 
-proc sortRecurse[C: ColumnLike](df: DataTable[C], by: seq[string],
-                                startIdx: int,
-                                resIdx: seq[int],
-                                order: SortOrder): seq[int] =
-  result = resIdx
-  let C = df[by[0]]
-  withNativeDtype(C):
-    sortRecurseImpl[dtype, C](result, df, by, startIdx, resIdx, order)
+proc sortRecurse[C: ColumnLike](df: DataTable[C], by: seq[string], idx: seq[int], order: SortOrder): seq[int] =
+  ## Recursively sorts the remaining columns `by` (last element `by` is first to be sorted)
+  ## within the indices given by `idx`.
+  ##
+  ## XXX: The following causes a segfault in the allocator. Likely a destructor bug, because it happens
+  ## with `-d:useMalloc` too
+  #var by = by # mutable *local* copy
+  let b = by[^1] #by.pop
+  let col = df[b]
+  withNativeDtype(col):
+    # Sort within indices `idx` the current column `b`
+    let res = sortBySubset[dtype](toTensor(col, dtype), b, idx, order)
+    # now walk over `res` indices to see when data changes. Then recurse, but only if still
+    # more columns to sort by
+    if by.len > 1: # if on the last column `sortBySubset` already did all the work
+      result = newSeq[int](idx.len)
+      for sl in slice(res):
+        let (start, stop) = sl # inclusive indices
+        if stop - start > 0: # if only a single element, nothing to sort
+          var subset = sortRecurse(df, by[0 .. ^2], # slice of last element, due to `pop` bug
+                                   toOpenArray(res, start, stop).mapIt(it[0]), # extract indices in which to sort
+                                   order)
+          result[start .. stop] = subset
+        else:
+          result[start] = res[start][0] # just set the index of the single element
+    else:
+      result = res.mapIt(it[0]) # extract the indices
 
 proc sortBys[C: ColumnLike](df: DataTable[C], by: seq[string], order: SortOrder): seq[int] =
-  let C = df[by[0]]
-  withNativeDtype(C):
-    var idx = 0
-    let t = toTensor(df[by[0]], dtype)
-    ## XXX: Nim compiler messes up type deduction if we write `(int, dtype)`. In the second
-    ## branch of the `colGeneric` case statement the type will be the same as in the
-    ## first for the `res` variable (for `dtype`). But *only* for that variable!
-    var res = newSeq[(int, typeof(t[0]))](df.len)
-    for i in 0 ..< t.size:
-      let val = t[i]
-      res[idx] = (idx, val)
-      inc idx
-    res.arrangeSortImpl(order = order)
-    # after sorting here, check duplicate values of `val`, slice
-    # of those
-    # duplicates, use the next `by` in line and sort
-    # the remaining indices. Recursively do this until
-    var resIdx = res.mapIt(it[0])
-    if res.len > 1 and by.len > 1:
-      resIdx = sortRecurse(df, by, startIdx = 1, resIdx = resIdx, order = order)
-    result = resIdx
+  ## Wrapper around the actual sorting logic, which prepares an index sequence `idx` that contains
+  ## the entire DF and then calls the recursive sorting logic.
+  ##
+  ## Note: The entire sorting logic ends up calling into `algorithm.sort` using `seq[(int, T)]`
+  ## which corresponds to a (subset of a) column with native data of type `T`. The indices `int`
+  ## are to track the original -> sorted indices. The procedure returns the indices that sort the
+  ## original DF.
+  ##
+  ## Ideally we could do this much easier, but due to the runtime type information we have to
+  ## "hack around" a bit to work on CT typed data.
+  # Indices for the _first_ column
+  var idx = toSeq(0 ..< df.len)
+  var by = by.reversed # reversed so we can `pop` the next column (XXX: doesn't work)
+  result = sortRecurse(df, by, idx, order)
 
 proc arrange*[C: ColumnLike](df: DataTable[C], by: varargs[string], order = SortOrder.Ascending): DataTable[C] =
   ## Sorts the data frame in ascending / descending `order` by key `by`.
@@ -1676,7 +1639,10 @@ proc arrange*[C: ColumnLike](df: DataTable[C], by: varargs[string], order = Sort
     result = df
   else:
     result = C.newDataTable(df.ncols)
+    # `sortBys` does the actual sorting and returns indices that sort the DF according to
+    # the given columns `by`.
     let idxCol = sortBys(df, by, order = order)
+    # The code below is just to produce a new DF from the sorted indices
     result.len = df.len
     var data = C.newColumnLike()
     for k in keys(df):
