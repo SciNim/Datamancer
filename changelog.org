@@ -1,3 +1,6 @@
+* v0.4.5
+- fix an issue in ~arrange~, which could lead to calls with more than
+  2 columns to result in bad sorting from the 3rd column on.
 * v0.4.4
 - remove ~toHashSet~ from Datamancer, as it is now part of Arraymancer directly
 * v0.4.3
