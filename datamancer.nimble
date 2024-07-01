@@ -21,6 +21,16 @@ task test, "Run standard tests":
   exec "nim c -r tests/testsFormula.nim"
   exec "nim c -r tests/testParse.nim"
 
+  # preview farm hash
+  if (NimMajor, NimMinor) >= (2, 1):
+    exec "nim c -r -d:nimPreviewHashFarm tests/testDf.nim"
+    exec "nim c -r -d:nimPreviewHashFarm tests/tests.nim"
+    exec "nim c -r -d:nimPreviewHashFarm tests/test_issue20.nim"
+    exec "nim c -r -d:nimPreviewHashFarm tests/test_issue28.nim"
+    exec "nim c -r -d:nimPreviewHashFarm tests/testsFormula.nim"
+    exec "nim c -r -d:nimPreviewHashFarm tests/testParse.nim"
+
+
 task testJs, "Run test for JS":
   exec "nim js -r tests/testdf_js_simple.nim"
 
