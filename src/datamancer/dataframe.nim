@@ -393,8 +393,8 @@ proc equal*[C: ColumnLike](df1, df2: DataTable[C]): bool =
   elif df1.kind != df2.kind: result = false
   elif df1.len != df2.len: result = false
   else:
-    let k1 = getKeys(df1)
-    let k2 = getKeys(df2)
+    let k1 = getKeys(df1).sorted
+    let k2 = getKeys(df2).sorted
     if k1 != k2: result = false
     else:
       result = true
