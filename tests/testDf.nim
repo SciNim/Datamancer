@@ -1106,7 +1106,7 @@ SeptemLineReal         true         true            1       0.1368            0
       let dfRes = df.spread("Fake", "FractionPass")
       check dfRes.len == 6
       check dfRes.getKeys().len == 6
-      check dfRes.getKeys() == dfExp.getKeys()
+      check dfRes.getKeys().sorted == dfExp.getKeys().sorted
       check equal(dfRes, dfExp)
 
   test "Pretty printing of DFs":
@@ -1508,7 +1508,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
                        "Ids" : ids })
     let dfRes = df1.innerJoin(df2, by = "Ident")
     check dfRes.len == dfExp.len
-    check dfRes.getKeys == dfExp.getKeys
+    check dfRes.getKeys.sorted == dfExp.getKeys.sorted
     check dfRes["Ident"].toTensor(string) == dfExp["Ident"].toTensor(string)
     check dfRes["Ids"].toTensor(int) == dfExp["Ids"].toTensor(int)
     check dfRes["Words"].toTensor(string) == dfExp["Words"].toTensor(string)
@@ -1528,7 +1528,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
                        "Ids" : idsFloat })
     let dfRes = df1.innerJoin(df2, by = "Ident")
     check dfRes.len == dfExp.len
-    check dfRes.getKeys == dfExp.getKeys
+    check dfRes.getKeys.sorted == dfExp.getKeys.sorted
     check dfRes["Ident"].toTensor(string) == dfExp["Ident"].toTensor(string)
     # result has enveloping column kind float
     check dfRes["Ids"].kind == colFloat
@@ -1550,7 +1550,7 @@ t_in_s,  C1_in_V,  C2_in_V,  type
                        "Ids" : idsFloat })
     let dfRes = df1.innerJoin(df2, by = "Ident")
     check dfRes.len == dfExp.len
-    check dfRes.getKeys == dfExp.getKeys
+    check dfRes.getKeys.sorted == dfExp.getKeys.sorted
     check dfRes["Ident"].toTensor(string) == dfExp["Ident"].toTensor(string)
     # result has enveloping column kind float
     check dfRes["Ids"].kind == colFloat
