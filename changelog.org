@@ -1,3 +1,5 @@
+* v0.4.6
+- prepare Datamancer for ~-d:nimPreviewHashFarm~
 * v0.4.5
 - fix an issue in ~arrange~, which could lead to calls with more than
   2 columns to result in bad sorting from the 3rd column on.
