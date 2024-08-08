@@ -10,7 +10,8 @@ proc toH5*[T](h5f: H5File, x: Tensor[T], name = "", path = "/") =
   ## shape info to construct an equivalent dataset.
   let dset = h5f.create_dataset(path / name,
                                 @(x.shape), # 1D, so use length
-                                T)
+                                T,
+                                overwrite = true)
   if x.size > 0:
     when T is KnownSupportsCopyMem:
       dset.unsafeWrite(x.toUnsafeView(), x.size.int)
