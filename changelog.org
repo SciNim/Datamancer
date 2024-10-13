@@ -1,3 +1,24 @@
+* v0.4.7
+- *Potentially BREAKING behavior*: ~innerJoin~ now has another
+  parameter ~commonColumns~, which handles how columns that are common
+  to both dataframes are handled.
+  Previously, we wrongly assumed that the data in all common columns
+  must match exactly. In that case it didn't matter which column to
+  take.
+  However, if they did *not* match, the data for the common columns
+  (including the one we joined by) was corrupted and left at default
+  initialization from the first mismatch in a common column.
+  There are now 3 different ways:
+  - ~ccLeft~: keep the data of the left input
+  - ~ccRename~: Rename the common columns to ~*_left~ and ~*_right~
+    (default)
+  - ~ccDrop~: Drop common columns that are not the joined one.
+  We choose to use ~ccRename~ as the default, because it keeps all
+  information. It is a breaking change however, because the common
+  columns now have a different name. But imo it's better here to make
+  people aware that this change happened instead of giving them wrong
+  data.
+  Feel free to conflict me on this.
 * v0.4.6
 - prepare Datamancer for ~-d:nimPreviewHashFarm~
 * v0.4.5
