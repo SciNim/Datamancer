@@ -2244,3 +2244,37 @@ suite "Formulas with nodes lifted out of body":
       check "μ" in df
       check counter == 1
       check df["μ", int] == @[6, 6, 6].toTensor()
+
+suite "Regression tests":
+  # Not strictly a regression, because I think it was always broken, but it appeared
+  # as a regression in my code after a related change
+  test "innerJoin - Treatment of common columns":
+    var dfChip = readCsv("data/df_chip_join_regression.csv")
+    let dfAll = readCsv("data/df_all_join_regression.csv")
+
+    # Before this fix the `eventNumber` data (and `Idx` data) would have cut off at index 4.
+    # Hence we compare the event numbers up to index 10.
+    let expEvNum = @[0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11]
+    block Rename:
+      let df = innerJoin(dfChip, dfAll, "eventNumber", commonColumns = ccRename)
+
+      check "Idx" notin df
+      check "Idx_left" in df
+      check "Idx_right" in df
+      check df["eventNumber", int][0 .. 10].toSeq1D == expEvNum
+
+    block Left:
+      let df = innerJoin(dfChip, dfAll, "eventNumber", commonColumns = ccLeft)
+
+      check "Idx" in df
+      check "Idx_left" notin df
+      check "Idx_right" notin df
+      check df["eventNumber", int][0 .. 10].toSeq1D == expEvNum
+
+    block Drop:
+      let df = innerJoin(dfChip, dfAll, "eventNumber", commonColumns = ccDrop)
+
+      check "Idx" notin df
+      check "Idx_left" notin df
+      check "Idx_right" notin df
+      check df["eventNumber", int][0 .. 10].toSeq1D == expEvNum
