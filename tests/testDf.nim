@@ -1525,14 +1525,17 @@ t_in_s,  C1_in_V,  C2_in_V,  type
                      "Words" : words})
     let dfExp = toDf({ "Ident" : idents,
                        "Words" : words,
-                       "Ids" : idsFloat })
+                       "Ids_left" : ids,
+                       "Ids_right" : idsFloat })
     let dfRes = df1.innerJoin(df2, by = "Ident")
     check dfRes.len == dfExp.len
     check dfRes.getKeys.sorted == dfExp.getKeys.sorted
     check dfRes["Ident"].toTensor(string) == dfExp["Ident"].toTensor(string)
     # result has enveloping column kind float
-    check dfRes["Ids"].kind == colFloat
-    check dfRes["Ids"].toTensor(float) == dfExp["Ids"].toTensor(float)
+    check dfRes["Ids_left"].kind == colInt
+    check dfRes["Ids_right"].kind == colFloat
+    check dfRes["Ids_left"].toTensor(int) == dfExp["Ids_left"].toTensor(int)
+    check dfRes["Ids_right"].toTensor(float) == dfExp["Ids_right"].toTensor(float)
     check dfRes["Words"].toTensor(string) == dfExp["Words"].toTensor(string)
 
   test "Inner join - missing elements":
@@ -1545,16 +1548,20 @@ t_in_s,  C1_in_V,  C2_in_V,  type
     let df2 = toDf({ "Ident" : idents[0 ..< ^1],
                      "Ids" : idsFloat,
                      "Words" : words})
+    let idsLeftExp = @[1, 2, 3, 4]
     let dfExp = toDf({ "Ident" : idents[0 ..< ^1],
                        "Words" : words,
-                       "Ids" : idsFloat })
+                       "Ids_left" : idsLeftExp,
+                       "Ids_right" : idsFloat })
     let dfRes = df1.innerJoin(df2, by = "Ident")
     check dfRes.len == dfExp.len
     check dfRes.getKeys.sorted == dfExp.getKeys.sorted
     check dfRes["Ident"].toTensor(string) == dfExp["Ident"].toTensor(string)
     # result has enveloping column kind float
-    check dfRes["Ids"].kind == colFloat
-    check dfRes["Ids"].toTensor(float) == dfExp["Ids"].toTensor(float)
+    check dfRes["Ids_left"].kind == colInt
+    check dfRes["Ids_right"].kind == colFloat
+    check dfRes["Ids_left"].toTensor(int) == dfExp["Ids_left"].toTensor(int)
+    check dfRes["Ids_right"].toTensor(float) == dfExp["Ids_right"].toTensor(float)
     check dfRes["Words"].toTensor(string) == dfExp["Words"].toTensor(string)
 
   test "Convert (one typed) object column to native":
