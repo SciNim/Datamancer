@@ -136,7 +136,7 @@ suite "`parseNumber` tests":
 
     # start after first separator
     for i in 123456789 .. 123456789 + 50:
-      when defined(nimPreviewFloatRoundtrip):
+      when (NimMajor, NimMinor) >= (2, 2):
         checkFloat($toFloat(i) & "," & $toFloat(i), toFloat(i), start = 19)
       else:
         checkFloat($toFloat(i) & "," & $toFloat(i), toFloat(i), start = 18)
