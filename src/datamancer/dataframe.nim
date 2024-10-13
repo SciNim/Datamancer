@@ -1854,9 +1854,41 @@ proc assign[C: ColumnLike](df: var DataTable[C], key: string, idx1: int, c2: C, 
   withNativeDtype(df[key]):
     df[key, idx1] = c2[idx2, dtype]
 
-proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C] =
+type
+  ## Decides how to handle columns that appear in both input DFs for ~innerJoin~.
+  CommonColumnMerge* = enum
+    ccLeft, ## Keep the version of the left column
+    ccDrop, ## Drop common columns that are not the one to join by
+    ccRename ## Rename the columns to `_left` , `_right` versions
+
+proc handleCommonColumns(df1, df2: var DataFrame, by: string, commonColumns: CommonColumnMerge) =
+  ## Handles the `CommonColumnMerge` behavior.
+  let
+    # for some reason we can't do toSeq(keys(df1S)) anymore...
+    # This is due to https://github.com/nim-lang/Nim/issues/7322. `toSeq` isn't exported for now.
+    keys1 = getKeys(df1).toHashSet
+    keys2 = getKeys(df2).toHashSet
+    commonKeys = keys1 * keys2
+    commonNotBy = toSeq(commonKeys - [by].toHashSet)
+
+  case commonColumns
+  of ccLeft: # drop the common columns of the right input
+    df2 = df2.drop(commonNotBy)
+  of ccRename: # rename
+    for k in commonNotby:
+      df1 = df1.rename(f{k & "_left" <- k})
+      df2 = df2.rename(f{k & "_right" <- k})
+  of ccDrop:
+    df1 = df1.drop(commonNotBy)
+    df2 = df2.drop(commonNotBy)
+
+proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string, commonColumns = ccRename): DataTable[C] =
   ## Returns a data frame joined by the given key `by` in such a way as to only keep
   ## rows found in both data frames.
+  ##
+  ## `commonColumns` decides how to deal with the case where both input DFs have columns
+  ## in common. They are either dropped `ccDrop`, renamed `ccRename` (default) or the left data
+  ## is used `ccLeft`.
   ##
   ## This is useful to combine two data frames that share a single column. It "zips"
   ## them together according to the column `by`.
@@ -1874,9 +1906,26 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
   bind sets.items
 
   # build sets from both columns and seqs of their corresponding indices
-  let
+  var
     df1S = df1.arrange(by)
     df2S = df2.arrange(by)
+
+  # Handle how common columns are treated
+  handleCommonColumns(df1S, df2S, by, commonColumns)
+
+  # Compute the now (possibly updated) common and rest keys
+  let
+    # for some reason we can't do toSeq(keys(df1S)) anymore...
+    # This is due to https://github.com/nim-lang/Nim/issues/7322. `toSeq` isn't exported for now.
+    keys1 = getKeys(df1S).toHashSet
+    keys2 = getKeys(df2S).toHashSet
+    allKeys = keys1 + keys2
+    commonKeys = keys1 * keys2
+    restKeys = allKeys - commonKeys
+
+  doAssert commonKeys.card == 1, "There is more than one common key left: " & $commonKeys &
+    " despite commonColumns strategy: " & $commonColumns
+
   withNativeDtype(df1S[by]): ## TODO: this likely means we convert constants to `Value`...
     let
       col1 = df1S[by].toTensor(dtype).toSeq1D
@@ -1890,14 +1939,7 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
     var
       i = 0
       j = 0
-    let
-      # for some reason we can't do toSeq(keys(df1S)) anymore...
-      # This is due to https://github.com/nim-lang/Nim/issues/7322. `toSeq` isn't exported for now.
-      keys1 = getKeys(df1S).toHashSet
-      keys2 = getKeys(df2S).toHashSet
-      allKeys = keys1 + keys2
-      commonKeys = keys1 * keys2
-      restKeys = allKeys - commonKeys
+
     result = C.newDataTable(allKeys.card)
     let resLen = (max(df1S.len, df2S.len))
     for k in items(allKeys):
@@ -1919,11 +1961,7 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
       let jl = idxDf2[j]
       # indices point to same row, merge row
       if df1By[il] == df2By[jl]:
-        for k in items(commonKeys):
-          if not equal(df1S[k], il, df2S[k], jl):
-            # skip this element
-            break
-          result.assign(k, count, df1S[k], il)
+        result.assign(by, count, df1S[by], il) # taking value from left, but they agree
         for k in items(restKeys):
           if k in keys1:
             result.assign(k, count, df1S[k], il)
@@ -1953,7 +1991,7 @@ proc innerJoin*[C: ColumnLike](df1, df2: DataTable[C], by: string): DataTable[C]
             result.asgn(k, toColumn(t[0 ..< result.len]))
         result[k].len = result.len
 
-proc innerJoin*[C: ColumnLike](dfs: varargs[DataTable[C]], by: string): DataTable[C] =
+proc innerJoin*[C: ColumnLike](dfs: varargs[DataTable[C]], by: string, commonColumns = ccRename): DataTable[C] =
   ## Inner join for more than two arguments. Performs the `innerJoin` operation on each
   ## set of arguments after another. Does *not* optimize the order in  which the operations
   ## are performed!
