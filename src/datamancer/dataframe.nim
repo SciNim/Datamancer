@@ -2346,6 +2346,10 @@ proc spread*[C: ColumnLike; T](df: DataTable[C], namesFrom, valuesFrom: string,
 
 proc unique*[C: ColumnLike](c: C): C =
   ## Returns a `Column` of all unique values in `c` (duplicates are removed).
+  ##
+  ## IMPORTANT: When applying this to columns that contain `NaN` values,
+  ## these rows will be removed. Internally, we perform a comparison
+  ## of entries and because `NaN != NaN` the check fails!
   runnableExamples:
     let x = toColumn [1, 2, 1, 4, 5]
     doAssert x.unique.toTensor(int) == [1, 2, 4, 5].toTensor
@@ -2372,6 +2376,10 @@ proc unique*[C: ColumnLike](df: DataTable[C], cols: varargs[string],
   ## If not all columns are considered and `keepAll` is true the resulting
   ## DF contains all other columns. Of those the first duplicated row
   ## is kept!
+  ##
+  ## IMPORTANT: When applying this to columns that contain `NaN` values,
+  ## these rows will be removed. Internally, we perform a comparison
+  ## of entries and because `NaN != NaN` the check fails!
   ##
   ## Note: The corresponding `dplyr` function is `distinct`. The choice for
   ## `unique` was made, since `distinct` is a keyword in Nim!
