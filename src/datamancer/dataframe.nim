@@ -2409,14 +2409,14 @@ proc unique*[C: ColumnLike](df: DataTable[C], cols: varargs[string],
   let hashes = buildColHashes(df, mcols)
   var hSet = toHashSet(hashes)
   # walk df, build indices from `hashes` which differ
-  var idxToKeep = newTensor[int](hSet.card)
+  var idxToKeep = newSeqOfCap[int](hSet.card)
   var idx = 0
   for i in 0 ..< df.len:
     if hashes[i] in hSet:
-      idxToKeep[idx] = i
+      idxToKeep.add i
       # remove from set to not get duplicates!
       hSet.excl hashes[i]
-      inc idx
+
   # apply idxToKeep as filter
   let resCols = if keepAll: getKeys(df) else: mcols
   result = df.filterToIdx(idxToKeep, resCols)
