@@ -1,3 +1,8 @@
+* v0.5.1
+- document that ~unique~ removes rows that contain ~NaN~ values
+- fixes ~unique~ so that it actually removes rows that were supposed
+  to be dropped. The effect was that ~NaN~ rows were technically kept,
+  but in the wrong order.   
 * v0.5.0
 - *Potentially BREAKING behavior*: ~innerJoin~ now has another
   parameter ~commonColumns~, which handles how columns that are common
