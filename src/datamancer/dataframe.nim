@@ -619,7 +619,7 @@ macro toTab*(args: varargs[untyped]): untyped =
       `lastTmp`
 
 template seqsToDf*(s: varargs[untyped]): untyped =
-  ## convertsb an arbitrary number of sequences to a `DataFrame` or any
+  ## converts an arbitrary number of sequences to a `DataFrame` or any
   ## number of key / value pairs where we have string / seq[T] pairs.
   static: hint "Consider simply using `toDf` instead of `seqsToDf`."
   toTab(s)
